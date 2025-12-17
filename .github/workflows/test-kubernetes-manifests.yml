@@ -4,21 +4,23 @@ on:
   push:
     branches: [ main, claude/** ]
     paths:
-      - 'tp*/**'
-      - 'docs/**'
+      - 'tp*/**/*.yaml'
+      - 'tp*/**/*.yml'
+      - 'tp*/**/*.sh'
+      - 'tp*/**/Dockerfile'
+      - 'docs/**/*.yaml'
+      - 'docs/**/*.yml'
       - '.github/workflows/**'
-    paths-ignore:
-      - '**/*.md'
-      - '.claude/**'
   pull_request:
     branches: [ main ]
     paths:
-      - 'tp*/**'
-      - 'docs/**'
+      - 'tp*/**/*.yaml'
+      - 'tp*/**/*.yml'
+      - 'tp*/**/*.sh'
+      - 'tp*/**/Dockerfile'
+      - 'docs/**/*.yaml'
+      - 'docs/**/*.yml'
       - '.github/workflows/**'
-    paths-ignore:
-      - '**/*.md'
-      - '.claude/**'
 
 jobs:
   validate-yaml-syntax:
