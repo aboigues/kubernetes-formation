@@ -10,5 +10,8 @@ psycopg2-binary==2.9.9
 # Cache
 redis==5.0.1
 
+# Monitoring
+prometheus-client==0.19.0
+
 # Utils (déjà inclus avec Flask mais explicite)
 werkzeug==3.0.1
