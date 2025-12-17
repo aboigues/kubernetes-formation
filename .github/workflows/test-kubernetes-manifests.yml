@@ -3,8 +3,22 @@ name: Test Kubernetes Manifests
 on:
   push:
     branches: [ main, claude/** ]
+    paths:
+      - 'tp*/**'
+      - 'docs/**'
+      - '.github/workflows/**'
+    paths-ignore:
+      - '**/*.md'
+      - '.claude/**'
   pull_request:
     branches: [ main ]
+    paths:
+      - 'tp*/**'
+      - 'docs/**'
+      - '.github/workflows/**'
+    paths-ignore:
+      - '**/*.md'
+      - '.claude/**'
 
 jobs:
   validate-yaml-syntax:
@@ -42,7 +56,7 @@ jobs:
         run: |
           echo "Validating YAML files in all TPs and docs..."
           shopt -s nullglob
-          for tp in tp1 tp2 tp3 tp4 tp5 tp6 tp7 tp8 tp9 docs; do
+          for tp in tp1 tp2 tp3 tp4 tp5 tp6 tp7 tp8 tp9 tp10 docs; do
             if [ -d "$tp" ]; then
               echo "Validating YAML files in $tp/"
               if compgen -G "$tp/*.yaml" > /dev/null; then
@@ -159,7 +173,7 @@ jobs:
         run: |
           echo "Validating all Kubernetes manifests with kubeconform..."
           shopt -s nullglob
-          for tp in tp1 tp2 tp3 tp4 tp5 tp6 tp7 tp8 tp9 docs; do
+          for tp in tp1 tp2 tp3 tp4 tp5 tp6 tp7 tp8 tp9 tp10 docs; do
             if [ -d "$tp" ]; then
               echo ""
               echo "=== Validating $tp ==="
@@ -183,7 +197,7 @@ jobs:
         run: |
           echo "Testing kubectl dry-run on all manifests..."
           shopt -s nullglob
-          for tp in tp1 tp2 tp3 tp4 tp5 tp6 tp7 tp8 tp9 docs; do
+          for tp in tp1 tp2 tp3 tp4 tp5 tp6 tp7 tp8 tp9 tp10 docs; do
             if [ -d "$tp" ]; then
               echo ""
               echo "=== Dry-run validation for $tp ==="
@@ -545,6 +559,126 @@ jobs:
           cd tp9
           ./test-tp9.sh || echo "Some tests failed but continuing..."
 
+  test-tp10-synthesis:
+    name: Test TP10 - Synthesis Project (TaskFlow)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Minikube
+        uses: medyagh/setup-minikube@latest
+        with:
+          kubernetes-version: 'v1.29.0'
+          cpus: 4
+          memory: 4096
+
+      - name: Enable metrics-server
+        run: |
+          minikube addons enable metrics-server
+          kubectl wait --for=condition=ready pod -l k8s-app=metrics-server -n kube-system --timeout=120s || true
+
+      - name: Verify Minikube
+        run: |
+          kubectl version --client
+          kubectl cluster-info
+          kubectl get nodes
+
+      - name: Create namespace
+        run: kubectl create namespace taskflow
+
+      - name: Deploy TP10 resources
+        run: |
+          echo "Deploying PostgreSQL..."
+          kubectl apply -f tp10/01-postgres-init-script.yaml
+          kubectl apply -f tp10/02-postgres-secret.yaml
+          kubectl apply -f tp10/03-postgres-pvc.yaml
+          kubectl apply -f tp10/04-postgres-deployment.yaml
+          kubectl apply -f tp10/05-postgres-service.yaml
+
+          echo "Deploying Redis..."
+          kubectl apply -f tp10/06-redis-deployment.yaml
+          kubectl apply -f tp10/07-redis-service.yaml
+
+          echo "Deploying Backend API..."
+          kubectl apply -f tp10/08-backend-config.yaml
+          kubectl apply -f tp10/09-backend-app-code.yaml
+          kubectl apply -f tp10/09-backend-deployment.yaml
+          kubectl apply -f tp10/10-backend-service.yaml
+          kubectl apply -f tp10/11-backend-hpa.yaml
+
+          echo "Deploying Frontend..."
+          kubectl apply -f tp10/12-frontend-config.yaml
+          kubectl apply -f tp10/12-frontend-nginx-config.yaml
+          kubectl apply -f tp10/13-frontend-deployment.yaml
+          kubectl apply -f tp10/14-frontend-service.yaml
+
+          echo "Deploying Prometheus..."
+          kubectl apply -f tp10/15-prometheus-config.yaml
+          kubectl apply -f tp10/16-prometheus-rbac.yaml
+          kubectl apply -f tp10/17-prometheus-pvc.yaml
+          kubectl apply -f tp10/18-prometheus-deployment.yaml
+          kubectl apply -f tp10/19-prometheus-service.yaml
+
+          echo "Deploying Grafana..."
+          kubectl apply -f tp10/20-grafana-datasource.yaml
+          kubectl apply -f tp10/20-grafana-deployment.yaml
+          kubectl apply -f tp10/21-grafana-service.yaml
+          kubectl apply -f tp10/24-grafana-dashboard-configmap.yaml
+          kubectl apply -f tp10/25-grafana-dashboard-provider.yaml
+
+      - name: Wait for pods to be ready
+        run: |
+          echo "Waiting for PostgreSQL..."
+          kubectl wait --for=condition=ready pod -l app=postgres -n taskflow --timeout=180s || true
+
+          echo "Waiting for Redis..."
+          kubectl wait --for=condition=ready pod -l app=redis -n taskflow --timeout=120s || true
+
+          echo "Waiting for Backend API..."
+          kubectl wait --for=condition=ready pod -l app=backend-api -n taskflow --timeout=180s || true
+
+          echo "Waiting for Frontend..."
+          kubectl wait --for=condition=ready pod -l app=frontend -n taskflow --timeout=120s || true
+
+      - name: Make test script executable
+        run: chmod +x tp10/test-tp10.sh
+
+      - name: Run TP10 synthesis tests
+        run: |
+          cd tp10
+          ./test-tp10.sh || echo "Some tests failed but continuing..."
+
+      - name: Display pod status
+        if: always()
+        run: |
+          echo "=== Pod Status ==="
+          kubectl get pods -n taskflow
+          echo ""
+          echo "=== HPA Status ==="
+          kubectl get hpa -n taskflow
+          echo ""
+          echo "=== PVC Status ==="
+          kubectl get pvc -n taskflow
+
+      - name: Show logs on failure
+        if: failure()
+        run: |
+          echo "=== PostgreSQL logs ==="
+          kubectl logs -l app=postgres -n taskflow --tail=50 || true
+          echo ""
+          echo "=== Backend API logs ==="
+          kubectl logs -l app=backend-api -n taskflow --tail=50 || true
+          echo ""
+          echo "=== Redis logs ==="
+          kubectl logs -l app=redis -n taskflow --tail=50 || true
+
+      - name: Cleanup TP10 resources
+        if: always()
+        run: |
+          kubectl delete namespace taskflow --ignore-not-found=true --timeout=60s || true
+
   validate-readme-manifests:
     name: Extract and Validate README Manifests
     runs-on: ubuntu-latest
@@ -598,7 +732,7 @@ jobs:
                   return False, str(e)
 
           # Process all TP README files
-          tps = ['tp1', 'tp2', 'tp3', 'tp4', 'tp5', 'tp6', 'tp7', 'tp8', 'tp9']
+          tps = ['tp1', 'tp2', 'tp3', 'tp4', 'tp5', 'tp6', 'tp7', 'tp8', 'tp9', 'tp10']
           total_yaml = 0
           total_k8s = 0
           errors = []
@@ -656,7 +790,7 @@ jobs:
       - name: Check README files exist
         run: |
           echo "Checking README files..."
-          for tp in tp1 tp2 tp3 tp4 tp5 tp6 tp7 tp8 tp9; do
+          for tp in tp1 tp2 tp3 tp4 tp5 tp6 tp7 tp8 tp9 tp10; do
             if [ -f "$tp/README.md" ]; then
               echo "✓ $tp/README.md exists ($(wc -l < "$tp/README.md") lines)"
             else
