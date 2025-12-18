@@ -72,9 +72,9 @@ Le hook détecte automatiquement **8 types d'APIs obsolètes** (synchronisé ave
 - Liste tous les scripts `test-*.sh`
 - Vérifie les permissions d'exécution
 - Suggère les tests à exécuter si cluster disponible :
-  - `tp5/test-tp5.sh` - Tests RBAC et sécurité
-  - `tp8/test-tp8.sh` - Tests réseau
-  - `tp9/test-tp9.sh` - Tests multi-nœuds
+  - `tp05/test-tp5.sh` - Tests RBAC et sécurité
+  - `tp08/test-tp8.sh` - Tests réseau
+  - `tp09/test-tp9.sh` - Tests multi-nœuds
 
 #### 6. Statistiques du projet
 - Compte des fichiers par type (YAML, Markdown, scripts)
@@ -154,7 +154,7 @@ Found 124 YAML manifest files
 - **Cleanup** : Automatique avec `if: always()`
 
 #### 5. `test-tp5-security` ⭐ NOUVEAU
-- **Script** : `tp5/test-tp5.sh`
+- **Script** : `tp05/test-tp5.sh`
 - **Tests** :
   - RBAC (Roles, RoleBindings)
   - ServiceAccounts
@@ -163,7 +163,7 @@ Found 124 YAML manifest files
   - Network Policies
 
 #### 6. `test-tp8-networking` ⭐ NOUVEAU
-- **Script** : `tp8/test-tp8.sh`
+- **Script** : `tp08/test-tp8.sh`
 - **Tests** :
   - Types de services (ClusterIP, NodePort, etc.)
   - Résolution DNS
@@ -171,7 +171,7 @@ Found 124 YAML manifest files
   - Architecture multi-tiers
 
 #### 7. `test-tp9-multi-node` ⭐ NOUVEAU
-- **Script** : `tp9/test-tp9.sh`
+- **Script** : `tp09/test-tp9.sh`
 - **Tests** :
   - Node affinity
   - Taints et tolerations

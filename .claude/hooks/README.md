@@ -94,7 +94,7 @@ Pour activer le hook dans Claude Code, ajouter dans les paramètres :
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Found 125 YAML manifest files
 
-✗ tp4/monitoring.yaml has deprecated APIs:
+✗ tp04/monitoring.yaml has deprecated APIs:
   - policy/v1beta1 PodDisruptionBudget is deprecated (use policy/v1)
 
 ⚠ All YAML files are syntactically valid
@@ -142,9 +142,9 @@ En fonction des résultats, le hook suggère :
 3. **🧪 Exécution des tests**
    ```bash
    # Si cluster disponible
-   ./tp5/test-tp5.sh
-   ./tp8/test-tp8.sh
-   ./tp9/test-tp9.sh
+   ./tp05/test-tp5.sh
+   ./tp08/test-tp8.sh
+   ./tp09/test-tp9.sh
    ```
 
 4. **📦 Déploiement des GitHub Actions**

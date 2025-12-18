@@ -284,9 +284,9 @@ if [ "$test_count" -gt 0 ]; then
     if [ "$cluster_available" = true ]; then
         echo ""
         echo "Cluster is available - tests can be run with:"
-        echo "  ./tp5/test-tp5.sh    # Test RBAC and security"
-        echo "  ./tp8/test-tp8.sh    # Test networking"
-        echo "  ./tp9/test-tp9.sh    # Test multi-node features"
+        echo "  ./tp05/test-tp5.sh    # Test RBAC and security"
+        echo "  ./tp08/test-tp8.sh    # Test networking"
+        echo "  ./tp09/test-tp9.sh    # Test multi-node features"
     fi
 else
     echo "No test scripts found"

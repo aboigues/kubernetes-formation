@@ -113,7 +113,7 @@ kubectl patch storageclass local-path -p '{"metadata": {"annotations":{"storagec
 - ✅ Commandes de débogage en cas de problème
 
 **Fichiers modifiés** :
-- `tp2/README.md` : +175 lignes (section 8.0 complète)
+- `tp02/README.md` : +175 lignes (section 8.0 complète)
 
 **Tests recommandés** :
 - [ ] Tester exercice 10 sur cluster Minikube fraîchement créé

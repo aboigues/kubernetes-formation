@@ -108,24 +108,24 @@ La **CKAD (Certified Kubernetes Application Developer)** est une certification p
 #### Phase 1 : Fondamentaux (Semaines 1-2)
 ```bash
 # Compléter dans l'ordre
-1. tp1/README.md
-2. tp2/README.md
-3. tp3/README.md
+1. tp01/README.md
+2. tp02/README.md
+3. tp03/README.md
 
 # Objectif : Maîtriser kubectl et les ressources de base
 ```
 
 #### Phase 2 : Observabilité et Sécurité (Semaines 3-4)
 ```bash
-4. tp4/README.md
-5. tp5/README.md
+4. tp04/README.md
+5. tp05/README.md
 
 # Objectif : Debugging, probes, resource management
 ```
 
 #### Phase 3 : Production Ready (Semaines 5-6)
 ```bash
-6. tp6/README.md
+6. tp06/README.md
 
 # Objectif : Déploiements avancés, stratégies de release
 ```

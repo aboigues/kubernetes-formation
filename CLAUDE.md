@@ -28,7 +28,7 @@ Formation complète sur Kubernetes avec :
 **Dernière mise à jour** : 2025-12-15
 
 **Statistiques** :
-- ✅ 135+ manifests YAML validés (tp1-tp9 + docs/)
+- ✅ 135+ manifests YAML validés (tp01-tp09 + docs/)
 - ✅ 0 APIs dépréciées détectées
 - ✅ 63 fichiers Markdown
 - ✅ 9 TPs complets
@@ -47,7 +47,7 @@ Formation complète sur Kubernetes avec :
 Le hook `.claude/hooks/session-start.sh` s'exécute automatiquement et vérifie :
 1. ✅ Versions des outils Kubernetes (kubectl >= v1.29, minikube, helm)
 2. ✅ État du cluster Kubernetes
-3. ✅ Validation syntaxe de tous les YAML (tp1-tp9 + docs/)
+3. ✅ Validation syntaxe de tous les YAML (tp01-tp09 + docs/)
 4. ✅ Détection de 8 types d'APIs dépréciées/supprimées (synchronisé avec GitHub Actions)
 5. ✅ Vérification des versions GitHub Actions
 6. ✅ Liste des scripts de test disponibles
@@ -102,7 +102,7 @@ kubernetes-formation/
 │       ├── session-start.sh    # Hook de validation automatique
 │       └── README.md           # Documentation des hooks
 ├── .github/workflows/          # CI/CD GitHub Actions
-├── tp1/ à tp9/                 # 9 TPs de formation
+├── tp01/ à tp09/                 # 9 TPs de formation
 ├── docs/                       # Documentation supplémentaire
 ├── settings.json               # Configuration Claude Code
 └── CLAUDE.md                   # Ce fichier (contexte session)
@@ -131,9 +131,9 @@ git status
 git log --oneline -10
 
 # Exécuter les tests (si cluster disponible)
-./tp5/test-tp5.sh    # RBAC et sécurité
-./tp8/test-tp8.sh    # Réseau
-./tp9/test-tp9.sh    # Multi-nœuds
+./tp05/test-tp5.sh    # RBAC et sécurité
+./tp08/test-tp8.sh    # Réseau
+./tp09/test-tp9.sh    # Multi-nœuds
 ```
 
 ## 🔐 Sécurité Kubernetes

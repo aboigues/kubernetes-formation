@@ -58,7 +58,7 @@ jobs:
         run: |
           echo "Validating YAML files in all TPs and docs..."
           shopt -s nullglob
-          for tp in tp1 tp2 tp3 tp4 tp5 tp6 tp7 tp8 tp9 tp10 docs; do
+          for tp in tp01 tp02 tp03 tp04 tp05 tp06 tp07 tp08 tp09 tp10 docs; do
             if [ -d "$tp" ]; then
               echo "Validating YAML files in $tp/"
               if compgen -G "$tp/*.yaml" > /dev/null; then
@@ -175,7 +175,7 @@ jobs:
         run: |
           echo "Validating all Kubernetes manifests with kubeconform..."
           shopt -s nullglob
-          for tp in tp1 tp2 tp3 tp4 tp5 tp6 tp7 tp8 tp9 tp10 docs; do
+          for tp in tp01 tp02 tp03 tp04 tp05 tp06 tp07 tp08 tp09 tp10 docs; do
             if [ -d "$tp" ]; then
               echo ""
               echo "=== Validating $tp ==="
@@ -199,7 +199,7 @@ jobs:
         run: |
           echo "Testing kubectl dry-run on all manifests..."
           shopt -s nullglob
-          for tp in tp1 tp2 tp3 tp4 tp5 tp6 tp7 tp8 tp9 tp10 docs; do
+          for tp in tp01 tp02 tp03 tp04 tp05 tp06 tp07 tp08 tp09 tp10 docs; do
             if [ -d "$tp" ]; then
               echo ""
               echo "=== Dry-run validation for $tp ==="
@@ -239,11 +239,11 @@ jobs:
           kubectl get nodes
 
       - name: Make test script executable
-        run: chmod +x tp1/test-tp1.sh
+        run: chmod +x tp01/test-tp1.sh
 
       - name: Run TP1 basic tests
         run: |
-          cd tp1
+          cd tp01
           ./test-tp1.sh || echo "Some tests failed but continuing..."
 
   test-tp2-manifests:
@@ -266,11 +266,11 @@ jobs:
           kubectl get nodes
 
       - name: Make test script executable
-        run: chmod +x tp2/test-tp2.sh
+        run: chmod +x tp02/test-tp2.sh
 
       - name: Run TP2 manifest tests
         run: |
-          cd tp2
+          cd tp02
           ./test-tp2.sh || echo "Some tests failed but continuing..."
 
   test-tp3-storage:
@@ -295,19 +295,19 @@ jobs:
       - name: Test basic pod creation (emptyDir)
         run: |
           echo "Testing 01-emptydir-pod.yaml"
-          if [ -f "tp3/01-emptydir-pod.yaml" ]; then
-            kubectl apply -f tp3/01-emptydir-pod.yaml
+          if [ -f "tp03/01-emptydir-pod.yaml" ]; then
+            kubectl apply -f tp03/01-emptydir-pod.yaml
             kubectl wait --for=condition=Ready pod/emptydir-pod --timeout=60s || true
             kubectl get pods
             kubectl describe pod emptydir-pod || true
-            kubectl delete -f tp3/01-emptydir-pod.yaml --ignore-not-found=true
+            kubectl delete -f tp03/01-emptydir-pod.yaml --ignore-not-found=true
           fi
 
       - name: Test PersistentVolume
         run: |
           echo "Testing 02-persistent-volume.yaml"
-          if [ -f "tp3/02-persistent-volume.yaml" ]; then
-            kubectl apply -f tp3/02-persistent-volume.yaml
+          if [ -f "tp03/02-persistent-volume.yaml" ]; then
+            kubectl apply -f tp03/02-persistent-volume.yaml
             kubectl get pv
             kubectl describe pv my-pv || true
           fi
@@ -315,8 +315,8 @@ jobs:
       - name: Test PersistentVolumeClaim
         run: |
           echo "Testing 03-persistent-volume-claim.yaml"
-          if [ -f "tp3/03-persistent-volume-claim.yaml" ]; then
-            kubectl apply -f tp3/03-persistent-volume-claim.yaml
+          if [ -f "tp03/03-persistent-volume-claim.yaml" ]; then
+            kubectl apply -f tp03/03-persistent-volume-claim.yaml
             sleep 5
             kubectl get pvc
             kubectl describe pvc my-pvc || true
@@ -325,8 +325,8 @@ jobs:
       - name: Test Pod with PVC
         run: |
           echo "Testing 04-pod-with-pvc.yaml"
-          if [ -f "tp3/04-pod-with-pvc.yaml" ]; then
-            kubectl apply -f tp3/04-pod-with-pvc.yaml
+          if [ -f "tp03/04-pod-with-pvc.yaml" ]; then
+            kubectl apply -f tp03/04-pod-with-pvc.yaml
             kubectl wait --for=condition=Ready pod/pod-with-pvc --timeout=90s || true
             kubectl get pods
             kubectl describe pod pod-with-pvc || true
@@ -360,19 +360,19 @@ jobs:
       - name: Test HPA Demo
         run: |
           echo "Testing 01-hpa-demo.yaml"
-          if [ -f "tp4/01-hpa-demo.yaml" ]; then
-            kubectl apply -f tp4/01-hpa-demo.yaml
+          if [ -f "tp04/01-hpa-demo.yaml" ]; then
+            kubectl apply -f tp04/01-hpa-demo.yaml
             kubectl wait --for=condition=ready pod -l app=php-apache --timeout=120s || true
             kubectl get pods
             kubectl get hpa
-            kubectl delete -f tp4/01-hpa-demo.yaml --ignore-not-found=true
+            kubectl delete -f tp04/01-hpa-demo.yaml --ignore-not-found=true
           fi
 
       - name: Test Prometheus Deployment
         run: |
           echo "Testing 04-prometheus-deployment.yaml"
-          if [ -f "tp4/04-prometheus-deployment.yaml" ]; then
-            kubectl apply -f tp4/04-prometheus-deployment.yaml
+          if [ -f "tp04/04-prometheus-deployment.yaml" ]; then
+            kubectl apply -f tp04/04-prometheus-deployment.yaml
             sleep 10
             kubectl get all -n monitoring
             kubectl wait --for=condition=ready pod -l app=prometheus -n monitoring --timeout=180s || echo "Prometheus pod not ready yet"
@@ -382,8 +382,8 @@ jobs:
       - name: Test Grafana Deployment
         run: |
           echo "Testing 05-grafana-deployment.yaml"
-          if [ -f "tp4/05-grafana-deployment.yaml" ]; then
-            kubectl apply -f tp4/05-grafana-deployment.yaml
+          if [ -f "tp04/05-grafana-deployment.yaml" ]; then
+            kubectl apply -f tp04/05-grafana-deployment.yaml
             sleep 10
             kubectl get all -n monitoring
             kubectl wait --for=condition=ready pod -l app=grafana -n monitoring --timeout=180s || echo "Grafana pod not ready yet"
@@ -393,8 +393,8 @@ jobs:
       - name: Test Instrumented App
         run: |
           echo "Testing 06-instrumented-app.yaml"
-          if [ -f "tp4/06-instrumented-app.yaml" ]; then
-            kubectl apply -f tp4/06-instrumented-app.yaml
+          if [ -f "tp04/06-instrumented-app.yaml" ]; then
+            kubectl apply -f tp04/06-instrumented-app.yaml
             kubectl wait --for=condition=ready pod -l app=demo-app -n monitoring --timeout=120s || echo "Demo app not ready yet"
             kubectl get pods -n monitoring
             kubectl describe pod -l app=demo-app -n monitoring || true
@@ -420,11 +420,11 @@ jobs:
           kubernetes-version: 'v1.29.0'
 
       - name: Make test script executable
-        run: chmod +x tp5/test-tp5.sh
+        run: chmod +x tp05/test-tp5.sh
 
       - name: Run TP5 security tests
         run: |
-          cd tp5
+          cd tp05
           ./test-tp5.sh || echo "Some tests failed but continuing..."
 
   test-tp6-production:
@@ -454,36 +454,36 @@ jobs:
         run: pip install pyyaml
 
       - name: Make test script executable
-        run: chmod +x tp6/test-all.sh
+        run: chmod +x tp06/test-all.sh
 
       - name: Run TP6 production tests
         run: |
-          cd tp6
+          cd tp06
           ./test-all.sh || echo "Some tests failed but continuing..."
 
       - name: Test Helm chart structure
         run: |
           echo "Testing Helm chart structure..."
-          if [ -d "tp6/01-helm/my-app" ]; then
-            helm lint tp6/01-helm/my-app/ || echo "Helm lint warnings"
-            helm template tp6/01-helm/my-app/ > /dev/null || echo "Template generation failed"
+          if [ -d "tp06/01-helm/my-app" ]; then
+            helm lint tp06/01-helm/my-app/ || echo "Helm lint warnings"
+            helm template tp06/01-helm/my-app/ > /dev/null || echo "Template generation failed"
           fi
 
       - name: Test Kustomize overlays
         run: |
           echo "Testing Kustomize overlays..."
-          if [ -d "tp6/07-gitops-structure" ]; then
-            kubectl kustomize tp6/07-gitops-structure/overlays/dev || echo "Dev overlay failed"
-            kubectl kustomize tp6/07-gitops-structure/overlays/staging || echo "Staging overlay failed"
-            kubectl kustomize tp6/07-gitops-structure/overlays/production || echo "Production overlay failed"
+          if [ -d "tp06/07-gitops-structure" ]; then
+            kubectl kustomize tp06/07-gitops-structure/overlays/dev || echo "Dev overlay failed"
+            kubectl kustomize tp06/07-gitops-structure/overlays/staging || echo "Staging overlay failed"
+            kubectl kustomize tp06/07-gitops-structure/overlays/production || echo "Production overlay failed"
           fi
 
       - name: Validate Tekton manifests
         run: |
           echo "Validating Tekton manifests..."
-          if [ -d "tp6/tekton" ]; then
-            kubectl apply --dry-run=client -f tp6/tekton/tasks/ || echo "Tekton tasks validation issues"
-            kubectl apply --dry-run=client -f tp6/tekton/pipelines/ || echo "Tekton pipelines validation issues"
+          if [ -d "tp06/tekton" ]; then
+            kubectl apply --dry-run=client -f tp06/tekton/tasks/ || echo "Tekton tasks validation issues"
+            kubectl apply --dry-run=client -f tp06/tekton/pipelines/ || echo "Tekton pipelines validation issues"
           fi
 
   test-tp7-migration:
@@ -506,17 +506,17 @@ jobs:
           kubectl get nodes
 
       - name: Make test script executable
-        run: chmod +x tp7/test-tp7.sh
+        run: chmod +x tp07/test-tp7.sh
 
       - name: Run TP7 E2E tests
         run: |
-          cd tp7
+          cd tp07
           ./test-tp7.sh || echo "Some tests failed but continuing..."
 
       - name: Cleanup TP7 resources
         if: always()
         run: |
-          cd tp7
+          cd tp07
           ./test-tp7.sh cleanup || true
 
   test-tp8-networking:
@@ -533,11 +533,11 @@ jobs:
           kubernetes-version: 'v1.29.0'
 
       - name: Make test script executable
-        run: chmod +x tp8/test-tp8.sh
+        run: chmod +x tp08/test-tp8.sh
 
       - name: Run TP8 networking tests
         run: |
-          cd tp8
+          cd tp08
           ./test-tp8.sh || echo "Some tests failed but continuing..."
 
   test-tp9-multi-node:
@@ -554,11 +554,11 @@ jobs:
           kubernetes-version: 'v1.29.0'
 
       - name: Make test script executable
-        run: chmod +x tp9/test-tp9.sh
+        run: chmod +x tp09/test-tp9.sh
 
       - name: Run TP9 multi-node tests
         run: |
-          cd tp9
+          cd tp09
           ./test-tp9.sh || echo "Some tests failed but continuing..."
 
   test-tp10-synthesis:
@@ -792,7 +792,7 @@ jobs:
       - name: Check README files exist
         run: |
           echo "Checking README files..."
-          for tp in tp1 tp2 tp3 tp4 tp5 tp6 tp7 tp8 tp9 tp10; do
+          for tp in tp01 tp02 tp03 tp04 tp05 tp06 tp07 tp08 tp09 tp10; do
             if [ -f "$tp/README.md" ]; then
               echo "✓ $tp/README.md exists ($(wc -l < "$tp/README.md") lines)"
             else
