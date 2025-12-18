@@ -1643,4 +1643,4 @@ Avec ces bases, vous êtes prêt à déployer et gérer vos applications contene
 
 ---
 
-**Prochain TP recommandé :** [TP6 - Mise en Production et CI/CD](../tp6/README.md) pour automatiser les déploiements avec GitOps et ArgoCD.
+**Prochain TP recommandé :** [TP6 - Mise en Production et CI/CD](../tp06/README.md) pour automatiser les déploiements avec GitOps et ArgoCD.

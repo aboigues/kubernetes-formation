@@ -34,39 +34,39 @@ Ce projet propose une formation Kubernetes structurée en travaux pratiques (TP)
 
 ### Travaux pratiques
 
-- **[TP1 - Premier déploiement Kubernetes avec Minikube](tp1/README.md)**
+- **[TP1 - Premier déploiement Kubernetes avec Minikube](tp01/README.md)**
 
   Installation, configuration et premiers pas avec Kubernetes sur AlmaLinux
 
-- **[TP2 - Maîtriser les Manifests Kubernetes](tp2/README.md)**
+- **[TP2 - Maîtriser les Manifests Kubernetes](tp02/README.md)**
 
   Apprentissage approfondi de la rédaction de manifests YAML
 
-- **[TP3 - Persistance des données dans Kubernetes](tp3/README.md)**
+- **[TP3 - Persistance des données dans Kubernetes](tp03/README.md)**
 
   Gestion des volumes et du stockage persistant
 
-- **[TP4 - Monitoring et Gestion des Logs](tp4/README.md)**
+- **[TP4 - Monitoring et Gestion des Logs](tp04/README.md)**
 
   Observabilité, métriques, logs et alertes dans Kubernetes
 
-- **[TP5 - Sécurité et RBAC](tp5/README.md)**
+- **[TP5 - Sécurité et RBAC](tp05/README.md)**
 
   Sécurisation des clusters, contrôle d'accès et bonnes pratiques
 
-- **[TP6 - Mise en Production et CI/CD](tp6/README.md)**
+- **[TP6 - Mise en Production et CI/CD](tp06/README.md)**
 
   Déploiement automatisé, GitOps, Helm et stratégies de mise en production
 
-- **[TP7 - Migration Docker Compose vers Kubernetes](tp7/README.md)**
+- **[TP7 - Migration Docker Compose vers Kubernetes](tp07/README.md)**
 
   Migration d'applications existantes, conversion avec Kompose et bonnes pratiques
 
-- **[TP8 - Réseau Kubernetes : Services, DNS et Connectivité](tp8/README.md)**
+- **[TP8 - Réseau Kubernetes : Services, DNS et Connectivité](tp08/README.md)**
 
   Maîtrise approfondie du réseau Kubernetes, Services, DNS et NetworkPolicies
 
-- **[TP9 - Gestion Multi-Noeud de Kubernetes](tp9/README.md)**
+- **[TP9 - Gestion Multi-Noeud de Kubernetes](tp09/README.md)**
 
   Architecture et gestion de clusters multi-noeuds, haute disponibilité, maintenance et stratégies de planification
 
@@ -105,7 +105,7 @@ Ce projet propose une formation Kubernetes structurée en travaux pratiques (TP)
 
 ### TP1 - Premier déploiement Kubernetes avec Minikube
 
-📁 **[Accéder au TP1](tp1/README.md)**
+📁 **[Accéder au TP1](tp01/README.md)**
 
 Apprenez les bases de Kubernetes en installant et configurant un environnement local avec minikube. Ce TP couvre :
 - Installation de Docker, kubectl et minikube sur AlmaLinux
@@ -120,7 +120,7 @@ Apprenez les bases de Kubernetes en installant et configurant un environnement l
 
 ### TP2 - Maîtriser les Manifests Kubernetes
 
-📁 **[Accéder au TP2](tp2/README.md)**
+📁 **[Accéder au TP2](tp02/README.md)**
 
 Maîtrisez l'écriture de manifests YAML Kubernetes et les bonnes pratiques de déploiement. Ce TP couvre :
 - Structure et anatomie des manifests Kubernetes
@@ -136,7 +136,7 @@ Maîtrisez l'écriture de manifests YAML Kubernetes et les bonnes pratiques de d
 
 ### TP3 - Persistance des données dans Kubernetes
 
-📁 **[Accéder au TP3](tp3/README.md)**
+📁 **[Accéder au TP3](tp03/README.md)**
 
 Apprenez à gérer le stockage persistant et les volumes dans Kubernetes. Ce TP couvre :
 - Types de volumes (emptyDir, hostPath, PVC)
@@ -152,7 +152,7 @@ Apprenez à gérer le stockage persistant et les volumes dans Kubernetes. Ce TP 
 
 ### TP4 - Monitoring et Gestion des Logs
 
-📁 **[Accéder au TP4](tp4/README.md)**
+📁 **[Accéder au TP4](tp04/README.md)**
 
 Maîtrisez l'observabilité et le monitoring de vos clusters Kubernetes. Ce TP couvre :
 - Les trois piliers de l'observabilité (métriques, logs, traces)
@@ -171,7 +171,7 @@ Maîtrisez l'observabilité et le monitoring de vos clusters Kubernetes. Ce TP c
 
 ### TP5 - Sécurité et RBAC
 
-📁 **[Accéder au TP5](tp5/README.md)**
+📁 **[Accéder au TP5](tp05/README.md)**
 
 Maîtrisez la sécurité et le contrôle d'accès dans Kubernetes. Ce TP couvre :
 - ServiceAccounts et identités
@@ -189,7 +189,7 @@ Maîtrisez la sécurité et le contrôle d'accès dans Kubernetes. Ce TP couvre 
 
 ### TP6 - Mise en Production et CI/CD
 
-📁 **[Accéder au TP6](tp6/README.md)**
+📁 **[Accéder au TP6](tp06/README.md)**
 
 Maîtrisez le déploiement en production et l'automatisation avec Kubernetes. Ce TP couvre :
 - Helm : Charts, releases et gestionnaire de packages
@@ -208,7 +208,7 @@ Maîtrisez le déploiement en production et l'automatisation avec Kubernetes. Ce
 
 ### TP7 - Migration Docker Compose vers Kubernetes
 
-📁 **[Accéder au TP7](tp7/README.md)**
+📁 **[Accéder au TP7](tp07/README.md)**
 
 Apprenez à migrer vos applications Docker Compose existantes vers Kubernetes. Ce TP couvre :
 - Comprendre les différences entre Docker Compose et Kubernetes
@@ -227,7 +227,7 @@ Apprenez à migrer vos applications Docker Compose existantes vers Kubernetes. C
 
 ### TP8 - Réseau Kubernetes : Services, DNS et Connectivité
 
-📁 **[Accéder au TP8](tp8/README.md)**
+📁 **[Accéder au TP8](tp08/README.md)**
 
 Maîtrisez en profondeur le réseau Kubernetes avec une approche pratique et progressive. Ce TP couvre :
 - Modèle réseau Kubernetes et Container Network Interface (CNI)
@@ -245,7 +245,7 @@ Maîtrisez en profondeur le réseau Kubernetes avec une approche pratique et pro
 
 ### TP9 - Gestion Multi-Noeud de Kubernetes
 
-📁 **[Accéder au TP9](tp9/README.md)**
+📁 **[Accéder au TP9](tp09/README.md)**
 
 Maîtrisez la gestion de clusters Kubernetes multi-noeuds pour la production. Ce TP couvre :
 - Architecture d'un cluster multi-noeud (control planes, workers, etcd)
@@ -308,28 +308,28 @@ https://github.com/aboigues/kubernetes-formation.git
 ```
 kubernetes-formation/
 ├── README.md                  # Ce fichier
-├── tp1/                       # TP1 - Premier déploiement
+├── tp01/                       # TP1 - Premier déploiement
 │   └── README.md             # Guide complet du TP1
-├── tp2/                       # TP2 - Manifests Kubernetes
+├── tp02/                       # TP2 - Manifests Kubernetes
 │   └── README.md             # Guide complet du TP2
-├── tp3/                       # TP3 - Persistance des données
+├── tp03/                       # TP3 - Persistance des données
 │   └── README.md             # Guide complet du TP3
-├── tp4/                       # TP4 - Monitoring et Logs
+├── tp04/                       # TP4 - Monitoring et Logs
 │   └── README.md             # Guide complet du TP4
-├── tp5/                       # TP5 - Sécurité et RBAC
+├── tp05/                       # TP5 - Sécurité et RBAC
 │   └── README.md             # Guide complet du TP5
-├── tp6/                       # TP6 - Mise en Production et CI/CD
+├── tp06/                       # TP6 - Mise en Production et CI/CD
 │   └── README.md             # Guide complet du TP6
-├── tp7/                       # TP7 - Migration Docker Compose vers Kubernetes
+├── tp07/                       # TP7 - Migration Docker Compose vers Kubernetes
 │   ├── README.md             # Guide complet du TP7
 │   ├── QUICKSTART.md         # Guide de démarrage rapide
 │   ├── docker-compose-app/   # Application exemple avec Docker Compose
 │   ├── kubernetes-manifests/ # Manifests Kubernetes correspondants
 │   ├── frontend/             # Fichiers frontend
 │   └── backend/              # Fichiers backend
-├── tp8/                       # TP8 - Réseau Kubernetes
+├── tp08/                       # TP8 - Réseau Kubernetes
 │   └── README.md             # Guide complet du TP8
-├── tp9/                       # TP9 - Gestion Multi-Noeud
+├── tp09/                       # TP9 - Gestion Multi-Noeud
 │   ├── README.md             # Guide complet du TP9
 │   ├── examples/             # Exemples de manifests (affinités, taints, PDB)
 │   └── exercices/            # Exercices pratiques

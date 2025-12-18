@@ -325,6 +325,6 @@ kubectl describe pvc database-pvc -n myapp
 ## Pour aller plus loin
 
 - Consultez le [README principal du TP7](../README.md) pour le guide complet
-- Voir [TP6 - Mise en Production](../../tp6/README.md) pour l'automatisation CI/CD
-- Voir [TP5 - Sécurité et RBAC](../../tp5/README.md) pour sécuriser l'application
-- Voir [TP4 - Monitoring](../../tp4/README.md) pour le monitoring et les logs
+- Voir [TP6 - Mise en Production](../../tp06/README.md) pour l'automatisation CI/CD
+- Voir [TP5 - Sécurité et RBAC](../../tp05/README.md) pour sécuriser l'application
+- Voir [TP4 - Monitoring](../../tp04/README.md) pour le monitoring et les logs
