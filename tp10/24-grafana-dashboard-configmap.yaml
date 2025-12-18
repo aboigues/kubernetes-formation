@@ -106,7 +106,7 @@ data:
             "title": "PostgreSQL",
             "targets": [
               {
-                "expr": "up{job=\"kubernetes-pods\", namespace=\"taskflow\", app=\"postgres\"}",
+                "expr": "count(container_cpu_usage_seconds_total{namespace=\"taskflow\", pod=~\"postgres.*\", container=\"postgres\"}) > 0 or vector(0)",
                 "refId": "A"
               }
             ],
@@ -137,7 +137,7 @@ data:
             "title": "Redis Cache",
             "targets": [
               {
-                "expr": "up{job=\"kubernetes-pods\", namespace=\"taskflow\", app=\"redis\"}",
+                "expr": "count(container_cpu_usage_seconds_total{namespace=\"taskflow\", pod=~\"redis.*\", container=\"redis\"}) > 0 or vector(0)",
                 "refId": "A"
               }
             ],
@@ -365,7 +365,7 @@ data:
             "title": "PostgreSQL - État",
             "targets": [
               {
-                "expr": "up{job=\"kubernetes-pods\", namespace=\"taskflow\", app=\"postgres\"}",
+                "expr": "count(container_cpu_usage_seconds_total{namespace=\"taskflow\", pod=~\"postgres.*\", container=\"postgres\"}) > 0 or vector(0)",
                 "refId": "A"
               }
             ],
@@ -430,7 +430,7 @@ data:
             "title": "Redis - État",
             "targets": [
               {
-                "expr": "up{job=\"kubernetes-pods\", namespace=\"taskflow\", app=\"redis\"}",
+                "expr": "count(container_cpu_usage_seconds_total{namespace=\"taskflow\", pod=~\"redis.*\", container=\"redis\"}) > 0 or vector(0)",
                 "refId": "A"
               }
             ],
