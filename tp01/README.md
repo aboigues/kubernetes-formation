@@ -82,7 +82,142 @@ sudo usermod -aG docker $USER
 newgrp docker
 ```
 
-### 1.3 Installation de kubectl
+### 1.3 Alternative : Utilisation avec Podman sur WSL
+
+> **💡 Section pour les utilisateurs WSL avec Podman** : Si vous utilisez Windows avec WSL2 et préférez Podman à Docker, cette section est pour vous. Podman est une alternative sans démon (daemonless) et rootless à Docker.
+
+#### Pourquoi Podman ?
+
+- **Rootless par défaut** : Pas besoin de privilèges root pour exécuter des conteneurs
+- **Sans démon** : Pas de service en arrière-plan à maintenir
+- **Compatible OCI** : Mêmes images que Docker
+- **Intégration WSL** : Fonctionne bien dans WSL2
+
+#### Installation de Podman dans WSL (Ubuntu/Debian)
+
+```bash
+# Mettre à jour les paquets
+sudo apt update && sudo apt upgrade -y
+
+# Installer Podman
+sudo apt install -y podman
+
+# Vérifier l'installation
+podman --version
+
+# Tester avec un conteneur
+podman run --rm hello-world
+```
+
+#### Installation de Podman dans WSL (Fedora/AlmaLinux)
+
+```bash
+# Installer Podman
+sudo dnf install -y podman
+
+# Vérifier l'installation
+podman --version
+```
+
+#### Configuration de minikube avec Podman
+
+```bash
+# Configurer Podman comme driver par défaut pour minikube
+minikube config set driver podman
+
+# OU démarrer minikube avec le driver Podman explicitement
+minikube start --driver=podman
+
+# Si vous rencontrez des problèmes avec rootless, utilisez :
+minikube start --driver=podman --container-runtime=containerd
+```
+
+#### Résolution des problèmes courants avec Podman + WSL
+
+**Problème : "cannot find crun"**
+```bash
+# Installer crun (runtime OCI léger)
+sudo apt install -y crun
+# ou sur Fedora/AlmaLinux
+sudo dnf install -y crun
+```
+
+**Problème : Erreurs de réseau ou de registre**
+```bash
+# Configurer les registries non qualifiés
+mkdir -p ~/.config/containers
+cat > ~/.config/containers/registries.conf << 'EOF'
+unqualified-search-registries = ["docker.io", "quay.io"]
+
+[[registry]]
+location = "docker.io"
+EOF
+```
+
+**Problème : "rootless mode requires a user namespace"**
+```bash
+# Vérifier que les user namespaces sont activés
+cat /proc/sys/user/max_user_namespaces
+# Si la valeur est 0, activer avec :
+echo "user.max_user_namespaces=28633" | sudo tee /etc/sysctl.d/userns.conf
+sudo sysctl -p /etc/sysctl.d/userns.conf
+```
+
+**Problème : minikube ne démarre pas avec Podman**
+```bash
+# Option 1 : Utiliser le mode rootful (nécessite sudo)
+minikube start --driver=podman --rootless=false
+
+# Option 2 : Vérifier les prérequis
+podman system info
+minikube start --driver=podman --alsologtostderr -v=4
+```
+
+**Problème : Erreur "aardvark-dns" ou résolution DNS**
+```bash
+# Installer les plugins réseau manquants
+sudo apt install -y aardvark-dns netavark
+# ou sur Fedora/AlmaLinux
+sudo dnf install -y aardvark-dns netavark
+
+# Redémarrer Podman
+podman system reset
+```
+
+#### Commandes Podman utiles
+
+```bash
+# Équivalent de docker ps
+podman ps -a
+
+# Voir les images
+podman images
+
+# Nettoyer les ressources inutilisées
+podman system prune -a
+
+# Voir les informations système
+podman system info
+
+# Debugger un problème
+podman system connection list
+```
+
+#### Alias pour compatibilité Docker
+
+Si vous avez des scripts qui utilisent la commande `docker`, vous pouvez créer un alias :
+
+```bash
+# Ajouter à ~/.bashrc ou ~/.zshrc
+echo 'alias docker=podman' >> ~/.bashrc
+source ~/.bashrc
+```
+
+**Note :** Certaines commandes Docker avancées peuvent ne pas avoir d'équivalent exact dans Podman.
+
+---
+
+### 1.4 Installation de kubectl
 
 ```bash
 # Télécharger kubectl
@@ -98,7 +233,7 @@ sudo mv kubectl /usr/local/bin/
 kubectl version --client
 ```
 
-### 1.4 Installation de minikube (Option A)
+### 1.5 Installation de minikube (Option A)
 
 **Si vous choisissez minikube :**
 
@@ -113,7 +248,7 @@ sudo install minikube-linux-amd64 /usr/local/bin/minikube
 minikube version
 ```
 
-### 1.5 Installation de kubeadm (Option B)
+### 1.6 Installation de kubeadm (Option B)
 
 **Si vous choisissez kubeadm :**
 
@@ -233,7 +368,7 @@ kubeconfig: Configured
 
 **Si vous utilisez kubeadm :**
 
-Après avoir suivi les étapes d'installation de la section 1.5, vérifiez que votre cluster est opérationnel :
+Après avoir suivi les étapes d'installation de la section 1.6, vérifiez que votre cluster est opérationnel :
 
 ```bash
 # Vérifier que tous les pods système sont prêts
@@ -1385,7 +1520,7 @@ sudo rm -rf /etc/cni/net.d
 sudo rm -rf $HOME/.kube/config
 sudo iptables -F && sudo iptables -t nat -F && sudo iptables -t mangle -F && sudo iptables -X
 
-# Puis réinitialiser depuis le début si nécessaire (voir section 1.5)
+# Puis réinitialiser depuis le début si nécessaire (voir section 1.6)
 ```
 
 ## Exercices pratiques
