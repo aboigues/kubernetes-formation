@@ -127,6 +127,7 @@ Maîtrisez l'écriture de manifests YAML Kubernetes et les bonnes pratiques de d
 - Création de Pods, Deployments et Services
 - Gestion de la configuration avec ConfigMaps et Secrets
 - Utilisation avancée des labels et selectors
+- **Sidecar containers natifs (K8s 1.29+)** — `initContainers` avec `restartPolicy: Always`
 - Namespaces et organisation des ressources
 - Validation, tests et debugging
 - Bonnes pratiques de production
@@ -181,10 +182,11 @@ Maîtrisez la sécurité et le contrôle d'accès dans Kubernetes. Ce TP couvre 
 - Gestion sécurisée des Secrets
 - Audit et logging de sécurité
 - Scanner de vulnérabilités d'images
+- **ValidatingAdmissionPolicy avec CEL (K8s 1.30+)** — contrôles déclaratifs sans webhook
 - Admission Controllers
 - Bonnes pratiques de sécurité en production
 
-**Durée estimée :** 6-7 heures
+**Durée estimée :** 6-8 heures
 **Niveau :** Avancé
 
 ### TP6 - Mise en Production et CI/CD
@@ -194,6 +196,7 @@ Maîtrisez la sécurité et le contrôle d'accès dans Kubernetes. Ce TP couvre 
 Maîtrisez le déploiement en production et l'automatisation avec Kubernetes. Ce TP couvre :
 - Helm : Charts, releases et gestionnaire de packages
 - Ingress Controllers : NGINX Ingress, routing HTTP/HTTPS
+- **Gateway API (K8s 1.31+)** — le successeur de l'Ingress avec séparation des rôles
 - CI/CD : Pipelines avec GitHub Actions
 - Stratégies de déploiement : Rolling, Blue-Green, Canary
 - GitOps : Déploiement continu avec ArgoCD
@@ -237,6 +240,7 @@ Maîtrisez en profondeur le réseau Kubernetes avec une approche pratique et pro
 - NetworkPolicies pour la sécurité réseau (ingress, egress)
 - Session affinity et load balancing
 - Débogage réseau avec outils appropriés (tcpdump, netshoot)
+- **Gateway API (K8s 1.31+)** — GatewayClass, Gateway, HTTPRoute, canary avancé
 - Architectures réseau multi-tiers et multi-tenancy
 - Cas pratiques et exercices progressifs
 
@@ -412,17 +416,28 @@ Pour plus de détails sur les tests, consultez [.github/workflows/README.md](.gi
 
 ## Concepts clés couverts
 
-- **Conteneurisation** : Docker et containerd
-- **Orchestration** : Kubernetes et minikube
-- **Pods** : Unité de base de déploiement
-- **Deployments** : Gestion déclarative des applications
-- **Services** : Exposition et découverte de services
-- **ConfigMaps & Secrets** : Gestion de la configuration
-- **Scaling** : Mise à l'échelle horizontale
-- **Rolling updates** : Mises à jour sans interruption
-- **Rollback** : Retour arrière en cas de problème
-- **YAML manifests** : Infrastructure as Code
-- **kubectl** : Outil de ligne de commande
+**Fondamentaux :**
+- **Conteneurisation** : Docker, containerd, Podman
+- **Orchestration** : Kubernetes (v1.32+) et minikube
+- **Pods & Deployments** : Unité de base, gestion déclarative
+- **Services** : Exposition et découverte (ClusterIP, NodePort, LoadBalancer)
+- **ConfigMaps & Secrets** : Gestion sécurisée de la configuration
+
+**Intermédiaire :**
+- **Volumes & Stockage** : PV, PVC, StorageClasses, snapshots
+- **Scaling** : Horizontal Pod Autoscaler (HPA), scaling manuel
+- **Rolling updates & Rollback** : Mises à jour sans interruption
+- **Sidecar containers natifs** : K8s 1.29+ `initContainers` avec `restartPolicy: Always`
+- **RBAC** : Roles, ClusterRoles, ServiceAccounts, Pod Security Standards
+
+**Avancé :**
+- **Gateway API (K8s 1.31+)** : GatewayClass, Gateway, HTTPRoute — successeur de l'Ingress
+- **ValidatingAdmissionPolicy (K8s 1.30+)** : Contrôles déclaratifs via CEL sans webhook
+- **Network Policies** : Isolation réseau, ingress/egress rules
+- **Monitoring** : Prometheus, Grafana, Metrics Server
+- **CI/CD & GitOps** : GitHub Actions, ArgoCD, Helm, Kustomize
+- **Multi-nœuds** : Taints, tolerations, affinités, haute disponibilité
+- **Migration** : Docker Compose → Kubernetes avec Kompose
 
 ## Commandes kubectl essentielles
 

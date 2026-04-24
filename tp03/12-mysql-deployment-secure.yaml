@@ -197,7 +197,7 @@ spec:
       containers:
       # Container MySQL principal
       - name: mysql
-        image: mysql:8.0.35  # Version spécifique pour la reproductibilité
+        image: mysql:8.4.0   # Version spécifique pour la reproductibilité
         imagePullPolicy: IfNotPresent
 
         ports:

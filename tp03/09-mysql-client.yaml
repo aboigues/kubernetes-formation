@@ -5,5 +5,5 @@ metadata:
 spec:
   containers:
   - name: mysql-client
-    image: mysql:8.0
+    image: mysql:8.4
     command: ['sh', '-c', 'sleep 3600']

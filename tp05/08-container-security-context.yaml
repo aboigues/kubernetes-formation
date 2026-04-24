@@ -5,7 +5,7 @@ metadata:
 spec:
   containers:
   - name: secure-container
-    image: nginx:alpine
+    image: nginx:1.27-alpine
     securityContext:
       runAsNonRoot: true
       runAsUser: 1000

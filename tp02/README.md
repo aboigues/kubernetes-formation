@@ -88,7 +88,7 @@ metadata:
 spec:
   containers:
   - name: nginx
-    image: nginx:1.24
+    image: nginx:1.27-alpine
     ports:
     - containerPort: 80
 ```
@@ -123,7 +123,7 @@ metadata:
 spec:
   containers:
   - name: webapp
-    image: httpd:2.4
+    image: httpd:2.4-alpine
     ports:
     - containerPort: 80
     resources:
@@ -154,7 +154,7 @@ metadata:
 spec:
   containers:
   - name: nginx
-    image: nginx:alpine
+    image: nginx:1.27-alpine
     ports:
     - containerPort: 80
     volumeMounts:
@@ -162,7 +162,7 @@ spec:
       mountPath: /usr/share/nginx/html
 
   - name: content-generator
-    image: busybox
+    image: busybox:1.36
     command: ["/bin/sh"]
     args:
       - -c
@@ -195,6 +195,84 @@ spec:
    curl localhost:8080
    ```
 
+**Question de réflexion :** Que se passe-t-il si le conteneur `content-generator` plante ? Testez en forçant une erreur dans la commande shell. Kubernetes redémarre-t-il seulement ce conteneur ou tout le pod ?
+
+### 2.4 Nouveauté K8s 1.29+ : Sidecar containers natifs
+
+Avant Kubernetes 1.29, un sidecar était simplement un conteneur supplémentaire dans la liste `containers`. Le problème : il démarrait en même temps que le conteneur principal, sans garantie d'ordre.
+
+Depuis **Kubernetes 1.29 (stable)**, les sidecars peuvent être déclarés dans `initContainers` avec `restartPolicy: Always`. Cela garantit que :
+- Le sidecar **démarre avant** le conteneur principal
+- Le sidecar **reste actif** pendant toute la durée de vie du pod
+- Le pod se termine correctement même si le sidecar est encore en cours d'exécution
+
+**Exemple — Log collector sidecar :**
+
+```yaml
+# 03b-native-sidecar.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: native-sidecar-demo
+spec:
+  initContainers:
+  # Sidecar natif : déclare restartPolicy: Always
+  - name: log-collector
+    image: busybox:1.36
+    restartPolicy: Always        # C'est ce qui en fait un "sidecar natif"
+    command: ["/bin/sh", "-c"]
+    args:
+    - |
+      echo "Log collector démarré, surveillance de /logs/app.log..."
+      tail -f /logs/app.log 2>/dev/null || (
+        echo "En attente du fichier de log...";
+        sleep 2;
+        tail -f /logs/app.log
+      )
+    volumeMounts:
+    - name: logs
+      mountPath: /logs
+
+  containers:
+  - name: application
+    image: busybox:1.36
+    command: ["/bin/sh", "-c"]
+    args:
+    - |
+      echo "Application démarrée"
+      i=1
+      while true; do
+        echo "$(date): Traitement de la tâche $i" >> /logs/app.log
+        i=$((i+1))
+        sleep 3
+      done
+    volumeMounts:
+    - name: logs
+      mountPath: /logs
+
+  volumes:
+  - name: logs
+    emptyDir: {}
+```
+
+**À observer :**
+```bash
+kubectl apply -f 03b-native-sidecar.yaml
+kubectl get pod native-sidecar-demo
+
+# Voir les logs du sidecar (il reçoit les logs de l'application)
+kubectl logs native-sidecar-demo -c log-collector -f
+
+# Le sidecar redémarre-t-il si on le "tue" ?
+kubectl exec native-sidecar-demo -c log-collector -- kill 1
+kubectl get pod native-sidecar-demo  # Observe le RESTARTS count
+```
+
+**Cas d'usage réels des sidecars natifs :**
+- Collecteurs de logs (Fluentd, Filebeat) — garantissent de ne pas perdre des logs à l'arrêt
+- Proxys service mesh (Istio Envoy, Linkerd) — doivent démarrer avant l'app
+- Agents de secrets (Vault Agent) — injectent la config avant le démarrage de l'app
+
 ## Partie 3 : Deployments - Gestion des réplicas
 
 ### 3.1 Deployment de base
@@ -222,7 +300,7 @@ spec:
     spec:
       containers:
       - name: nginx
-        image: nginx:1.24
+        image: nginx:1.27-alpine
         ports:
         - containerPort: 80
 ```
@@ -262,7 +340,7 @@ spec:
     spec:
       containers:
       - name: app
-        image: nginx:1.24
+        image: nginx:1.27-alpine
         ports:
         - containerPort: 80
         livenessProbe:    # Vérification que le conteneur est vivant
@@ -378,7 +456,7 @@ spec:
     spec:
       containers:
       - name: app
-        image: nginx:1.24
+        image: nginx:1.27-alpine
         ports:
         - containerPort: 80
         resources:
@@ -572,7 +650,7 @@ spec:
     spec:
       containers:
       - name: app
-        image: nginx:1.24
+        image: nginx:1.27-alpine
         readinessProbe:  # Crucial pour détecter les déploiements problématiques
           httpGet:
             path: /
@@ -1097,7 +1175,7 @@ spec:
     spec:
       containers:
       - name: webapp
-        image: nginx:1.24
+        image: nginx:1.27-alpine
         ports:
         - containerPort: 80
         # Contexte de sécurité
@@ -1193,7 +1271,7 @@ spec:
     spec:
       containers:
       - name: app
-        image: nginx:1.24-alpine
+        image: nginx:1.27-alpine
         ports:
         - containerPort: 80
         resources:
@@ -1270,7 +1348,7 @@ spec:
     spec:
       containers:
       - name: app
-        image: nginx:1.24-alpine
+        image: nginx:1.27-alpine
         ports:
         - containerPort: 80
         resources:
@@ -1332,7 +1410,7 @@ spec:
     spec:
       containers:
       - name: app
-        image: nginx:1.24-alpine
+        image: nginx:1.27-alpine
         ports:
         - containerPort: 80
         resources:
@@ -1396,7 +1474,7 @@ spec:
     spec:
       containers:
       - name: app
-        image: nginx:1.24-alpine
+        image: nginx:1.27-alpine
         ports:
         - containerPort: 80
         resources:
@@ -1468,7 +1546,7 @@ spec:
     spec:
       containers:
       - name: backend
-        image: nginx:1.24-alpine
+        image: nginx:1.27-alpine
         ports:
         - containerPort: 80
         resources:
@@ -1538,7 +1616,7 @@ spec:
     spec:
       containers:
       - name: nginx
-        image: nginx:1.24
+        image: nginx:1.27-alpine
         ports:
         - name: http
           containerPort: 80
@@ -1672,7 +1750,7 @@ spec:
     spec:
       containers:
       - name: nginx
-        image: nginx:1.24-alpine
+        image: nginx:1.27-alpine
         ports:
         - containerPort: 80
         securityContext:
@@ -2239,7 +2317,7 @@ metadata:
 spec:
   containers:
   - name: test
-    image: busybox
+    image: busybox:1.36
     command: ["sleep", "3600"]
     volumeMounts:
     - name: test-storage
@@ -2407,7 +2485,7 @@ spec:
     spec:
       containers:
       - name: backup
-        image: busybox
+        image: busybox:1.36
         command: ["/bin/sh"]
         args:
           - -c
@@ -2435,7 +2513,7 @@ spec:
         spec:
           containers:
           - name: cleanup
-            image: busybox
+            image: busybox:1.36
             command: ["/bin/sh"]
             args:
               - -c
@@ -2505,7 +2583,7 @@ kube-score score manifest.yaml
 image: nginx
 
 # Bon
-image: nginx:1.24.0
+image: nginx:1.27.0
 ```
 
 **2. Définir les ressources requests et limits**
@@ -2613,7 +2691,7 @@ spec:
 
       containers:
       - name: app
-        image: nginx:1.24.0
+        image: nginx:1.27.0
 
         ports:
         - name: http
@@ -2983,7 +3061,7 @@ spec:
     spec:
       containers:
       - name: app
-        image: nginx:1.24  # Correction 2: Nom d'image corrigé avec version spécifique
+        image: nginx:1.27-alpine  # Correction 2: Nom d'image corrigé avec version spécifique
         ports:
         - containerPort: 80
         resources:

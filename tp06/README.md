@@ -395,11 +395,15 @@ helm install my-app-prod ./my-app -f values-prod.yaml
 helm list
 ```
 
-## Partie 2 : Ingress Controllers
+## Partie 2 : Ingress Controllers et Gateway API
 
-### 2.1 Qu'est-ce qu'un Ingress ?
+### 2.1 Ingress vs Gateway API — Comprendre l'évolution
 
-Un **Ingress** expose les routes HTTP/HTTPS depuis l'extérieur du cluster vers les services internes.
+Kubernetes propose deux approches pour exposer des services HTTP/HTTPS :
+
+#### Ingress (API stable, largement déployé)
+
+Un **Ingress** expose les routes HTTP/HTTPS depuis l'extérieur vers les services internes.
 
 **Avantages** :
 - Un seul point d'entrée
@@ -407,6 +411,38 @@ Un **Ingress** expose les routes HTTP/HTTPS depuis l'extérieur du cluster vers 
 - SSL/TLS termination
 - Name-based virtual hosting
 - Path-based routing
+
+**Limites de l'Ingress** :
+- Un seul objet `Ingress` par contrôleur — difficile à partager entre équipes
+- Les fonctionnalités avancées (timeout, retry, header matching) passent par des annotations propriétaires à chaque contrôleur
+- Pas de notion de séparation des rôles (qui gère les routes vs qui gère le contrôleur)
+
+#### Gateway API (stable depuis K8s 1.31 — la voie future)
+
+La **Gateway API** est le successeur de l'Ingress, conçu pour les environnements multi-équipes et multi-tenants. Elle introduit une hiérarchie de rôles claire :
+
+```
+GatewayClass  ← Créé par l'admin infrastructure (type de contrôleur)
+    └── Gateway  ← Créé par l'admin cluster (point d'entrée + TLS)
+            └── HTTPRoute  ← Créé par les équipes applicatives (règles de routage)
+```
+
+**Avantages sur l'Ingress** :
+- **Séparation des rôles** : les équipes app gèrent leurs HTTPRoutes sans toucher au Gateway
+- **API standardisée** : les fonctionnalités avancées sont dans la spec, pas dans des annotations
+- **Multi-protocoles** : HTTP, TCP, TLS, gRPC natifs (vs plugins pour Ingress)
+- **Portable** : un seul manifest fonctionne avec NGINX, Envoy, Istio, etc.
+
+| Aspect | Ingress | Gateway API |
+|--------|---------|-------------|
+| Stabilité | Stable | Stable (K8s 1.31) |
+| Séparation rôles | Non | Oui |
+| Header matching | Via annotations | Natif |
+| Retry/Timeout | Via annotations | Natif |
+| Multi-cluster | Non | Oui (extensible) |
+| Migration | — | `ingress2gateway` tool disponible |
+
+> **Conseil :** Pour un nouveau cluster, démarrez avec la **Gateway API**. Pour un cluster existant avec Ingress, la migration est progressive — les deux peuvent coexister.
 
 ### 2.2 Installation de NGINX Ingress Controller
 
@@ -802,6 +838,140 @@ kubectl wait --namespace ingress-nginx \
 ```
 
 **⚠️ Avertissement** : L'option `allow-snippet-annotations: "true"` **NE DOIT PAS** être utilisée en production car elle représente un risque de sécurité.
+
+### 2.7 Gateway API — L'Ingress nouvelle génération (K8s 1.31+)
+
+Cette section vous fait découvrir la **Gateway API**, le standard qui remplace progressivement l'Ingress.
+
+#### Installation du contrôleur NGINX Gateway Fabric
+
+```bash
+# Installer les CRDs de la Gateway API
+kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.0/standard-install.yaml
+
+# Avec minikube — utiliser NGINX Gateway Fabric
+helm repo add nginx-gateway https://helm.nginx.com/stable
+helm repo update
+helm install ngf nginx-gateway/nginx-gateway-fabric \
+  --create-namespace \
+  --namespace nginx-gateway \
+  --set service.type=NodePort
+
+# Vérifier l'installation
+kubectl get pods -n nginx-gateway
+kubectl get gatewayclass
+```
+
+#### Exercice 7 : Reproduire l'Exercice 5 avec la Gateway API
+
+**Objectif :** Migrer la configuration Ingress de l'exercice 5 vers la Gateway API.
+
+**Étape 1 — GatewayClass et Gateway (rôle admin) :**
+
+```yaml
+# gateway-api-setup.yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: nginx
+spec:
+  controllerName: gateway.nginx.org/nginx-gateway-controller
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: main-gateway
+  namespace: default
+spec:
+  gatewayClassName: nginx
+  listeners:
+  - name: http
+    protocol: HTTP
+    port: 80
+    allowedRoutes:
+      namespaces:
+        from: Same
+```
+
+**Étape 2 — HTTPRoute (rôle équipe applicative) :**
+
+```yaml
+# app-routes.yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: web-app-route
+  namespace: default
+spec:
+  parentRefs:
+  - name: main-gateway
+    namespace: default
+  hostnames:
+  - "myapp.local"
+  rules:
+  # Route /api vers le backend
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /api
+    backendRefs:
+    - name: api-service
+      port: 8080
+  # Route / vers le frontend
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: web-app-service
+      port: 80
+```
+
+**Fonctionnalités avancées natives dans l'HTTPRoute :**
+
+```yaml
+# Timeout et retry — natifs dans Gateway API, pas d'annotations propriétaires
+rules:
+- matches:
+  - path:
+      type: PathPrefix
+      value: /api
+  timeouts:
+    request: 30s
+    backendRequest: 25s
+  backendRefs:
+  - name: api-service
+    port: 8080
+    weight: 100  # Pour le canary : définir weight: 90 ici et weight: 10 sur la v2
+
+# Header matching — filtre par header sans annotation
+- matches:
+  - headers:
+    - name: X-User-Beta
+      value: "true"
+  backendRefs:
+  - name: api-service-beta
+    port: 8080
+```
+
+**Test et vérification :**
+```bash
+kubectl apply -f gateway-api-setup.yaml
+kubectl apply -f app-routes.yaml
+
+# Vérifier l'état
+kubectl get gateway main-gateway
+kubectl get httproute web-app-route
+kubectl describe httproute web-app-route
+
+# La condition "Accepted" et "ResolvedRefs" doivent être True
+```
+
+**Questions de réflexion :**
+- Pourquoi la Gateway API sépare-t-elle `GatewayClass`, `Gateway` et `HTTPRoute` en 3 objets distincts ?
+- Dans un contexte multi-équipes, qui devrait avoir le droit de créer chaque type d'objet ?
+- Comment migreriez-vous un Ingress existant vers la Gateway API ? (Indice : cherchez l'outil `ingress2gateway`)
+- La Gateway API supporte-t-elle TCP et gRPC ? Quels types de routes sont disponibles ?
 
 ## Partie 3 : CI/CD avec GitHub Actions
 

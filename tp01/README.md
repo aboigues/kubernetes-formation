@@ -298,13 +298,15 @@ sudo systemctl restart containerd
 sudo systemctl enable containerd
 
 # 4. Installer kubeadm, kubelet et kubectl
+# Remplacez v1.32 par la version souhaitée (v1.32, v1.33, v1.34, etc.)
+KUBE_VERSION="v1.32"
 cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
 [kubernetes]
 name=Kubernetes
-baseurl=https://pkgs.k8s.io/core:/stable:/v1.29/rpm/
+baseurl=https://pkgs.k8s.io/core:/stable:/${KUBE_VERSION}/rpm/
 enabled=1
 gpgcheck=1
-gpgkey=https://pkgs.k8s.io/core:/stable:/v1.29/rpm/repodata/repomd.xml.key
+gpgkey=https://pkgs.k8s.io/core:/stable:/${KUBE_VERSION}/rpm/repodata/repomd.xml.key
 exclude=kubelet kubeadm kubectl cri-tools kubernetes-cni
 EOF
 
@@ -1525,75 +1527,133 @@ sudo iptables -F && sudo iptables -t nat -F && sudo iptables -t mangle -F && sud
 
 ## Exercices pratiques
 
-### Exercice 1 : Déploiement Redis
-1. Déployer une instance Redis avec l'image `redis:7-alpine`
-2. L'exposer via un service de type **ClusterIP** sur le port 6379
-3. Vérifier que le pod est en cours d'exécution
+> **Conseil pédagogique :** Essayez de réaliser chaque exercice sans regarder la solution. La commande `kubectl explain <ressource>` et la documentation `kubectl --help` sont vos meilleures alliées. Développer ce réflexe est fondamental pour la certification CKAD.
 
-**Pourquoi ClusterIP ?** Redis est typiquement une base de données backend qui doit être accessible uniquement depuis l'intérieur du cluster par d'autres applications. Il n'a pas besoin d'être exposé à l'extérieur. Voir Partie 4.1 pour plus de détails sur ClusterIP.
+### Exercice 1 : Déploiement Redis et choix du service
 
-### Exercice 2 : Application multi-conteneurs
-1. Créer un déploiement avec 3 réplicas d'nginx
-2. Créer un service **LoadBalancer**
-3. Tester l'accès à l'application
-4. Scaler à 5 réplicas
-5. Observer la distribution des pods
+**Contexte :** Vous déployez une base de données Redis qui sera utilisée uniquement par d'autres microservices dans le cluster. Elle ne doit jamais être accessible depuis l'extérieur.
 
-**À propos de LoadBalancer :**
-- **Avec minikube :** Le type LoadBalancer est automatiquement converti en NodePort. Pour simuler un vrai LoadBalancer localement, vous pouvez utiliser `minikube tunnel` dans un terminal séparé.
-- **Avec kubeadm :** Installez MetalLB pour obtenir des IPs externes pour vos LoadBalancers (voir [guide kubeadm](../docs/KUBEADM_SETUP.md#partie-6--configuration-du-loadbalancer-metallb))
-
-### Exercice 3 : Manipulation YAML
-1. Créer un fichier YAML pour déployer MySQL
-   - Image: `mysql:8.0`
-   - Variables d'environnement: `MYSQL_ROOT_PASSWORD=secret`
-   - Port: 3306
-2. Appliquer le déploiement
-3. Vérifier les logs du pod MySQL
-
-## Solutions des exercices
-
-<details>
-<summary>Solution Exercice 1</summary>
+**À faire :**
+1. Déployez Redis avec l'image `redis:7.4-alpine`
+2. Choisissez le bon type de Service parmi ClusterIP, NodePort et LoadBalancer — justifiez votre choix
+3. Exposez Redis sur le port 6379
+4. Vérifiez que Redis répond en lançant un pod client temporaire :
 
 ```bash
-# Créer le déploiement
-kubectl create deployment redis-demo --image=redis:7-alpine
+kubectl run redis-test --rm -it --image=redis:7.4-alpine -- redis-cli -h redis-demo ping
+# Résultat attendu : PONG
+```
 
-# Créer le service
+**Questions de réflexion :**
+- Que se passe-t-il si vous essayez d'accéder à ce service depuis l'extérieur du cluster ?
+- Quelle différence y a-t-il entre `kubectl create deployment` (impératif) et un fichier YAML (déclaratif) ? Dans quel contexte utiliseriez-vous l'un plutôt que l'autre ?
+- Observez l'adresse IP attribuée au service (`kubectl get svc`). D'où vient cette IP ? (Indice : `kubectl cluster-info dump | grep -m1 service-cluster-ip-range`)
+
+<details>
+<summary>💡 Aide (débloquer si besoin)</summary>
+
+```bash
+kubectl create deployment redis-demo --image=redis:7.4-alpine
 kubectl expose deployment redis-demo --type=ClusterIP --port=6379
-
-# Vérifier
 kubectl get pods,services
 ```
+
+Le type ClusterIP est le bon choix : Redis est un service interne, il n'a pas à être exposé à l'extérieur. Exposer une base de données sur un NodePort ou LoadBalancer constituerait une faille de sécurité.
 </details>
 
+---
+
+### Exercice 2 : Auto-réparation et résilience
+
+**Contexte :** Vous voulez observer le comportement de Kubernetes face à une défaillance. C'est l'une des fonctionnalités les plus importantes à comprendre.
+
+**À faire :**
+1. Créez un déploiement nginx avec **3 réplicas**
+2. Exposez-le en NodePort
+3. Vérifiez que les 3 pods sont `Running` et notez leurs noms
+4. **Supprimez un pod manuellement** : `kubectl delete pod <nom-du-pod>`
+5. Observez ce qui se passe avec `kubectl get pods -w` (flag `--watch`)
+6. Scalez à 5 réplicas, puis observez la distribution sur les nœuds
+
+**Questions de réflexion :**
+- Combien de temps a pris Kubernetes pour recréer le pod supprimé ?
+- Quel composant Kubernetes est responsable de cette auto-réparation ?
+- Que se passe-t-il si vous scalez à 0 réplicas ? Est-ce que le service est toujours présent ?
+- Pourquoi n'utilise-t-on pas NodePort en production sur un cloud provider ?
+
 <details>
-<summary>Solution Exercice 2</summary>
+<summary>💡 Aide (débloquer si besoin)</summary>
 
 ```bash
 # Créer le déploiement
-kubectl create deployment nginx-multi --image=nginx --replicas=3
+kubectl create deployment nginx-multi --image=nginx:1.27-alpine --replicas=3
+kubectl expose deployment nginx-multi --type=NodePort --port=80
 
-# Exposer le service
-kubectl expose deployment nginx-multi --type=LoadBalancer --port=80
+# Observer les pods
+kubectl get pods -o wide
 
-# Obtenir l'URL
-minikube service nginx-multi --url
+# Supprimer un pod (remplacer par le vrai nom)
+kubectl delete pod nginx-multi-xxxxx-yyyyy
+
+# Observer la recréation en temps réel
+kubectl get pods -w
 
 # Scaler
 kubectl scale deployment nginx-multi --replicas=5
-
-# Observer
-kubectl get pods -o wide
+kubectl get pods -o wide  # Observer la distribution sur les nœuds
 ```
+
+L'auto-réparation est assurée par le **ReplicaSet Controller** dans le kube-controller-manager : il surveille en permanence l'état réel vs l'état désiré.
 </details>
 
+---
+
+### Exercice 3 : MySQL avec gestion correcte des secrets
+
+**Contexte :** Vous devez déployer MySQL. **Attention :** stocker un mot de passe dans `value:` directement dans un manifest YAML est une grave erreur de sécurité — ce fichier finira dans Git. Kubernetes fournit l'objet `Secret` pour ça.
+
+**À faire :**
+1. Créez un Secret Kubernetes contenant le mot de passe MySQL :
+   ```bash
+   kubectl create secret generic mysql-credentials \
+     --from-literal=MYSQL_ROOT_PASSWORD=MonMotDePasseSecret123
+   ```
+2. Créez un fichier `mysql-deployment.yaml` qui :
+   - Utilise l'image `mysql:8.4`
+   - Lit le mot de passe depuis le Secret (utilisez `secretKeyRef`)
+   - Définit `MYSQL_DATABASE=appdb`
+   - Expose le port 3306
+   - Définit des `resources.requests` et `resources.limits`
+3. Appliquez le déploiement et vérifiez les logs
+4. Testez la connexion depuis un pod client :
+   ```bash
+   kubectl run mysql-client --rm -it \
+     --image=mysql:8.4 \
+     -- mysql -h mysql-service -u root -pMonMotDePasseSecret123 appdb
+   ```
+
+**Questions de réflexion :**
+- Quel est le contenu d'un Secret en base64 ? Vérifiez : `kubectl get secret mysql-credentials -o yaml`
+- Un Secret est-il vraiment sécurisé par défaut ? (Indice : cherchez "Kubernetes Secret encryption at rest")
+- Pourquoi définir des `resources.limits` est-il important pour une base de données dans un cluster partagé ?
+
 <details>
-<summary>Solution Exercice 3</summary>
+<summary>💡 Solution complète (débloquer après tentative)</summary>
 
 Fichier `mysql-deployment.yaml` :
 ```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-service
+spec:
+  type: ClusterIP
+  selector:
+    app: mysql
+  ports:
+  - port: 3306
+    targetPort: 3306
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -1610,20 +1670,112 @@ spec:
     spec:
       containers:
       - name: mysql
-        image: mysql:8.0
+        image: mysql:8.4
         env:
         - name: MYSQL_ROOT_PASSWORD
-          value: secret
+          valueFrom:
+            secretKeyRef:
+              name: mysql-credentials
+              key: MYSQL_ROOT_PASSWORD
+        - name: MYSQL_DATABASE
+          value: "appdb"
         ports:
         - containerPort: 3306
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
 ```
 
-Commandes :
 ```bash
 kubectl apply -f mysql-deployment.yaml
 kubectl get pods
 kubectl logs <mysql-pod-name>
 ```
+
+**Réponse sécurité :** Les Secrets Kubernetes sont encodés en base64 (pas chiffrés) par défaut. Ils sont stockés en clair dans etcd. Pour une vraie sécurité, activez le chiffrement at-rest (`--encryption-provider-config`) ou utilisez un gestionnaire de secrets externe (HashiCorp Vault, AWS Secrets Manager). On approfondira cela en TP5.
+</details>
+
+---
+
+### Exercice 4 : Troubleshooting (Avancé)
+
+**Contexte :** Un déploiement a un problème. Votre mission est de diagnostiquer et corriger sans regarder la solution.
+
+**Setup :** Créez ce manifest volontairement cassé (`broken-app.yaml`) :
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: broken-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: broken
+  template:
+    metadata:
+      labels:
+        app: wrong-label
+    spec:
+      containers:
+      - name: app
+        image: nginx:does-not-exist
+        ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: broken-service
+spec:
+  type: NodePort
+  selector:
+    app: broken
+  ports:
+  - port: 80
+    targetPort: 9999
+```
+
+**À faire :**
+1. Appliquez le manifest : `kubectl apply -f broken-app.yaml`
+2. Identifiez **tous les problèmes** (il y en a au moins 3)
+3. Corrigez-les et vérifiez que l'application fonctionne
+
+**Commandes de diagnostic utiles :**
+```bash
+kubectl get pods
+kubectl describe pod <pod-name>
+kubectl describe service broken-service
+kubectl get endpoints broken-service
+kubectl events --for deployment/broken-app
+```
+
+<details>
+<summary>💡 Liste des problèmes (débloquer après tentative)</summary>
+
+**Problème 1 — Label selector incohérent :**
+- Le Deployment sélectionne `app: broken`
+- Mais les pods ont le label `app: wrong-label`
+- Résultat : le ReplicaSet ne peut pas gérer ses pods → état instable
+- Fix : changer `app: wrong-label` en `app: broken` dans `template.metadata.labels`
+
+**Problème 2 — Image inexistante :**
+- `nginx:does-not-exist` n'existe pas sur Docker Hub
+- Le pod reste en `ImagePullBackOff`
+- Fix : utiliser `nginx:1.27-alpine`
+
+**Problème 3 — Port cible incorrect :**
+- Le Service redirige vers le port `9999`
+- Mais nginx écoute sur le port `80`
+- Résultat : le Service existe mais aucun endpoint n'est accessible
+- Fix : `targetPort: 80`
+
+Ces trois types d'erreurs sont parmi les plus fréquentes en production.
 </details>
 
 ## Dépannage

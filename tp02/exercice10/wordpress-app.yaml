@@ -35,7 +35,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: wordpress
-        image: wordpress:6.4-apache
+        image: wordpress:6.7-apache
         env:
         - name: WORDPRESS_DB_HOST
           value: mysql-service

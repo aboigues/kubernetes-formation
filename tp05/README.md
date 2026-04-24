@@ -1534,6 +1534,178 @@ spec:
     type: Container
 ```
 
+## Partie 10b : ValidatingAdmissionPolicy — Contrôles déclaratifs avec CEL (K8s 1.30+)
+
+### 10b.1 Pourquoi ValidatingAdmissionPolicy ?
+
+Avant K8s 1.30, pour imposer des règles personnalisées (ex: "tout pod doit avoir des resource limits"), il fallait déployer un **webhook d'admission** — un serveur HTTP séparé qui validait chaque requête. C'était complexe à maintenir.
+
+Depuis **Kubernetes 1.30 (stable)**, `ValidatingAdmissionPolicy` permet d'écrire ces règles directement dans l'API Kubernetes, en utilisant le langage **CEL (Common Expression Language)**. Pas de webhook, pas de serveur séparé.
+
+```
+Requête kubectl apply
+        ↓
+  API Server
+        ↓
+  ValidatingAdmissionPolicy  ← Évalue l'expression CEL
+        ↓
+  ACCEPTÉ ou REJETÉ avec message explicite
+```
+
+### 10b.2 Structure d'une ValidatingAdmissionPolicy
+
+```yaml
+# Règle : tout pod doit définir des resource limits
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: require-resource-limits
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups: ["apps"]
+      apiVersions: ["v1"]
+      operations: ["CREATE", "UPDATE"]
+      resources: ["deployments"]
+  validations:
+  - expression: >
+      object.spec.template.spec.containers.all(c,
+        has(c.resources) &&
+        has(c.resources.limits) &&
+        has(c.resources.limits.memory) &&
+        has(c.resources.limits.cpu)
+      )
+    message: "Tous les conteneurs doivent définir resources.limits.cpu et resources.limits.memory"
+```
+
+Le `ValidatingAdmissionPolicyBinding` lie la règle à un scope :
+
+```yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: require-resource-limits-binding
+spec:
+  policyName: require-resource-limits
+  validationActions: [Deny]  # ou [Warn] pour warning sans bloquer
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        env: production
+```
+
+### 10b.3 Exercice pratique : Enforcer les resource limits
+
+**Objectif :** Empêcher tout Deployment sans resource limits dans le namespace `production`.
+
+**Étape 1 — Créer le namespace de test :**
+```bash
+kubectl create namespace production
+kubectl label namespace production env=production
+```
+
+**Étape 2 — Créer la politique et le binding :**
+
+Créez `10b-resource-limits-policy.yaml` :
+
+```yaml
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: require-resource-limits
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+    - apiGroups: ["apps"]
+      apiVersions: ["v1"]
+      operations: ["CREATE", "UPDATE"]
+      resources: ["deployments"]
+  validations:
+  - expression: >
+      object.spec.template.spec.containers.all(c,
+        has(c.resources) &&
+        has(c.resources.limits) &&
+        has(c.resources.limits.memory) &&
+        has(c.resources.limits.cpu)
+      )
+    message: "ERREUR : Tous les conteneurs doivent avoir resources.limits.cpu et memory définis"
+  - expression: >
+      object.spec.template.spec.containers.all(c,
+        has(c.resources) &&
+        has(c.resources.requests) &&
+        has(c.resources.requests.memory)
+      )
+    message: "ERREUR : resources.requests.memory est obligatoire"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: require-resource-limits-binding
+spec:
+  policyName: require-resource-limits
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        env: production
+```
+
+**Étape 3 — Tester le blocage :**
+```bash
+kubectl apply -f 10b-resource-limits-policy.yaml
+
+# Ce déploiement DOIT être refusé (pas de resource limits)
+kubectl -n production create deployment bad-deploy --image=nginx:1.27-alpine
+# Attendu : "ERREUR : Tous les conteneurs doivent avoir resources.limits..."
+
+# Ce déploiement DOIT passer
+kubectl apply -n production -f - <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: good-deploy
+  namespace: production
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: good
+  template:
+    metadata:
+      labels:
+        app: good
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.27-alpine
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+EOF
+# Attendu : deployment.apps/good-deploy created
+```
+
+**Questions de réflexion :**
+- Quelle est la différence entre `validationActions: [Deny]` et `[Warn]` ?
+- Comment auditeriez-vous quelles policies s'appliquent à un namespace donné ?
+- En quoi une `ValidatingAdmissionPolicy` est-elle plus maintenable qu'un webhook d'admission ?
+- Cherchez : comment écrit-on une règle CEL pour vérifier qu'un label `team` est présent sur tous les pods ?
+
+### 10b.4 Nettoyage
+```bash
+kubectl delete validatingadmissionpolicy require-resource-limits
+kubectl delete validatingadmissionpolicybinding require-resource-limits-binding
+kubectl delete namespace production
+```
+
+---
+
 ## Partie 11 : Bonnes pratiques de sécurité
 
 ### 11.1 Checklist de sécurité
