@@ -162,7 +162,7 @@ jobs:
       - name: Set up kubectl
         uses: azure/setup-kubectl@v4
         with:
-          version: 'v1.29.0'
+          version: 'v1.32.0'
 
       - name: Install kubeconform
         run: |
@@ -230,7 +230,7 @@ jobs:
       - name: Set up Minikube
         uses: medyagh/setup-minikube@latest
         with:
-          kubernetes-version: 'v1.29.0'
+          kubernetes-version: 'v1.32.0'
 
       - name: Verify Minikube
         run: |
@@ -257,7 +257,7 @@ jobs:
       - name: Set up Minikube
         uses: medyagh/setup-minikube@latest
         with:
-          kubernetes-version: 'v1.29.0'
+          kubernetes-version: 'v1.32.0'
 
       - name: Verify Minikube
         run: |
@@ -284,7 +284,7 @@ jobs:
       - name: Set up Minikube
         uses: medyagh/setup-minikube@latest
         with:
-          kubernetes-version: 'v1.29.0'
+          kubernetes-version: 'v1.32.0'
 
       - name: Verify Minikube
         run: |
@@ -350,7 +350,7 @@ jobs:
       - name: Set up Minikube
         uses: medyagh/setup-minikube@latest
         with:
-          kubernetes-version: 'v1.29.0'
+          kubernetes-version: 'v1.32.0'
 
       - name: Enable metrics-server
         run: |
@@ -417,7 +417,7 @@ jobs:
       - name: Set up Minikube
         uses: medyagh/setup-minikube@latest
         with:
-          kubernetes-version: 'v1.29.0'
+          kubernetes-version: 'v1.32.0'
 
       - name: Make test script executable
         run: chmod +x tp05/test-tp5.sh
@@ -438,7 +438,7 @@ jobs:
       - name: Set up Minikube
         uses: medyagh/setup-minikube@latest
         with:
-          kubernetes-version: 'v1.29.0'
+          kubernetes-version: 'v1.32.0'
 
       - name: Set up Helm
         uses: azure/setup-helm@v4
@@ -497,7 +497,7 @@ jobs:
       - name: Set up Minikube
         uses: medyagh/setup-minikube@latest
         with:
-          kubernetes-version: 'v1.29.0'
+          kubernetes-version: 'v1.32.0'
 
       - name: Verify Minikube
         run: |
@@ -530,7 +530,7 @@ jobs:
       - name: Set up Minikube
         uses: medyagh/setup-minikube@latest
         with:
-          kubernetes-version: 'v1.29.0'
+          kubernetes-version: 'v1.32.0'
 
       - name: Make test script executable
         run: chmod +x tp08/test-tp8.sh
@@ -551,7 +551,7 @@ jobs:
       - name: Set up Minikube
         uses: medyagh/setup-minikube@latest
         with:
-          kubernetes-version: 'v1.29.0'
+          kubernetes-version: 'v1.32.0'
 
       - name: Make test script executable
         run: chmod +x tp09/test-tp9.sh
@@ -572,7 +572,7 @@ jobs:
       - name: Set up Minikube
         uses: medyagh/setup-minikube@latest
         with:
-          kubernetes-version: 'v1.29.0'
+          kubernetes-version: 'v1.32.0'
           cpus: 4
           memory: 4096
 

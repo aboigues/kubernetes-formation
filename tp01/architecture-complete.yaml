@@ -1,7 +1,20 @@
 # Exemple d'architecture complète à 3 tiers
 # Frontend (LoadBalancer) -> Backend API (ClusterIP) -> Database (ClusterIP)
 # Démontre l'utilisation appropriée de chaque type de service
+#
+# PRÉREQUIS : Créer le Secret avant d'appliquer ce fichier :
+#   kubectl create secret generic db-credentials \
+#     --from-literal=password=changeme-use-a-strong-password
 
+# Secret pour les credentials de la base de données
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db-credentials
+type: Opaque
+stringData:
+  password: "changeme-use-a-strong-password"
+---
 # Base de données (ClusterIP - interne uniquement)
 apiVersion: apps/v1
 kind: Deployment
@@ -25,26 +38,41 @@ spec:
           type: RuntimeDefault
       containers:
       - name: postgres
-        image: postgres:15-alpine
+        image: postgres:17-alpine
         securityContext:
           allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
           capabilities:
             drop:
             - ALL
         env:
         - name: POSTGRES_PASSWORD
-          value: "secretpassword"
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: password
         - name: POSTGRES_DB
           value: "appdb"
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
         ports:
         - containerPort: 5432
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
         volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
         - name: tmp
           mountPath: /tmp
         - name: run
           mountPath: /var/run/postgresql
       volumes:
+      - name: data
+        emptyDir: {}
       - name: tmp
         emptyDir: {}
       - name: run
@@ -85,7 +113,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: api
-        image: httpd:2.4-alpine  # Remplacer par votre API réelle
+        image: httpd:2.4-alpine   # Remplacer par votre image applicative réelle
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
@@ -145,7 +173,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: nginx
-        image: nginx:alpine
+        image: nginx:1.27-alpine
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true

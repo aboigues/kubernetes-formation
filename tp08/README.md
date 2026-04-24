@@ -1438,19 +1438,144 @@ kubectl exec <pod> -- nc -zv <host> <port>
 - [DNS for Services and Pods](https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/)
 - [Network Policies](https://kubernetes.io/docs/concepts/services-networking/network-policies/)
 - [Ingress](https://kubernetes.io/docs/concepts/services-networking/ingress/)
+- [Gateway API](https://gateway-api.sigs.k8s.io/) — successeur de l'Ingress (stable K8s 1.31)
 
 ### Outils et plugins
 
 - [Calico](https://www.projectcalico.org/) - NetworkPolicy et networking
-- [Cilium](https://cilium.io/) - eBPF-based networking
-- [Weave Net](https://www.weave.works/oss/net/) - Container networking
+- [Cilium](https://cilium.io/) - eBPF-based networking (recommandé pour nouveaux clusters)
 - [CoreDNS](https://coredns.io/) - DNS server
 
 ### Guides avancés
 
 - [Network Policy Recipes](https://github.com/ahmetb/kubernetes-network-policy-recipes)
 - [Debugging DNS Resolution](https://kubernetes.io/docs/tasks/administer-cluster/dns-debugging-resolution/)
+- [Gateway API — Guide de migration depuis Ingress](https://gateway-api.sigs.k8s.io/guides/migrating-from-ingress/)
 - [Service Mesh Comparison](https://servicemesh.es/)
+
+---
+
+## Partie 7 : Gateway API — Le futur du réseau Kubernetes (K8s 1.31+)
+
+La **Gateway API** est le successeur standardisé de l'Ingress, stable depuis Kubernetes 1.31. Elle résout les limitations de l'Ingress en proposant une hiérarchie d'objets claire.
+
+### 7.1 Modèle mental : Ingress vs Gateway API
+
+```
+INGRESS (ancien modèle)            GATEWAY API (nouveau modèle)
+─────────────────────────          ──────────────────────────────────────────
+                                   GatewayClass  (admin infra : type de LB)
+Ingress Controller                      │
+    │                                   ▼
+    └── Ingress                    Gateway  (admin cluster : point d'entrée)
+         (routes HTTP/HTTPS)            │
+                                        ▼
+                                   HTTPRoute  (équipe app : règles de routage)
+                                   TCPRoute   (idem pour TCP)
+                                   TLSRoute   (idem pour TLS)
+```
+
+### 7.2 Concepts clés
+
+**GatewayClass** — Définit le type de contrôleur (nginx, envoy, istio, etc.) :
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: nginx
+spec:
+  controllerName: gateway.nginx.org/nginx-gateway-controller
+```
+
+**Gateway** — Point d'entrée avec les listeners (ports, protocoles, TLS) :
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: prod-gateway
+spec:
+  gatewayClassName: nginx
+  listeners:
+  - name: https
+    protocol: HTTPS
+    port: 443
+    tls:
+      certificateRefs:
+      - name: tls-cert
+    allowedRoutes:
+      namespaces:
+        from: All  # Accepte des routes de tous les namespaces
+```
+
+**HTTPRoute** — Règles de routage (peut être géré par chaque équipe applicative) :
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: api-routes
+  namespace: team-a  # L'équipe A gère ses propres routes
+spec:
+  parentRefs:
+  - name: prod-gateway
+    namespace: infra       # Pointe vers le Gateway de l'infra
+  hostnames: ["api.example.com"]
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /v2
+      headers:
+      - name: X-API-Version
+        value: "2"
+    backendRefs:
+    - name: api-v2-service
+      port: 8080
+      weight: 100
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /v2
+    backendRefs:
+    - name: api-v1-service
+      port: 8080
+      weight: 100
+```
+
+### 7.3 Exercice : Implémenter un canary avec Gateway API
+
+Un **canary deployment** avec la Gateway API est plus propre et portable qu'avec des annotations Ingress.
+
+**Scénario :** Vous avez `api-v1` en production. Vous déployez `api-v2` et voulez lui envoyer 10% du trafic.
+
+```yaml
+# canary-httproute.yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: api-canary
+spec:
+  parentRefs:
+  - name: prod-gateway
+  hostnames: ["api.local"]
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: api-v1-service
+      port: 8080
+      weight: 90   # 90% du trafic vers v1
+    - name: api-v2-service
+      port: 8080
+      weight: 10   # 10% vers v2 (canary)
+```
+
+**Questions de réflexion :**
+- Quelle est la différence entre ce canary et celui basé sur des annotations Ingress NGINX ?
+- Qui devrait avoir le droit de modifier l'objet `Gateway` vs l'objet `HTTPRoute` ?
+- Pourquoi les `weight` sont-ils plus flexibles que le canary par pourcentage d'Ingress ?
+- Recherchez : quelles implémentations (contrôleurs) supportent la Gateway API aujourd'hui ?
 
 ---
 
@@ -1458,11 +1583,11 @@ kubectl exec <pod> -- nc -zv <host> <port>
 
 Après avoir maîtrisé ce TP, vous pouvez explorer :
 
-1. **Ingress Controllers** (TP6) pour le routing HTTP/HTTPS avancé
-2. **Service Mesh** (Istio, Linkerd) pour mTLS et observabilité
-3. **Multi-cluster networking** avec Submariner ou Cilium Cluster Mesh
-4. **IPv6** et dual-stack networking
-5. **eBPF** avec Cilium pour haute performance
+1. **Gateway API** — Implémentez des scénarios multi-équipes et multi-tenants
+2. **Ingress Controllers** (TP6) pour approfondir avec Helm et ArgoCD
+3. **Service Mesh** (Istio, Linkerd) pour mTLS et observabilité — complémentaire à la Gateway API
+4. **Cilium** — CNI eBPF avec NetworkPolicies L7 et Gateway API intégrée
+5. **Multi-cluster networking** avec Cilium Cluster Mesh ou Submariner
 
 ---
 

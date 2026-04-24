@@ -5,7 +5,7 @@ metadata:
 spec:
   containers:
   - name: frontend
-    image: busybox
+    image: busybox:1.36
     command: ["/bin/sh"]
     args:
       - -c
@@ -16,7 +16,7 @@ spec:
         done
 
   - name: backend
-    image: busybox
+    image: busybox:1.36
     command: ["/bin/sh"]
     args:
       - -c
@@ -27,7 +27,7 @@ spec:
         done
 
   - name: cache
-    image: busybox
+    image: busybox:1.36
     command: ["/bin/sh"]
     args:
       - -c
