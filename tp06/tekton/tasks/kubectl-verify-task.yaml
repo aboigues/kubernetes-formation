@@ -13,7 +13,7 @@ spec:
       default: default
   steps:
     - name: verify-deployment
-      image: bitnami/kubectl:latest
+      image: bitnami/kubectl:1.32.0
       script: |
         #!/bin/sh
         set -e
@@ -24,7 +24,7 @@ spec:
         kubectl get pods -n $(params.namespace)
 
     - name: smoke-test
-      image: curlimages/curl:latest
+      image: curlimages/curl:8.11.1
       script: |
         #!/bin/sh
         set -e

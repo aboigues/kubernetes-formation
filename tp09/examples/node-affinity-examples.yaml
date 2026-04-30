@@ -134,7 +134,7 @@ spec:
                 - high-performance
       containers:
       - name: app
-        image: myapp:latest
+        image: myapp:1.0.0
         resources:
           requests:
             memory: "512Mi"
@@ -179,7 +179,7 @@ spec:
                 - "3"
       containers:
       - name: prometheus
-        image: prom/prometheus:latest
+        image: prom/prometheus:v2.45.0
         resources:
           requests:
             memory: "2Gi"

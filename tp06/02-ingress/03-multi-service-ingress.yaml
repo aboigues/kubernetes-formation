@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: api
-        image: hashicorp/http-echo:latest
+        image: hashicorp/http-echo:0.2.3
         args:
         - "-text=API Response"
         ports:

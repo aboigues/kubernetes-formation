@@ -53,7 +53,7 @@ jobs:
 
     - name: Run smoke tests
       run: |
-        kubectl run smoke-test --image=curlimages/curl:latest --rm -i --restart=Never \
+        kubectl run smoke-test --image=curlimages/curl:8.11.1 --rm -i --restart=Never \
           -- curl -f http://my-app-service.production.svc.cluster.local/health
 
   notify:

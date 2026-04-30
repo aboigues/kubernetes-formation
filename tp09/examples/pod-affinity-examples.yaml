@@ -108,7 +108,7 @@ spec:
             topologyKey: kubernetes.io/hostname
       containers:
       - name: service
-        image: myapp:latest
+        image: myapp:1.0.0
         ports:
         - containerPort: 8080
         resources:
@@ -388,7 +388,7 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
       - name: app
-        image: myapp:latest
+        image: myapp:1.0.0
         resources:
           requests:
             memory: "256Mi"

@@ -17,7 +17,7 @@ spec:
       description: Chemin vers le Dockerfile
   steps:
     - name: build-and-push
-      image: gcr.io/kaniko-project/executor:latest
+      image: gcr.io/kaniko-project/executor:v1.23.2
       workingDir: $(workspaces.source.path)
       env:
         - name: DOCKER_CONFIG

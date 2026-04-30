@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: app
-        image: hashicorp/http-echo:latest
+        image: hashicorp/http-echo:0.2.3
         args: ["-text=Version 1"]
         ports:
         - containerPort: 5678
@@ -39,7 +39,7 @@ spec:
     spec:
       containers:
       - name: app
-        image: hashicorp/http-echo:latest
+        image: hashicorp/http-echo:0.2.3
         args: ["-text=Version 2 - New Feature"]
         ports:
         - containerPort: 5678
