@@ -46,7 +46,7 @@ spec:
     effect: "NoSchedule"
   containers:
   - name: admin
-    image: busybox:latest
+    image: busybox:1.36
     command: ['sh', '-c', 'sleep 3600']
 
 ---
@@ -134,7 +134,7 @@ spec:
         effect: "NoSchedule"
       containers:
       - name: ml-training
-        image: tensorflow/tensorflow:latest-gpu
+        image: tensorflow/tensorflow:2.18.0-gpu
         command: ["python", "train.py"]
         resources:
           limits:
@@ -197,7 +197,7 @@ spec:
         effect: "PreferNoSchedule"
       containers:
       - name: app
-        image: myapp:latest
+        image: myapp:1.0.0
         resources:
           requests:
             memory: "256Mi"
@@ -236,7 +236,7 @@ spec:
         effect: NoSchedule
       containers:
       - name: fluentd
-        image: fluent/fluentd:latest
+        image: fluent/fluentd:v1.16-alpine
         volumeMounts:
         - name: varlog
           mountPath: /var/log
@@ -335,7 +335,7 @@ spec:
             effect: "NoExecute"
           containers:
           - name: backup
-            image: backup-tool:latest
+            image: backup-tool:1.0.0
             command: ["/bin/sh"]
             args:
             - -c

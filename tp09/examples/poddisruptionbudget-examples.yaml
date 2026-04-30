@@ -386,7 +386,7 @@ spec:
     spec:
       containers:
       - name: agent
-        image: monitoring-agent:latest
+        image: monitoring-agent:1.0.0
         resources:
           requests:
             memory: "128Mi"
