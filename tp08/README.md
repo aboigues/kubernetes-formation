@@ -548,7 +548,7 @@ wget -qO- http://api  # ERREUR
 
 ```bash
 # Tester la résolution DNS
-kubectl run dnsutils --image=tutum/dnsutils --rm -it -- sh
+kubectl run dnsutils --image=registry.k8s.io/e2e-test-images/jessie-dnsutils:1.3 --rm -it -- sh
 
 # Dans le pod
 nslookup kubernetes.default
