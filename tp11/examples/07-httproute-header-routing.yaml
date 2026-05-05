@@ -1,0 +1,31 @@
+# HTTPRoute avec routage par header : A/B testing
+# Les requêtes avec X-Version: v2 vont vers backend-v2
+# Les autres vont vers backend-v1
+# Utilisation : kubectl apply -f 07-httproute-header-routing.yaml
+# Test :
+#   curl -H "X-Version: v2" http://<GATEWAY_IP>/
+#   curl http://<GATEWAY_IP>/
+
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: header-routing
+  namespace: tp11
+spec:
+  parentRefs:
+  - name: main-gateway
+    namespace: tp11
+    sectionName: http
+  hostnames:
+  - "ab.example.com"
+  rules:
+  - matches:
+    - headers:
+      - name: X-Version
+        value: v2
+    backendRefs:
+    - name: backend-v2
+      port: 80
+  - backendRefs:
+    - name: backend-v1
+      port: 80

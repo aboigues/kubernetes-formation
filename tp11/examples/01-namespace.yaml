@@ -1,0 +1,9 @@
+# TP11 - Namespace de travail
+# Utilisation : kubectl apply -f 01-namespace.yaml
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tp11
+  labels:
+    kubernetes.io/metadata.name: tp11

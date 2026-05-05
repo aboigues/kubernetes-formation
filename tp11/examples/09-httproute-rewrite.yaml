@@ -1,0 +1,43 @@
+# HTTPRoute avec filtres : réécriture de chemin et redirection
+# /old-api/* → /api/* (réécriture transparente)
+# /http/* → redirection 301 vers HTTPS
+# Utilisation : kubectl apply -f 09-httproute-rewrite.yaml
+
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: rewrite-routing
+  namespace: tp11
+spec:
+  parentRefs:
+  - name: main-gateway
+    namespace: tp11
+    sectionName: http
+  hostnames:
+  - "rewrite.example.com"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /old-api
+    filters:
+    - type: URLRewrite
+      urlRewrite:
+        path:
+          type: ReplacePrefixMatch
+          replacePrefixMatch: /api
+    backendRefs:
+    - name: backend-v1
+      port: 80
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /redirect
+    filters:
+    - type: RequestRedirect
+      requestRedirect:
+        scheme: https
+        statusCode: 301
+    backendRefs:
+    - name: backend-v1
+      port: 80

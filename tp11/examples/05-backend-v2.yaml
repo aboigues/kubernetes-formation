@@ -1,0 +1,94 @@
+# Backend v2 : nouvelle version (canary)
+# Utilisation : kubectl apply -f 05-backend-v2.yaml
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-v2
+  namespace: tp11
+  labels:
+    app: backend
+    version: v2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+      version: v2
+  template:
+    metadata:
+      labels:
+        app: backend
+        version: v2
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: backend
+        image: nginx:1.27-alpine
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: nginx-config
+          mountPath: /etc/nginx/conf.d
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 101
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: nginx-config
+        configMap:
+          name: nginx-config-v2
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config-v2
+  namespace: tp11
+data:
+  default.conf: |
+    server {
+      listen 8080;
+      location / {
+        default_type text/html;
+        return 200 '<h1>Backend v2 - canary</h1>';
+      }
+      location /health {
+        return 200 'ok';
+      }
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-v2
+  namespace: tp11
+  labels:
+    app: backend
+    version: v2
+spec:
+  selector:
+    app: backend
+    version: v2
+  ports:
+  - port: 80
+    targetPort: 8080
