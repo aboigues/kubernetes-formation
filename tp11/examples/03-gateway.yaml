@@ -1,0 +1,30 @@
+# Gateway : défini par l'opérateur cluster
+# Configure les listeners HTTP et HTTPS
+# Utilisation : kubectl apply -f 03-gateway.yaml
+# Vérification : kubectl get gateway -n tp11
+
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: main-gateway
+  namespace: tp11
+spec:
+  gatewayClassName: nginx
+  listeners:
+  - name: http
+    protocol: HTTP
+    port: 80
+    allowedRoutes:
+      namespaces:
+        from: Same
+  - name: https
+    protocol: HTTPS
+    port: 443
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - kind: Secret
+        name: tls-secret
+    allowedRoutes:
+      namespaces:
+        from: Same

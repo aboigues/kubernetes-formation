@@ -1,0 +1,26 @@
+# HTTPRoute avec traffic splitting : déploiement canary
+# 90% du trafic → v1 (stable), 10% → v2 (canary)
+# Utilisation : kubectl apply -f 08-httproute-canary.yaml
+# Test :
+#   for i in $(seq 1 20); do curl -s http://<GATEWAY_IP>/ | grep -o 'v[12]'; done
+
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: canary-routing
+  namespace: tp11
+spec:
+  parentRefs:
+  - name: main-gateway
+    namespace: tp11
+    sectionName: http
+  hostnames:
+  - "canary.example.com"
+  rules:
+  - backendRefs:
+    - name: backend-v1
+      port: 80
+      weight: 90
+    - name: backend-v2
+      port: 80
+      weight: 10

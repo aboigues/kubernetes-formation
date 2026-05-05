@@ -1,0 +1,176 @@
+# Exercice 2 : Canary deployment progressif
+#
+# Objectif : Simuler un déploiement canary en 3 étapes
+#   Étape 1 : 100% trafic → stable (weight: 100 / 0)
+#   Étape 2 :  20% trafic → canary, 80% → stable
+#   Étape 3 :   0% trafic → stable, basculement complet vers canary
+#
+# Modifier uniquement les weights dans l'HTTPRoute pour simuler chaque étape.
+# Vérifier avec : for i in $(seq 1 10); do curl -s http://<IP>/; done
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-stable
+  namespace: tp11
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: myapp
+      track: stable
+  template:
+    metadata:
+      labels:
+        app: myapp
+        track: stable
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: app
+        image: nginx:1.27-alpine
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: config
+          mountPath: /etc/nginx/conf.d
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: [ALL]
+        resources:
+          requests: { cpu: 50m, memory: 64Mi }
+          limits: { cpu: 100m, memory: 128Mi }
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: config
+        configMap:
+          name: stable-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: stable-config
+  namespace: tp11
+data:
+  default.conf: |
+    server {
+      listen 8080;
+      location / { return 200 'version=stable\n'; }
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-stable
+  namespace: tp11
+spec:
+  selector:
+    app: myapp
+    track: stable
+  ports:
+  - port: 80
+    targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-canary
+  namespace: tp11
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: myapp
+      track: canary
+  template:
+    metadata:
+      labels:
+        app: myapp
+        track: canary
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: app
+        image: nginx:1.27-alpine
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: config
+          mountPath: /etc/nginx/conf.d
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: [ALL]
+        resources:
+          requests: { cpu: 50m, memory: 64Mi }
+          limits: { cpu: 100m, memory: 128Mi }
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: config
+        configMap:
+          name: canary-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: canary-config
+  namespace: tp11
+data:
+  default.conf: |
+    server {
+      listen 8080;
+      location / { return 200 'version=canary\n'; }
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-canary
+  namespace: tp11
+spec:
+  selector:
+    app: myapp
+    track: canary
+  ports:
+  - port: 80
+    targetPort: 8080
+---
+# Étape 1 : 100% stable — modifier les weights pour avancer vers les étapes 2 et 3
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: exercice-2-canary
+  namespace: tp11
+spec:
+  parentRefs:
+  - name: main-gateway
+    namespace: tp11
+    sectionName: http
+  hostnames:
+  - "canary-ex.example.com"
+  rules:
+  - backendRefs:
+    - name: app-stable
+      port: 80
+      weight: 100   # Étape 1: 100 | Étape 2: 80 | Étape 3: 0
+    - name: app-canary
+      port: 80
+      weight: 0     # Étape 1: 0   | Étape 2: 20 | Étape 3: 100
