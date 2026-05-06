@@ -1365,170 +1365,180 @@ Dans l'interface Prometheus :
 2. Vous verrez les règles d'alerte configurées
 3. Les alertes actives apparaîtront en rouge
 
-## Partie 8 : Logging avancé (Introduction)
+## Partie 8 : Logging avancé — Stack EFK complète
 
-### 8.1 Stack EFK/ELK
+### 8.1 Architecture EFK
 
-Pour une gestion avancée des logs, on utilise généralement :
+La stack EFK centralise les logs de tous les pods du cluster dans une interface unique :
 
-**Stack EFK** :
-- **E**lasticsearch : Stockage et indexation des logs
-- **F**luentd/Fluent Bit : Collecte et agrégation des logs
-- **K**ibana : Visualisation
-
-**Stack ELK** :
-- **E**lasticsearch
-- **L**ogstash : Collecte et transformation
-- **K**ibana
-
-### 8.2 Introduction à Fluentd
-
-**Note importante** : Cette section présente une configuration simplifiée de Fluentd pour la démonstration. Pour une installation complète d'EFK avec Elasticsearch et Kibana, consultez les ressources complémentaires en fin de TP.
-
-Dans cet exercice, nous déployons Fluentd avec une sortie vers stdout pour observer la collecte des logs.
-
-Créer `08-fluentd-daemonset.yaml` :
-
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: fluentd-config
-  namespace: kube-system
-data:
-  fluent.conf: |
-    <source>
-      @type tail
-      path /var/log/containers/*.log
-      pos_file /var/log/fluentd-containers.log.pos
-      tag kubernetes.*
-      read_from_head true
-      <parse>
-        @type json
-        time_format %Y-%m-%dT%H:%M:%S.%NZ
-      </parse>
-    </source>
-
-    <filter kubernetes.**>
-      @type kubernetes_metadata
-      @id filter_kube_metadata
-    </filter>
-
-    <match kubernetes.**>
-      @type stdout
-    </match>
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: fluentd
-  namespace: kube-system
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: fluentd
-rules:
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  - namespaces
-  verbs:
-  - get
-  - list
-  - watch
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: fluentd
-roleRef:
-  kind: ClusterRole
-  name: fluentd
-  apiGroup: rbac.authorization.k8s.io
-subjects:
-- kind: ServiceAccount
-  name: fluentd
-  namespace: kube-system
----
-apiVersion: apps/v1
-kind: DaemonSet
-metadata:
-  name: fluentd
-  namespace: kube-system
-  labels:
-    app: fluentd
-spec:
-  selector:
-    matchLabels:
-      app: fluentd
-  template:
-    metadata:
-      labels:
-        app: fluentd
-    spec:
-      serviceAccountName: fluentd
-      containers:
-      - name: fluentd
-        image: fluent/fluentd-kubernetes-daemonset:v1.16-debian-1
-        env:
-        - name: FLUENTD_SYSTEMD_CONF
-          value: "disable"
-        volumeMounts:
-        - name: fluentd-config
-          mountPath: /fluentd/etc/fluent.conf
-          subPath: fluent.conf
-        - name: varlog
-          mountPath: /var/log
-        - name: varlibdockercontainers
-          mountPath: /var/lib/docker/containers
-          readOnly: true
-        resources:
-          limits:
-            memory: 200Mi
-          requests:
-            cpu: 100m
-            memory: 200Mi
-      volumes:
-      - name: fluentd-config
-        configMap:
-          name: fluentd-config
-      - name: varlog
-        hostPath:
-          path: /var/log
-      - name: varlibdockercontainers
-        hostPath:
-          path: /var/lib/docker/containers
+```
+┌─────────────────────────────────────────────────────────┐
+│  Chaque nœud                                            │
+│  ┌──────────┐   /var/log/containers/*.log               │
+│  │  Fluentd │──────────────────────────────────────┐    │
+│  │ DaemonSet│  collecte + enrichissement metadata  │    │
+│  └──────────┘                                      │    │
+└────────────────────────────────────────────────────┼────┘
+                                                     │
+                                                     ▼
+                                    ┌─────────────────────────┐
+                                    │  Elasticsearch          │
+                                    │  namespace: logging     │
+                                    │  stockage + indexation  │
+                                    └────────────┬────────────┘
+                                                 │
+                                                 ▼
+                                    ┌─────────────────────────┐
+                                    │  Kibana                 │
+                                    │  namespace: logging     │
+                                    │  visualisation + search │
+                                    └─────────────────────────┘
 ```
 
-**Exercice 14 : Déployer Fluentd**
+**Composants** :
+- **Elasticsearch** : base de données orientée document, indexe et stocke les logs
+- **Fluentd** : agent de collecte déployé en DaemonSet (un pod par nœud), lit les fichiers de logs et les envoie vers Elasticsearch enrichis de métadonnées Kubernetes (pod, namespace, labels)
+- **Kibana** : interface web pour explorer, filtrer et visualiser les logs
+
+> **Note** : `xpack.security` est désactivé dans cette configuration pour simplifier le TP. En production, activer l'authentification et le chiffrement TLS.
+
+---
+
+### 8.2 Déployer Elasticsearch
+
+**Exercice 14 : Déployer Elasticsearch**
 
 ```bash
-# Déployer Fluentd
-kubectl apply -f 08-fluentd-daemonset.yaml
+kubectl apply -f 09-elasticsearch.yaml
 
-# Vérifier le DaemonSet
-kubectl get daemonset fluentd -n kube-system
+# Attendre que le pod soit prêt (l'initialisation prend ~60s)
+kubectl wait --for=condition=ready pod -l app=elasticsearch -n logging --timeout=120s
 
-# Vérifier les pods Fluentd (un par nœud)
-kubectl get pods -n kube-system -l app=fluentd
+# Vérifier l'état du cluster
+kubectl get statefulset elasticsearch -n logging
+kubectl get pods -n logging -l app=elasticsearch
 
-# Voir les logs collectés par Fluentd
-FLUENTD_POD=$(kubectl get pods -n kube-system -l app=fluentd -o jsonpath='{.items[0].metadata.name}')
-kubectl logs -n kube-system $FLUENTD_POD --tail=50
-
-# Observer les logs en temps réel
-kubectl logs -n kube-system $FLUENTD_POD -f
+# Tester l'API Elasticsearch depuis le cluster
+kubectl run curl-test --image=curlimages/curl:8.11.1 --rm -it --restart=Never -- \
+  curl -s http://elasticsearch.logging.svc.cluster.local:9200/_cluster/health | head -c 200
 ```
 
-**Note** : Cette configuration affiche simplement les logs collectés vers stdout. Pour une installation complète avec Elasticsearch et Kibana, consultez les ressources complémentaires ci-dessous.
+**✅ Attendu :** `"status":"green"` ou `"status":"yellow"` (nœud unique → yellow est normal)
 
-**Pour aller plus loin avec EFK** :
-- Déployer Elasticsearch avec l'Elastic Cloud on Kubernetes (ECK) operator
-- Configurer Kibana pour la visualisation
-- Modifier la configuration Fluentd pour envoyer vers Elasticsearch
-- Voir : [Elastic Cloud on Kubernetes](https://www.elastic.co/guide/en/cloud-on-k8s/current/index.html)
+```bash
+# Accès local via port-forward
+kubectl port-forward svc/elasticsearch 9200:9200 -n logging &
+curl http://localhost:9200/_cluster/health?pretty
+```
+
+---
+
+### 8.3 Déployer Kibana
+
+**Exercice 15 : Déployer Kibana**
+
+```bash
+kubectl apply -f 10-kibana.yaml
+
+# Attendre que le pod soit prêt (l'initialisation prend ~60s)
+kubectl wait --for=condition=ready pod -l app=kibana -n logging --timeout=120s
+
+# Vérifier
+kubectl get deployment kibana -n logging
+kubectl get pods -n logging -l app=kibana
+```
+
+```bash
+# Accès à l'interface Kibana
+kubectl port-forward svc/kibana 5601:5601 -n logging
+# Ouvrir http://localhost:5601 dans un navigateur
+```
+
+---
+
+### 8.4 Déployer Fluentd (connecté à Elasticsearch)
+
+**Exercice 16 : Déployer Fluentd**
+
+```bash
+kubectl apply -f 08-fluentd-daemonset.yaml
+
+# Vérifier le DaemonSet (un pod par nœud)
+kubectl get daemonset fluentd -n kube-system
+kubectl get pods -n kube-system -l app=fluentd
+
+# Vérifier que Fluentd envoie bien vers Elasticsearch (pas d'erreurs)
+FLUENTD_POD=$(kubectl get pods -n kube-system -l app=fluentd -o jsonpath='{.items[0].metadata.name}')
+kubectl logs -n kube-system $FLUENTD_POD --tail=30
+
+# Vérifier les index créés dans Elasticsearch
+kubectl run curl-test --image=curlimages/curl:8.11.1 --rm -it --restart=Never -- \
+  curl -s http://elasticsearch.logging.svc.cluster.local:9200/_cat/indices?v
+```
+
+**✅ Attendu :** des index `fluentd-kubernetes.*-YYYYMMDD` apparaissent après quelques secondes.
+
+**Erreurs fréquentes :**
+
+```bash
+# Si Fluentd ne peut pas joindre Elasticsearch
+kubectl describe pod $FLUENTD_POD -n kube-system | grep -A 5 "Events"
+
+# Vérifier la résolution DNS depuis kube-system
+kubectl run dns-test --image=busybox:1.37 --rm -it --restart=Never -n kube-system -- \
+  nslookup elasticsearch.logging.svc.cluster.local
+```
+
+---
+
+### 8.5 Vérifier le pipeline et explorer dans Kibana
+
+**Exercice 17 : Explorer les logs dans Kibana**
+
+```bash
+# Accéder à Kibana
+kubectl port-forward svc/kibana 5601:5601 -n logging
+```
+
+Dans Kibana (`http://localhost:5601`) :
+
+1. **Créer un Data View** : menu ☰ → *Management* → *Data Views* → *Create data view*
+   - Name : `fluentd-kubernetes`
+   - Index pattern : `fluentd-kubernetes.*`
+   - Timestamp field : `@timestamp`
+   - Cliquer *Save data view to Kibana*
+
+2. **Explorer les logs** : menu ☰ → *Discover*
+   - Sélectionner le Data View `fluentd-kubernetes`
+   - Filtrer par namespace : chercher `kubernetes.namespace_name : default`
+   - Filtrer par pod : `kubernetes.pod_name : <nom-du-pod>`
+
+3. **Vérifier le pipeline bout-en-bout** :
+
+```bash
+# Générer des logs depuis un pod de test
+kubectl run log-test --image=busybox:1.37 --restart=Never -- \
+  sh -c 'for i in $(seq 1 10); do echo "Log de test $i - $(date)"; sleep 1; done'
+
+# Dans Kibana → Discover, chercher : "Log de test"
+# Les logs doivent apparaître dans les secondes qui suivent
+```
+
+**Questions :**
+1. Quelle est la latence entre l'émission d'un log et son apparition dans Kibana ?
+2. Quels champs Kubernetes sont automatiquement ajoutés par le filtre `kubernetes_metadata` ?
+3. Comment filtrer les logs d'un seul namespace dans Kibana ?
+
+---
+
+### 8.6 Nettoyage
+
+```bash
+kubectl delete -f 08-fluentd-daemonset.yaml
+kubectl delete -f 10-kibana.yaml
+kubectl delete -f 09-elasticsearch.yaml
+kubectl delete namespace logging
+```
 
 ## Partie 9 : Bonnes pratiques
 

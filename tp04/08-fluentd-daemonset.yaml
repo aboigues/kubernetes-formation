@@ -1,3 +1,11 @@
+# Fluentd — collecte des logs de tous les containers et envoi vers Elasticsearch
+# Prérequis : 09-elasticsearch.yaml appliqué et Elasticsearch prêt
+# Utilisation :
+#   kubectl apply -f 08-fluentd-daemonset.yaml
+#   kubectl get daemonset fluentd -n kube-system
+#   kubectl get pods -n kube-system -l app=fluentd
+
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -5,6 +13,7 @@ metadata:
   namespace: kube-system
 data:
   fluent.conf: |
+    # Source : collecte les logs de tous les containers via les fichiers du nœud
     <source>
       @type tail
       path /var/log/containers/*.log
@@ -17,13 +26,32 @@ data:
       </parse>
     </source>
 
+    # Filtre : enrichit chaque log avec les métadonnées Kubernetes (pod, namespace, labels)
     <filter kubernetes.**>
       @type kubernetes_metadata
       @id filter_kube_metadata
     </filter>
 
+    # Sortie : envoie vers Elasticsearch
     <match kubernetes.**>
-      @type stdout
+      @type elasticsearch
+      host "#{ENV['FLUENT_ELASTICSEARCH_HOST']}"
+      port "#{ENV['FLUENT_ELASTICSEARCH_PORT']}"
+      scheme http
+      index_name fluentd-${tag}-%Y%m%d
+      type_name _doc
+      include_timestamp true
+      <buffer tag,time>
+        @type file
+        path /var/log/fluentd-buffers/kubernetes.buffer
+        flush_mode interval
+        retry_type exponential_backoff
+        flush_interval 5s
+        retry_max_interval 30
+        chunk_limit_size 2M
+        queue_limit_length 8
+        overflow_action block
+      </buffer>
     </match>
 ---
 apiVersion: v1
@@ -77,12 +105,26 @@ spec:
         app: fluentd
     spec:
       serviceAccountName: fluentd
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        effect: NoSchedule
       containers:
       - name: fluentd
-        image: fluent/fluentd-kubernetes-daemonset:v1.16-debian-1
+        image: fluent/fluentd-kubernetes-daemonset:v1.19-debian-elasticsearch8-amd64-1
         env:
         - name: FLUENTD_SYSTEMD_CONF
           value: "disable"
+        - name: FLUENT_ELASTICSEARCH_HOST
+          value: "elasticsearch.logging.svc.cluster.local"
+        - name: FLUENT_ELASTICSEARCH_PORT
+          value: "9200"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 200Mi
+          limits:
+            cpu: 200m
+            memory: 400Mi
         volumeMounts:
         - name: fluentd-config
           mountPath: /fluentd/etc/fluent.conf
@@ -92,12 +134,6 @@ spec:
         - name: varlibdockercontainers
           mountPath: /var/lib/docker/containers
           readOnly: true
-        resources:
-          limits:
-            memory: 200Mi
-          requests:
-            cpu: 100m
-            memory: 200Mi
       volumes:
       - name: fluentd-config
         configMap:
