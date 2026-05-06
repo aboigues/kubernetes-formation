@@ -39,8 +39,13 @@ spec:
         volumeMounts:
         - name: tmp
           mountPath: /tmp
+        - name: nginx-cache
+          mountPath: /var/cache/nginx
+        - name: nginx-run
+          mountPath: /var/run
         - name: config
           mountPath: /etc/nginx/conf.d
+          readOnly: true
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
@@ -51,6 +56,10 @@ spec:
           limits: { cpu: 100m, memory: 128Mi }
       volumes:
       - name: tmp
+        emptyDir: {}
+      - name: nginx-cache
+        emptyDir: {}
+      - name: nginx-run
         emptyDir: {}
       - name: config
         configMap:
@@ -111,8 +120,13 @@ spec:
         volumeMounts:
         - name: tmp
           mountPath: /tmp
+        - name: nginx-cache
+          mountPath: /var/cache/nginx
+        - name: nginx-run
+          mountPath: /var/run
         - name: config
           mountPath: /etc/nginx/conf.d
+          readOnly: true
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
@@ -123,6 +137,10 @@ spec:
           limits: { cpu: 100m, memory: 128Mi }
       volumes:
       - name: tmp
+        emptyDir: {}
+      - name: nginx-cache
+        emptyDir: {}
+      - name: nginx-run
         emptyDir: {}
       - name: config
         configMap:
