@@ -27,6 +27,7 @@ spec:
       securityContext:
         runAsUser: 1000
         runAsGroup: 1000
+        runAsNonRoot: true
         fsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
@@ -43,6 +44,14 @@ spec:
           value: kibana
         - name: XPACK_SECURITY_ENABLED
           value: "false"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
         resources:
           requests:
             cpu: 250m
@@ -64,6 +73,16 @@ spec:
           initialDelaySeconds: 60
           periodSeconds: 20
           failureThreshold: 3
+        volumeMounts:
+        - name: data
+          mountPath: /usr/share/kibana/data
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: data
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

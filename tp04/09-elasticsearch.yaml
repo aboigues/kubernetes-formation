@@ -1,6 +1,12 @@
 # Elasticsearch — nœud unique pour le TP
 # Namespace dédié : logging
 # Sécurité xpack désactivée pour simplifier le TP (ne pas faire en production)
+#
+# Prérequis : vm.max_map_count ≥ 262144 sur chaque nœud (voir README section 8.2)
+#   minikube : minikube ssh -- 'sudo sysctl -w vm.max_map_count=262144'
+#   kind     : docker exec -it <node> sysctl -w vm.max_map_count=262144
+#   kubeadm  : sudo sysctl -w vm.max_map_count=262144 (sur chaque nœud)
+#
 # Utilisation :
 #   kubectl apply -f 09-elasticsearch.yaml
 #   kubectl wait --for=condition=ready pod -l app=elasticsearch -n logging --timeout=120s
@@ -53,17 +59,10 @@ spec:
       securityContext:
         runAsUser: 1000
         runAsGroup: 1000
+        runAsNonRoot: true
         fsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
-      initContainers:
-      # Elasticsearch nécessite vm.max_map_count ≥ 262144
-      - name: sysctl
-        image: busybox:1.37
-        command: ["sysctl", "-w", "vm.max_map_count=262144"]
-        securityContext:
-          privileged: true
-          runAsUser: 0
       containers:
       - name: elasticsearch
         image: docker.elastic.co/elasticsearch/elasticsearch:8.17.7
@@ -81,6 +80,14 @@ spec:
           value: "-Xms512m -Xmx512m"
         - name: cluster.name
           value: tp04-logging
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
         resources:
           requests:
             cpu: 500m
@@ -105,6 +112,14 @@ spec:
         volumeMounts:
         - name: data
           mountPath: /usr/share/elasticsearch/data
+        - name: logs
+          mountPath: /usr/share/elasticsearch/logs
+        - name: tmp
+          mountPath: /tmp
       volumes:
       - name: data
+        emptyDir: {}
+      - name: logs
+        emptyDir: {}
+      - name: tmp
         emptyDir: {}

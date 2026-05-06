@@ -1406,6 +1406,24 @@ La stack EFK centralise les logs de tous les pods du cluster dans une interface 
 
 ### 8.2 Déployer Elasticsearch
 
+> **Prérequis — `vm.max_map_count`**
+>
+> Elasticsearch exige que le paramètre noyau `vm.max_map_count` soit ≥ 262144 sur chaque nœud.
+> À configurer **avant** de déployer, selon votre environnement :
+>
+> ```bash
+> # minikube
+> minikube ssh -- 'sudo sysctl -w vm.max_map_count=262144'
+>
+> # kind
+> docker exec -it $(docker ps -qf name=kind) sysctl -w vm.max_map_count=262144
+>
+> # kubeadm / bare metal (sur chaque nœud)
+> sudo sysctl -w vm.max_map_count=262144
+> echo "vm.max_map_count=262144" | sudo tee /etc/sysctl.d/99-elasticsearch.conf
+> sudo sysctl --system
+> ```
+
 **Exercice 14 : Déployer Elasticsearch**
 
 ```bash

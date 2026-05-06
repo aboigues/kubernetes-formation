@@ -1,0 +1,7 @@
+# Suppressions Trivy justifiées
+#
+# AVD-KSV-0125 — Registre non approuvé par défaut
+# docker.elastic.co est le registre officiel d'Elastic pour Elasticsearch et Kibana.
+# Il n'existe pas d'image équivalente sur Docker Hub ou d'autre registre "approuvé".
+# Référence : https://www.docker.elastic.co
+AVD-KSV-0125
