@@ -238,9 +238,16 @@ kubectl get namespace tp11
 
 ### 3.4 Récupérer l'adresse du Gateway (environnements locaux)
 
-nginx Gateway Fabric crée un Service de type `LoadBalancer`. En environnement local (minikube, kind), ce service reste en `<pending>` sans IP externe tant qu'aucun mécanisme de LoadBalancer n'est actif.
+nginx Gateway Fabric crée un Service de type `LoadBalancer`. Sans mécanisme de LoadBalancer actif, ce service reste en `<pending>` et `status.addresses` est vide.
 
-**Option A — minikube tunnel (recommandé avec minikube)**
+| Environnement | Solution recommandée |
+|---|---|
+| minikube | Option A : `minikube tunnel` |
+| kubeadm (bare metal / VM) | Option B : MetalLB, ou Option C : NodePort |
+| kind | Option C : NodePort ou Option D : port-forward |
+| Tous | Option D : port-forward (toujours disponible) |
+
+**Option A — minikube tunnel**
 
 Dans un **terminal séparé**, lancer et laisser tourner :
 
@@ -255,17 +262,64 @@ GW_IP=$(kubectl get gateway main-gateway -n tp11 -o jsonpath='{.status.addresses
 echo "Gateway IP: $GW_IP"
 ```
 
-**Option B — NodePort via l'IP du nœud (minikube, kind)**
+**Option B — MetalLB (kubeadm, bare metal)**
+
+MetalLB permet d'assigner de vraies IP aux Services `LoadBalancer` sur un cluster sans cloud provider.
 
 ```bash
-NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+# Installer MetalLB
+kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.9/config/manifests/metallb-native.yaml
+
+# Attendre que les pods soient prêts
+kubectl wait --for=condition=ready pod -n metallb-system --all --timeout=90s
+
+# Déclarer un pool d'adresses (adapter la plage à votre réseau)
+kubectl apply -f - <<EOF
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: tp11-pool
+  namespace: metallb-system
+spec:
+  addresses:
+  - 192.168.1.200-192.168.1.210   # Plage libre sur votre réseau local
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: tp11-l2
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+  - tp11-pool
+EOF
+
+# Le Service LoadBalancer reçoit maintenant une IP — attendre ~30s
+GW_IP=$(kubectl get gateway main-gateway -n tp11 -o jsonpath='{.status.addresses[0].value}')
+echo "Gateway IP: $GW_IP"
+```
+
+> **Trouver une plage libre :** la plage doit être dans le même sous-réseau que vos nœuds et ne pas être utilisée par votre DHCP. Vérifier avec `kubectl get nodes -o wide` l'IP de vos nœuds pour déterminer le sous-réseau.
+
+**Option C — NodePort via l'IP d'un nœud (kubeadm, kind, minikube)**
+
+Nginx Gateway Fabric expose aussi ses ports en NodePort. Cette méthode ne nécessite aucun composant supplémentaire.
+
+```bash
+# Récupérer l'IP d'un nœud (préférer un worker si disponible)
+NODE_IP=$(kubectl get nodes -o wide --no-headers | grep -v control-plane | awk '{print $6}' | head -1)
+# Si pas de worker (cluster mono-nœud) :
+NODE_IP=$(kubectl get nodes -o wide --no-headers | awk '{print $6}' | head -1)
+
+# Récupérer le NodePort HTTP (port 80 du service)
 GW_HTTP_PORT=$(kubectl get svc -n nginx-gateway \
-  -o jsonpath='{.items[0].spec.ports[?(@.port==80)].nodePort}' 2>/dev/null)
+  -o jsonpath='{.items[0].spec.ports[?(@.port==80)].nodePort}')
+
 GW_IP="${NODE_IP}:${GW_HTTP_PORT}"
 echo "Gateway accessible via: http://$GW_IP"
 ```
 
-**Option C — port-forward (fonctionne dans tous les environnements)**
+**Option D — port-forward (fonctionne dans tous les environnements)**
 
 ```bash
 # Dans un terminal séparé
@@ -275,7 +329,7 @@ kubectl port-forward svc/nginx-gateway -n nginx-gateway 8080:80 8443:443
 GW_IP="localhost:8080"
 ```
 
-> **Note :** Avec l'option C, remplacer `http://$GW_IP/` par `http://$GW_IP/` dans les commandes curl — le port est déjà inclus dans la variable `GW_IP`.
+> **Note :** avec l'option D, le port est inclus dans `GW_IP` (`localhost:8080`). Les commandes `curl http://$GW_IP/` fonctionnent sans modification.
 
 ---
 
