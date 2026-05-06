@@ -198,11 +198,11 @@ tp10/
 ├── app.py                       # Code Python de l'API backend
 ├── requirements.txt             # Dépendances Python
 ├── build-image.sh               # Script de build automatisé
-└── 09-backend-deployment.yaml   # Utilise taskflow-backend:latest
+└── 09b-backend-deployment.yaml   # Utilise taskflow-backend:latest
 ```
 
 **Configuration du Deployment** :
-Le fichier `09-backend-deployment.yaml` est configuré pour utiliser l'image locale :
+Le fichier `09b-backend-deployment.yaml` est configuré pour utiliser l'image locale :
 ```yaml
 containers:
 - name: api
@@ -617,7 +617,7 @@ kubectl apply -f 08-backend-config.yaml
 
 ### 4.2 Deployment Backend API
 
-Créer `09-backend-deployment.yaml` :
+Créer `09b-backend-deployment.yaml` :
 
 ```yaml
 apiVersion: apps/v1
@@ -682,9 +682,10 @@ spec:
 
 **Note** : Les `requests.cpu` et `requests.memory` sont **essentiels** pour le HPA.
 
-Appliquer :
+Appliquer (la ConfigMap du code doit être créée **avant** le Deployment qui la monte) :
 ```bash
-kubectl apply -f 09-backend-deployment.yaml
+kubectl apply -f 09a-backend-app-code.yaml
+kubectl apply -f 09b-backend-deployment.yaml
 ```
 
 ### 4.3 Service Backend API
@@ -806,7 +807,7 @@ Navigateur → /api → Nginx (reverse proxy) → http://backend-api:5000
 
 ### 5.1 Configuration Nginx avec Reverse Proxy
 
-Créer `12-frontend-nginx-config.yaml` :
+Créer `12b-frontend-nginx-config.yaml` :
 
 ```yaml
 apiVersion: v1
@@ -896,12 +897,12 @@ data:
 
 Appliquer :
 ```bash
-kubectl apply -f 12-frontend-nginx-config.yaml
+kubectl apply -f 12b-frontend-nginx-config.yaml
 ```
 
 ### 5.2 ConfigMap pour le Frontend HTML
 
-Créer `12-frontend-config.yaml` :
+Créer `12a-frontend-config.yaml` :
 
 ```yaml
 apiVersion: v1
@@ -1149,7 +1150,7 @@ data:
 
 Appliquer :
 ```bash
-kubectl apply -f 12-frontend-config.yaml
+kubectl apply -f 12a-frontend-config.yaml
 ```
 
 ### 5.3 Deployment Frontend
@@ -1483,7 +1484,7 @@ kubectl apply -f 19-prometheus-service.yaml
 
 ### 6.6 Déployer Grafana
 
-Créer `20-grafana-deployment.yaml` :
+Créer `20b-grafana-deployment.yaml` :
 
 ```yaml
 apiVersion: apps/v1
@@ -1531,9 +1532,12 @@ spec:
         emptyDir: {}
 ```
 
-Appliquer :
+Appliquer (les ConfigMaps de provisioning doivent exister **avant** le Deployment) :
 ```bash
-kubectl apply -f 20-grafana-deployment.yaml
+kubectl apply -f 20a-grafana-datasource.yaml
+kubectl apply -f 24-grafana-dashboard-configmap.yaml
+kubectl apply -f 25-grafana-dashboard-provider.yaml
+kubectl apply -f 20b-grafana-deployment.yaml
 ```
 
 ### 6.7 Service Grafana (LoadBalancer)
@@ -1890,8 +1894,10 @@ kubectl delete namespace taskflow
 # Option 2 : Supprimer ressource par ressource
 kubectl delete -f 22-load-generator.yaml
 kubectl delete -f 21-grafana-service.yaml
-kubectl delete -f 20-grafana-deployment.yaml
-kubectl delete -f 20-grafana-datasource.yaml
+kubectl delete -f 20b-grafana-deployment.yaml
+kubectl delete -f 25-grafana-dashboard-provider.yaml
+kubectl delete -f 24-grafana-dashboard-configmap.yaml
+kubectl delete -f 20a-grafana-datasource.yaml
 kubectl delete -f 19-prometheus-service.yaml
 kubectl delete -f 18-prometheus-deployment.yaml
 kubectl delete -f 17-prometheus-pvc.yaml
@@ -1899,10 +1905,12 @@ kubectl delete -f 16-prometheus-rbac.yaml
 kubectl delete -f 15-prometheus-config.yaml
 kubectl delete -f 14-frontend-service.yaml
 kubectl delete -f 13-frontend-deployment.yaml
-kubectl delete -f 12-frontend-config.yaml
+kubectl delete -f 12b-frontend-nginx-config.yaml
+kubectl delete -f 12a-frontend-config.yaml
 kubectl delete -f 11-backend-hpa.yaml
 kubectl delete -f 10-backend-service.yaml
-kubectl delete -f 09-backend-deployment.yaml
+kubectl delete -f 09b-backend-deployment.yaml
+kubectl delete -f 09a-backend-app-code.yaml
 kubectl delete -f 08-backend-config.yaml
 kubectl delete -f 07-redis-service.yaml
 kubectl delete -f 06-redis-deployment.yaml

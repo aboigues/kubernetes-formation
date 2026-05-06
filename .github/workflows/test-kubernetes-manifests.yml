@@ -605,14 +605,14 @@ jobs:
 
           echo "Deploying Backend API..."
           kubectl apply -f tp10/08-backend-config.yaml
-          kubectl apply -f tp10/09-backend-app-code.yaml
-          kubectl apply -f tp10/09-backend-deployment.yaml
+          kubectl apply -f tp10/09a-backend-app-code.yaml
+          kubectl apply -f tp10/09b-backend-deployment.yaml
           kubectl apply -f tp10/10-backend-service.yaml
           kubectl apply -f tp10/11-backend-hpa.yaml
 
           echo "Deploying Frontend..."
-          kubectl apply -f tp10/12-frontend-config.yaml
-          kubectl apply -f tp10/12-frontend-nginx-config.yaml
+          kubectl apply -f tp10/12a-frontend-config.yaml
+          kubectl apply -f tp10/12b-frontend-nginx-config.yaml
           kubectl apply -f tp10/13-frontend-deployment.yaml
           kubectl apply -f tp10/14-frontend-service.yaml
 
@@ -624,8 +624,8 @@ jobs:
           kubectl apply -f tp10/19-prometheus-service.yaml
 
           echo "Deploying Grafana..."
-          kubectl apply -f tp10/20-grafana-datasource.yaml
-          kubectl apply -f tp10/20-grafana-deployment.yaml
+          kubectl apply -f tp10/20a-grafana-datasource.yaml
+          kubectl apply -f tp10/20b-grafana-deployment.yaml
           kubectl apply -f tp10/21-grafana-service.yaml
           kubectl apply -f tp10/24-grafana-dashboard-configmap.yaml
           kubectl apply -f tp10/25-grafana-dashboard-provider.yaml

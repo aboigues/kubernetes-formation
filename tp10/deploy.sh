@@ -60,8 +60,8 @@ echo ""
 # Déployer Backend API
 echo -e "${YELLOW}[4/8] Déploiement du Backend API${NC}"
 kubectl apply -f 08-backend-config.yaml
-kubectl apply -f 09-backend-app-code.yaml
-kubectl apply -f 09-backend-deployment.yaml
+kubectl apply -f 09a-backend-app-code.yaml
+kubectl apply -f 09b-backend-deployment.yaml
 kubectl apply -f 10-backend-service.yaml
 kubectl apply -f 11-backend-hpa.yaml
 echo "Attente que le Backend soit prêt..."
@@ -70,8 +70,8 @@ echo ""
 
 # Déployer Frontend
 echo -e "${YELLOW}[5/8] Déploiement du Frontend${NC}"
-kubectl apply -f 12-frontend-nginx-config.yaml
-kubectl apply -f 12-frontend-config.yaml
+kubectl apply -f 12b-frontend-nginx-config.yaml
+kubectl apply -f 12a-frontend-config.yaml
 kubectl apply -f 13-frontend-deployment.yaml
 kubectl apply -f 14-frontend-service.yaml
 kubectl wait --for=condition=ready pod -l app=frontend -n $NAMESPACE --timeout=120s
@@ -90,10 +90,10 @@ echo ""
 
 # Déployer Grafana
 echo -e "${YELLOW}[7/8] Déploiement de Grafana${NC}"
-kubectl apply -f 20-grafana-datasource.yaml
+kubectl apply -f 20a-grafana-datasource.yaml
 kubectl apply -f 24-grafana-dashboard-configmap.yaml
 kubectl apply -f 25-grafana-dashboard-provider.yaml
-kubectl apply -f 20-grafana-deployment.yaml
+kubectl apply -f 20b-grafana-deployment.yaml
 kubectl apply -f 21-grafana-service.yaml
 kubectl wait --for=condition=ready pod -l app=grafana -n $NAMESPACE --timeout=120s
 echo ""
