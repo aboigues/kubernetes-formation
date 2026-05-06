@@ -44,6 +44,30 @@ kubectl apply -f examples/01-namespace.yaml
 kubectl get namespace tp11
 ```
 
+### 4. Récupérer l'adresse du Gateway (environnements locaux)
+
+nginx Gateway Fabric crée un Service `LoadBalancer`. En local (minikube, kind), ce service reste en `<pending>` sans mécanisme de LoadBalancer actif.
+
+**minikube — lancer dans un terminal séparé :**
+```bash
+minikube tunnel
+```
+
+**Alternative port-forward (tous environnements) :**
+```bash
+# Terminal séparé
+kubectl port-forward svc/nginx-gateway -n nginx-gateway 8080:80 8443:443
+# Puis dans les commandes : GW_IP="localhost:8080"
+```
+
+**Alternative NodePort :**
+```bash
+NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+GW_HTTP_PORT=$(kubectl get svc -n nginx-gateway \
+  -o jsonpath='{.items[0].spec.ports[?(@.port==80)].nodePort}' 2>/dev/null)
+GW_IP="${NODE_IP}:${GW_HTTP_PORT}"
+```
+
 ---
 
 ## Tests Partie 4 : GatewayClass et Gateway
@@ -156,7 +180,7 @@ curl -s -H "Host: ab.example.com" -H "X-Version: v1" http://$GW_IP/
 ### Test 6.2 : Filtres — réécriture de chemin et redirection
 
 ```bash
-kubectl apply -f examples/09-httproute-rewrite.yaml
+kubectl apply -f examples/08-httproute-rewrite.yaml
 
 GW_IP=$(kubectl get gateway main-gateway -n tp11 -o jsonpath='{.status.addresses[0].value}')
 
@@ -176,7 +200,7 @@ curl -v -H "Host: rewrite.example.com" http://$GW_IP/redirect 2>&1 | grep -E "< 
 ### Test 7.1 : Distribution canary 90/10
 
 ```bash
-kubectl apply -f examples/08-httproute-canary.yaml
+kubectl apply -f examples/09-httproute-canary.yaml
 
 GW_IP=$(kubectl get gateway main-gateway -n tp11 -o jsonpath='{.status.addresses[0].value}')
 

@@ -33,17 +33,6 @@ spec:
         image: nginx:1.27-alpine
         ports:
         - containerPort: 8080
-        command: ["/bin/sh", "-c"]
-        args:
-        - |
-          mkdir -p /tmp/nginx /tmp/nginx/logs
-          cat > /tmp/index.html <<EOF
-          <!DOCTYPE html><html><body>
-          <h1>Backend v1</h1>
-          <p>Version: stable</p>
-          </body></html>
-          EOF
-          nginx -g 'daemon off;' -c /etc/nginx/nginx.conf
         volumeMounts:
         - name: tmp
           mountPath: /tmp
@@ -80,7 +69,6 @@ data:
   default.conf: |
     server {
       listen 8080;
-      root /tmp;
       location / {
         default_type text/html;
         return 200 '<h1>Backend v1 - stable</h1>';

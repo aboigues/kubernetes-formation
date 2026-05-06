@@ -1,6 +1,6 @@
 # HTTPRoute avec traffic splitting : déploiement canary
 # 90% du trafic → v1 (stable), 10% → v2 (canary)
-# Utilisation : kubectl apply -f 08-httproute-canary.yaml
+# Utilisation : kubectl apply -f 09-httproute-canary.yaml
 # Test :
 #   for i in $(seq 1 20); do curl -s http://<GATEWAY_IP>/ | grep -o 'v[12]'; done
 
