@@ -1,7 +1,7 @@
 # HTTPRoute avec filtres : réécriture de chemin et redirection
 # /old-api/* → /api/* (réécriture transparente)
 # /http/* → redirection 301 vers HTTPS
-# Utilisation : kubectl apply -f 09-httproute-rewrite.yaml
+# Utilisation : kubectl apply -f 08-httproute-rewrite.yaml
 
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -38,6 +38,3 @@ spec:
       requestRedirect:
         scheme: https
         statusCode: 301
-    backendRefs:
-    - name: backend-v1
-      port: 80

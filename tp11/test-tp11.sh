@@ -21,6 +21,35 @@ TESTS_TOTAL=0
 NAMESPACE="tp11"
 TIMEOUT=120
 
+# Récupère l'IP du Gateway avec fallback NodePort si LoadBalancer non disponible
+get_gw_ip() {
+    local gw_ip
+    gw_ip=$(kubectl get gateway main-gateway -n "$NAMESPACE" \
+        -o jsonpath='{.status.addresses[0].value}' 2>/dev/null)
+
+    if [ -z "$gw_ip" ]; then
+        # Fallback : NodeIP + NodePort du service nginx-gateway
+        local node_ip node_port
+        node_ip=$(kubectl get nodes \
+            -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null)
+        node_port=$(kubectl get svc -n nginx-gateway \
+            -o jsonpath='{.items[0].spec.ports[?(@.port==80)].nodePort}' 2>/dev/null)
+
+        if [ -n "$node_ip" ] && [ -n "$node_port" ]; then
+            gw_ip="${node_ip}:${node_port}"
+            warning "LoadBalancer IP non disponible — utilisation du NodePort: $gw_ip"
+            warning "Pour minikube : lancer 'minikube tunnel' dans un terminal séparé"
+        else
+            warning "IP du Gateway non disponible."
+            warning "Solutions :"
+            warning "  - minikube : lancer 'minikube tunnel' dans un terminal séparé"
+            warning "  - Tous clusters : kubectl port-forward svc/nginx-gateway -n nginx-gateway 8080:80"
+        fi
+    fi
+
+    echo "$gw_ip"
+}
+
 log()     { echo -e "${BLUE}[INFO]${NC} $1"; }
 success() { echo -e "${GREEN}[✓]${NC} $1"; ((TESTS_PASSED++)); ((TESTS_TOTAL++)); }
 error()   { echo -e "${RED}[✗]${NC} $1"; ((TESTS_FAILED++)); ((TESTS_TOTAL++)); }
@@ -119,12 +148,12 @@ test_gateway() {
         return
     fi
 
-    GW_IP=$(kubectl get gateway main-gateway -n "$NAMESPACE" \
-      -o jsonpath='{.status.addresses[0].value}' 2>/dev/null)
+    GW_IP=$(get_gw_ip)
     if [ -n "$GW_IP" ]; then
-        success "Gateway IP assignée: $GW_IP"
+        success "Gateway accessible: $GW_IP"
     else
-        error "Pas d'IP assignée au Gateway"
+        warning "Pas d'IP assignée au Gateway — les tests HTTP seront ignorés"
+        warning "Lancer 'minikube tunnel' ou 'kubectl port-forward svc/nginx-gateway -n nginx-gateway 8080:80'"
     fi
 }
 
@@ -181,8 +210,7 @@ test_basic_routing() {
         error "HTTPRoute basic-routing: ResolvedRefs KO (status: $RESOLVED)"
     fi
 
-    GW_IP=$(kubectl get gateway main-gateway -n "$NAMESPACE" \
-      -o jsonpath='{.status.addresses[0].value}' 2>/dev/null)
+    GW_IP=$(get_gw_ip)
 
     if [ -z "$GW_IP" ]; then
         warning "IP du Gateway non disponible — tests HTTP ignorés"
@@ -206,8 +234,7 @@ test_header_routing() {
     kubectl apply -f examples/07-httproute-header-routing.yaml > /dev/null 2>&1
     sleep 3
 
-    GW_IP=$(kubectl get gateway main-gateway -n "$NAMESPACE" \
-      -o jsonpath='{.status.addresses[0].value}' 2>/dev/null)
+    GW_IP=$(get_gw_ip)
 
     if [ -z "$GW_IP" ]; then
         warning "IP du Gateway non disponible — test ignoré"
@@ -231,14 +258,53 @@ test_header_routing() {
     fi
 }
 
+test_rewrite() {
+    log "=== Test filtres (réécriture et redirection) ==="
+
+    kubectl apply -f examples/08-httproute-rewrite.yaml > /dev/null 2>&1
+    sleep 3
+
+    ACCEPTED=$(kubectl get httproute rewrite-routing -n "$NAMESPACE" \
+      -o jsonpath='{.status.parents[0].conditions[?(@.type=="Accepted")].status}' 2>/dev/null)
+    if [ "$ACCEPTED" = "True" ]; then
+        success "HTTPRoute rewrite-routing: Accepted"
+    else
+        error "HTTPRoute rewrite-routing non acceptée (status: $ACCEPTED)"
+    fi
+
+    GW_IP=$(get_gw_ip)
+
+    if [ -z "$GW_IP" ]; then
+        warning "IP du Gateway non disponible — tests HTTP ignorés"
+        return
+    fi
+
+    # Test réécriture /old-api → /api (doit retourner 200)
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+        -H "Host: rewrite.example.com" "http://$GW_IP/old-api/users" 2>/dev/null)
+    if [ "$HTTP_CODE" = "200" ]; then
+        success "URLRewrite /old-api → /api : HTTP 200"
+    else
+        error "URLRewrite /old-api → /api : HTTP $HTTP_CODE (attendu: 200)"
+    fi
+
+    # Test redirection /redirect → 301
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+        -H "Host: rewrite.example.com" "http://$GW_IP/redirect" 2>/dev/null)
+    if [ "$HTTP_CODE" = "301" ]; then
+        success "RequestRedirect /redirect : HTTP 301"
+    else
+        error "RequestRedirect /redirect : HTTP $HTTP_CODE (attendu: 301)"
+    fi
+}
+
 test_canary() {
     log "=== Test traffic splitting (canary 90/10) ==="
 
-    kubectl apply -f examples/08-httproute-canary.yaml > /dev/null 2>&1
+    kubectl apply -f examples/09-httproute-canary.yaml > /dev/null 2>&1
     sleep 3
 
-    GW_IP=$(kubectl get gateway main-gateway -n "$NAMESPACE" \
-      -o jsonpath='{.status.addresses[0].value}' 2>/dev/null)
+    GW_IP=$(get_gw_ip)
 
     if [ -z "$GW_IP" ]; then
         warning "IP du Gateway non disponible — test ignoré"
@@ -296,8 +362,7 @@ test_tls() {
 
     kubectl apply -f examples/10-httproute-tls.yaml > /dev/null 2>&1
 
-    GW_IP=$(kubectl get gateway main-gateway -n "$NAMESPACE" \
-      -o jsonpath='{.status.addresses[0].value}' 2>/dev/null)
+    GW_IP=$(get_gw_ip)
 
     if [ -z "$GW_IP" ]; then
         warning "IP du Gateway non disponible — test HTTPS ignoré"
@@ -340,24 +405,26 @@ cd "$SCRIPT_DIR"
 check_prerequisites
 
 case "${1:-all}" in
-    test_gatewayclass)  test_gatewayclass ;;
-    test_gateway)       test_gateway ;;
-    test_backends)      test_backends ;;
-    test_basic_routing) test_basic_routing ;;
+    test_gatewayclass)   test_gatewayclass ;;
+    test_gateway)        test_gateway ;;
+    test_backends)       test_backends ;;
+    test_basic_routing)  test_basic_routing ;;
     test_header_routing) test_header_routing ;;
-    test_canary)        test_canary ;;
-    test_tls)           test_tls ;;
+    test_rewrite)        test_rewrite ;;
+    test_canary)         test_canary ;;
+    test_tls)            test_tls ;;
     all)
         test_gatewayclass
         test_gateway
         test_backends
         test_basic_routing
         test_header_routing
+        test_rewrite
         test_canary
         test_tls
         ;;
     *)
-        echo "Usage: $0 [test_gatewayclass|test_gateway|test_backends|test_basic_routing|test_header_routing|test_canary|test_tls|all]"
+        echo "Usage: $0 [test_gatewayclass|test_gateway|test_backends|test_basic_routing|test_header_routing|test_rewrite|test_canary|test_tls|all]"
         exit 1
         ;;
 esac

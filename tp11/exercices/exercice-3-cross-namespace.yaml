@@ -1,0 +1,129 @@
+# Exercice 3 : HTTPRoute cross-namespace avec ReferenceGrant
+#
+# Objectif : Permettre à une HTTPRoute dans le namespace "team-a" de cibler
+# un Service dans le namespace "shared-services", via un ReferenceGrant explicite.
+#
+# Architecture :
+#   [Gateway - tp11] ← [HTTPRoute - team-a] → [Service - shared-services]
+#                                                     ↑
+#                                           ReferenceGrant requis ici
+#
+# Étapes :
+#   1. Créer les namespaces : kubectl create namespace team-a shared-services
+#   2. Appliquer ce fichier : kubectl apply -f exercice-3-cross-namespace.yaml
+#   3. Vérifier l'attachement de la route (ResolvedRefs doit être True)
+#   4. Supprimer le ReferenceGrant et observer l'effet sur la route
+#
+# Question 1 : Que se passe-t-il si vous appliquez l'HTTPRoute sans le ReferenceGrant ?
+# Question 2 : À quoi sert le champ "name" dans spec.to du ReferenceGrant ?
+#              Que se passe-t-il si vous le supprimez (accès à tous les Secrets/Services) ?
+
+---
+# Service partagé dans shared-services
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shared-api
+  namespace: shared-services
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: shared-api
+  template:
+    metadata:
+      labels:
+        app: shared-api
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: api
+        image: nginx:1.27-alpine
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: config
+          mountPath: /etc/nginx/conf.d
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: [ALL]
+        resources:
+          requests: { cpu: 50m, memory: 64Mi }
+          limits: { cpu: 100m, memory: 128Mi }
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: config
+        configMap:
+          name: shared-api-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shared-api-config
+  namespace: shared-services
+data:
+  default.conf: |
+    server {
+      listen 8080;
+      location / { return 200 '{"service":"shared-api","namespace":"shared-services"}'; }
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shared-api
+  namespace: shared-services
+spec:
+  selector:
+    app: shared-api
+  ports:
+  - port: 80
+    targetPort: 8080
+---
+# ReferenceGrant : placé dans shared-services, autorise team-a à cibler shared-api
+# Sans ce manifest, l'HTTPRoute ci-dessous aura ResolvedRefs: False
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-team-a
+  namespace: shared-services    # Namespace du Service cible
+spec:
+  from:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    namespace: team-a           # Seul team-a est autorisé
+  to:
+  - group: ""
+    kind: Service
+    name: shared-api            # Seul ce Service est exposé (granularité fine)
+---
+# HTTPRoute dans team-a qui cible le service cross-namespace
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: cross-namespace-route
+  namespace: team-a
+spec:
+  parentRefs:
+  - name: main-gateway
+    namespace: tp11             # Gateway dans tp11
+  hostnames:
+  - "shared.example.com"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /shared
+    backendRefs:
+    - name: shared-api
+      namespace: shared-services   # Cross-namespace : nécessite le ReferenceGrant
+      port: 80

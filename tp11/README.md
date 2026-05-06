@@ -236,6 +236,47 @@ kubectl apply -f examples/01-namespace.yaml
 kubectl get namespace tp11
 ```
 
+### 3.4 Récupérer l'adresse du Gateway (environnements locaux)
+
+nginx Gateway Fabric crée un Service de type `LoadBalancer`. En environnement local (minikube, kind), ce service reste en `<pending>` sans IP externe tant qu'aucun mécanisme de LoadBalancer n'est actif.
+
+**Option A — minikube tunnel (recommandé avec minikube)**
+
+Dans un **terminal séparé**, lancer et laisser tourner :
+
+```bash
+minikube tunnel
+```
+
+Puis récupérer l'IP une fois assignée :
+
+```bash
+GW_IP=$(kubectl get gateway main-gateway -n tp11 -o jsonpath='{.status.addresses[0].value}')
+echo "Gateway IP: $GW_IP"
+```
+
+**Option B — NodePort via l'IP du nœud (minikube, kind)**
+
+```bash
+NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+GW_HTTP_PORT=$(kubectl get svc -n nginx-gateway \
+  -o jsonpath='{.items[0].spec.ports[?(@.port==80)].nodePort}' 2>/dev/null)
+GW_IP="${NODE_IP}:${GW_HTTP_PORT}"
+echo "Gateway accessible via: http://$GW_IP"
+```
+
+**Option C — port-forward (fonctionne dans tous les environnements)**
+
+```bash
+# Dans un terminal séparé
+kubectl port-forward svc/nginx-gateway -n nginx-gateway 8080:80 8443:443
+
+# Dans votre terminal de travail
+GW_IP="localhost:8080"
+```
+
+> **Note :** Avec l'option C, remplacer `http://$GW_IP/` par `http://$GW_IP/` dans les commandes curl — le port est déjà inclus dans la variable `GW_IP`.
+
 ---
 
 ## Partie 4 : GatewayClass et Gateway
@@ -316,9 +357,14 @@ kubectl apply -f examples/03-gateway.yaml
 # Vérifier (PROGRAMMED = infrastructure provisionnée)
 kubectl get gateway -n tp11
 kubectl describe gateway main-gateway -n tp11
+```
 
+> **Environnement local :** si la colonne `ADDRESS` est vide, consulter la [section 3.4](#34-récupérer-ladresse-du-gateway-environnements-locaux) pour activer `minikube tunnel` ou utiliser le port-forward.
+
+```bash
 # Obtenir l'IP externe du Gateway
-kubectl get gateway main-gateway -n tp11 -o jsonpath='{.status.addresses[0].value}'
+GW_IP=$(kubectl get gateway main-gateway -n tp11 -o jsonpath='{.status.addresses[0].value}')
+echo "Gateway IP: $GW_IP"
 ```
 
 **Exercice 4.1 :**
@@ -528,7 +574,7 @@ filters:
 ```
 
 ```bash
-kubectl apply -f examples/09-httproute-rewrite.yaml
+kubectl apply -f examples/08-httproute-rewrite.yaml
 
 GW_IP=$(kubectl get gateway main-gateway -n tp11 -o jsonpath='{.status.addresses[0].value}')
 
@@ -580,7 +626,7 @@ Rollback :  si anomalie, revenir à 100%/0% immédiatement
 ```
 
 ```bash
-kubectl apply -f examples/08-httproute-canary.yaml
+kubectl apply -f examples/09-httproute-canary.yaml
 
 GW_IP=$(kubectl get gateway main-gateway -n tp11 -o jsonpath='{.status.addresses[0].value}')
 
