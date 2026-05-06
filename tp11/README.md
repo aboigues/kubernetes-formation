@@ -27,6 +27,7 @@ Ce TP vous permettra de maîtriser la Gateway API Kubernetes, successeur officie
 - [Partie 1 : Pourquoi remplacer l'Ingress ?](#partie-1--pourquoi-remplacer-lingress-)
 - [Partie 2 : Architecture et modèle de rôles](#partie-2--architecture-et-modèle-de-rôles)
 - [Partie 3 : Installation et mise en place](#partie-3--installation-et-mise-en-place)
+  - [3.5 Noms d'hôtes et en-tête HTTP Host](#35-noms-dhôtes-et-en-tête-http-host)
 - [Partie 4 : GatewayClass et Gateway](#partie-4--gatewayclass-et-gateway)
 - [Partie 5 : HTTPRoute — routage basique](#partie-5--httproute--routage-basique)
 - [Partie 6 : Routage avancé](#partie-6--routage-avancé)
@@ -275,7 +276,43 @@ kubectl port-forward svc/nginx-gateway -n nginx-gateway 8080:80 8443:443
 GW_IP="localhost:8080"
 ```
 
-> **Note :** Avec l'option C, remplacer `http://$GW_IP/` par `http://$GW_IP/` dans les commandes curl — le port est déjà inclus dans la variable `GW_IP`.
+> **Note :** Avec l'option D, le port est inclus dans `GW_IP` (`localhost:8080`). Les commandes `curl http://$GW_IP/` fonctionnent sans modification.
+
+### 3.5 Noms d'hôtes et en-tête HTTP Host
+
+Tous les exemples de ce TP utilisent des hostnames fictifs (`app.example.com`, `canary.example.com`, etc.). Ces hostnames n'ont pas besoin d'exister dans le DNS — la Gateway API les utilise uniquement pour filtrer sur l'en-tête HTTP `Host`.
+
+**Comment ça fonctionne :**
+
+```
+curl -H "Host: app.example.com" http://$GW_IP/api
+         │
+         └─ Le Gateway reçoit la requête et lit l'en-tête Host
+            → Il cherche une HTTPRoute dont spec.hostnames contient "app.example.com"
+            → La règle correspondante route vers le bon backend
+```
+
+**Ce qui se passe sans l'en-tête Host :**
+
+```bash
+# Sans -H "Host: ..." → curl envoie l'IP comme Host header
+curl http://$GW_IP/api
+# Résultat : 404 ou réponse par défaut — aucune HTTPRoute ne correspond à l'IP
+```
+
+C'est pourquoi **toutes les commandes curl de ce TP incluent `-H "Host: ..."`**.
+
+**Tester depuis un navigateur (optionnel) :**
+
+Ajouter les entrées suivantes dans `/etc/hosts` (Linux/Mac) ou `C:\Windows\System32\drivers\etc\hosts` (Windows) :
+
+```
+<GW_IP>  app.example.com ab.example.com canary.example.com
+<GW_IP>  rewrite.example.com secure.example.com
+<GW_IP>  exercice1.example.com canary-ex.example.com shared.example.com
+```
+
+Remplacer `<GW_IP>` par l'IP récupérée à la section 3.4. Avec port-forward (`localhost:8080`), utiliser `127.0.0.1`.
 
 ---
 
@@ -436,6 +473,8 @@ kubectl describe httproute basic-routing -n tp11
 ```
 
 **Tester le routage :**
+
+> **Pourquoi `-H "Host: app.example.com"` ?** Le Gateway filtre les requêtes sur l'en-tête HTTP `Host`. Sans ce header, aucune HTTPRoute ne correspond et la réponse est 404. Voir la [section 3.5](#35-noms-dhôtes-et-en-tête-http-host) pour le détail.
 
 ```bash
 # Récupérer l'IP du Gateway
