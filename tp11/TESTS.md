@@ -46,26 +46,40 @@ kubectl get namespace tp11
 
 ### 4. Récupérer l'adresse du Gateway (environnements locaux)
 
-nginx Gateway Fabric crée un Service `LoadBalancer`. En local (minikube, kind), ce service reste en `<pending>` sans mécanisme de LoadBalancer actif.
+| Environnement | Solution |
+|---|---|
+| minikube | `minikube tunnel` (Option A) |
+| kubeadm / bare metal | MetalLB (Option B) ou NodePort (Option C) |
+| kind / autre | NodePort (Option C) ou port-forward (Option D) |
 
-**minikube — lancer dans un terminal séparé :**
+**Option A — minikube tunnel (terminal séparé) :**
 ```bash
 minikube tunnel
+GW_IP=$(kubectl get gateway main-gateway -n tp11 -o jsonpath='{.status.addresses[0].value}')
 ```
 
-**Alternative port-forward (tous environnements) :**
+**Option B — MetalLB (kubeadm, bare metal) :**
+```bash
+kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.9/config/manifests/metallb-native.yaml
+# Configurer un IPAddressPool sur la plage libre de votre réseau (voir README section 3.4)
+GW_IP=$(kubectl get gateway main-gateway -n tp11 -o jsonpath='{.status.addresses[0].value}')
+```
+
+**Option C — NodePort (kubeadm, kind, minikube) :**
+```bash
+NODE_IP=$(kubectl get nodes -o wide --no-headers | grep -v control-plane | awk '{print $6}' | head -1)
+# Cluster mono-nœud :
+# NODE_IP=$(kubectl get nodes -o wide --no-headers | awk '{print $6}' | head -1)
+GW_HTTP_PORT=$(kubectl get svc -n nginx-gateway \
+  -o jsonpath='{.items[0].spec.ports[?(@.port==80)].nodePort}')
+GW_IP="${NODE_IP}:${GW_HTTP_PORT}"
+```
+
+**Option D — port-forward (tous environnements) :**
 ```bash
 # Terminal séparé
 kubectl port-forward svc/nginx-gateway -n nginx-gateway 8080:80 8443:443
-# Puis dans les commandes : GW_IP="localhost:8080"
-```
-
-**Alternative NodePort :**
-```bash
-NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
-GW_HTTP_PORT=$(kubectl get svc -n nginx-gateway \
-  -o jsonpath='{.items[0].spec.ports[?(@.port==80)].nodePort}' 2>/dev/null)
-GW_IP="${NODE_IP}:${GW_HTTP_PORT}"
+GW_IP="localhost:8080"
 ```
 
 ---

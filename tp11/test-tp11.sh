@@ -28,22 +28,30 @@ get_gw_ip() {
         -o jsonpath='{.status.addresses[0].value}' 2>/dev/null)
 
     if [ -z "$gw_ip" ]; then
-        # Fallback : NodeIP + NodePort du service nginx-gateway
+        # Fallback : NodeIP d'un worker + NodePort du service nginx-gateway
         local node_ip node_port
-        node_ip=$(kubectl get nodes \
-            -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null)
+        node_ip=$(kubectl get nodes -o wide --no-headers 2>/dev/null \
+            | grep -v control-plane | awk '{print $6}' | head -1)
+        # Cluster mono-nœud (pas de worker distinct)
+        if [ -z "$node_ip" ]; then
+            node_ip=$(kubectl get nodes -o wide --no-headers 2>/dev/null \
+                | awk '{print $6}' | head -1)
+        fi
         node_port=$(kubectl get svc -n nginx-gateway \
             -o jsonpath='{.items[0].spec.ports[?(@.port==80)].nodePort}' 2>/dev/null)
 
         if [ -n "$node_ip" ] && [ -n "$node_port" ]; then
             gw_ip="${node_ip}:${node_port}"
             warning "LoadBalancer IP non disponible — utilisation du NodePort: $gw_ip"
-            warning "Pour minikube : lancer 'minikube tunnel' dans un terminal séparé"
+            warning "Solutions pour obtenir une vraie IP LoadBalancer :"
+            warning "  - minikube   : 'minikube tunnel' dans un terminal séparé"
+            warning "  - kubeadm    : installer MetalLB (voir README section 3.4)"
+            warning "  - Tous       : 'kubectl port-forward svc/nginx-gateway -n nginx-gateway 8080:80'"
         else
-            warning "IP du Gateway non disponible."
-            warning "Solutions :"
-            warning "  - minikube : lancer 'minikube tunnel' dans un terminal séparé"
-            warning "  - Tous clusters : kubectl port-forward svc/nginx-gateway -n nginx-gateway 8080:80"
+            warning "IP du Gateway non disponible. Solutions :"
+            warning "  - minikube   : 'minikube tunnel' dans un terminal séparé"
+            warning "  - kubeadm    : installer MetalLB (voir README section 3.4)"
+            warning "  - Tous       : 'kubectl port-forward svc/nginx-gateway -n nginx-gateway 8080:80'"
         fi
     fi
 
