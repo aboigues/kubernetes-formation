@@ -39,7 +39,9 @@ spec:
             echo "Database is ready!"
       containers:
       - name: backend
-        image: python:3.11-slim
+        # Alpine plutôt que slim : 0 CVE OS contre 22 pour python:3.11-slim.
+        # server.py n'utilise que la stdlib, aucune dépendance compilée en jeu.
+        image: python:3.13-alpine
         command:
           - python
           - /app/server.py

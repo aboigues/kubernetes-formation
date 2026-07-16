@@ -19,7 +19,9 @@ services:
 
   # Backend API
   backend:
-    image: python:3.11-slim
+    # Aligné sur le manifest Kubernetes du même TP (06-backend-deployment.yaml) :
+    # la migration compose -> k8s n'a de sens que si les deux côtés sont identiques.
+    image: python:3.13-alpine
     container_name: myapp-backend
     command: python /app/server.py
     working_dir: /app

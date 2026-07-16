@@ -287,11 +287,28 @@ scan échouera en tentant de la puller.
 python3 .github/scripts/extract-images.py --verbose
 ```
 
-### Politique de résultat : bloquant sur HIGH et CRITICAL
+### Politique de résultat : bloquant sur les CVE de paquets OS
 
-Le scan **échoue** (exit 1) dès qu'une vulnérabilité HIGH ou CRITICAL est trouvée, sur
-n'importe quelle image. C'est cohérent avec l'objectif du projet : 0 vulnérabilité
-HIGH/CRITICAL (voir `SECURITY.md`).
+Le scan **échoue** (exit 1) sur les CVE HIGH/CRITICAL **de paquets OS**
+(`vuln-type: 'os'`). Les CVE de binaires embarqués (gobinary, jar, node-pkg…) sont
+scannées et publiées dans l'onglet Security, mais **ne bloquent pas**.
+
+Ce n'est pas un assouplissement de complaisance, c'est ce que la mesure impose :
+
+| Seuil | Images vertes (sur 38) |
+|---|---|
+| Toutes les CVE HIGH/CRITICAL | 5 |
+| CVE de paquets OS uniquement | 17 |
+
+Sur les 38 images, **12 n'ont que des CVE de binaires** (`prom/prometheus`, `etcd`,
+`kaniko`, `rancher/kubectl`… sont des binaires Go statiques). Une CVE de binaire dans
+une image tierce ne part que si l'amont recompile : la signaler en rouge chaque
+semaine n'offre aucune action possible. Elles sont en outre largement non
+atteignables — un binaire qui n'appelle jamais `net/http` embarque quand même les
+CVE de la stdlib.
+
+⚠️ `--ignore-unfixed` **ne** répond **pas** à ce problème : il retient les CVE dont un
+correctif existe en amont, pas celles qu'on peut appliquer.
 
 **Le rouge est attribuable à une image précise.** Le job de chaque image devient rouge
 si cette image est vulnérable, et le job `report` rend le même verdict sur l'ensemble.
@@ -318,10 +335,13 @@ python3 .github/scripts/image-scan-report.py reports --fail-on CRITICAL,HIGH
 # exit 0 = aucune vulnérabilité bloquante | exit 1 = scan en échec
 ```
 
-**Conséquence à assumer** : un HIGH publié sur une image amont rend le scan rouge le
-lundi suivant, même sans commit. C'est le comportement voulu (une CVE apparaît sans
-qu'on touche au code), mais cela demande de traiter les alertes pour que le rouge garde
-son sens.
+**Conséquence à assumer** : ~21 jobs restent rouges en permanence. Même le tag le plus
+récent d'une image amont porte des CVE OS corrigeables (`nginx:1.29-alpine` : 13), parce
+que l'image est en retard sur les paquets de sa distribution. Aucune action de ce dépôt
+ne les rend vertes — seule une **image dérivée** avec `apk/apt upgrade` le ferait, ce qui
+est un chantier à part.
+
+Le rouge ici veut donc dire « à surveiller », pas « à corriger avant de merger ».
 
 Le rapport distingue les vulnérabilités **corrigeables** (un correctif existe → monter le
 tag suffit) des autres. C'est la colonne à regarder en premier : les non-corrigeables

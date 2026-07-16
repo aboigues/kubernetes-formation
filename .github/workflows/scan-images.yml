@@ -124,11 +124,26 @@ jobs:
           path: 'trivy-${{ matrix.slug }}.json'
           retention-days: 30
 
-      # C'est ici que le job d'une image vulnérable devient rouge, et pas sur les
-      # étapes de scan ci-dessus : le SARIF et le rapport JSON sont déjà envoyés,
-      # donc rien n'est perdu au moment précis où il y a quelque chose à voir.
-      # L'image est en cache depuis le premier scan, ce passage ne la retélécharge pas.
-      - name: Fail if image has blocking vulnerabilities
+      # BARRIÈRE : seules les CVE de paquets OS font rougir le job.
+      #
+      # Pourquoi pas toutes les CVE, ni --ignore-unfixed : sur une image tierce,
+      # une CVE de binaire (gobinary, jar...) ne part que si l'amont recompile.
+      # --ignore-unfixed ne filtre pas ça — il retient les CVE dont un correctif
+      # existe, pas celles qu'on peut appliquer. Mesuré sur ce dépôt : 33 images
+      # rouges avec toutes les CVE, dont 12 n'ont QUE des CVE de binaires Go.
+      # Ces CVE-là sont en plus largement non atteignables (un binaire qui
+      # n'appelle jamais net/http embarque quand même les CVE de la stdlib).
+      #
+      # Une CVE de paquet OS, elle, part avec une image plus récente : c'est la
+      # seule catégorie sur laquelle ce dépôt peut réellement agir.
+      #
+      # Le reste n'est pas perdu : le scan complet ci-dessus l'a déjà envoyé dans
+      # l'onglet Security, où il reste consultable pour jugement humain.
+      #
+      # L'étape est en dernier : le SARIF et le JSON sont déjà uploadés, donc rien
+      # n'est perdu au moment précis où il y a quelque chose à voir. L'image est en
+      # cache depuis le premier scan, ce passage ne la retélécharge pas.
+      - name: Fail on OS package vulnerabilities
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: 'image'
@@ -136,6 +151,10 @@ jobs:
           format: 'table'
           severity: ${{ env.FAIL_ON_SEVERITY }}
           scanners: 'vuln'
+          # Attention : l'input s'appelle bien vuln-type et non pkg-types dans
+          # trivy-action v0.36.0 (l'action le mappe vers TRIVY_PKG_TYPES). Un input
+          # inconnu serait ignoré en silence et la barrière bloquerait sur tout.
+          vuln-type: 'os'
           exit-code: '1'
           version: 'v0.72.0'
           timeout: '15m'

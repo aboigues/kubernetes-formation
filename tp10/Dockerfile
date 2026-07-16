@@ -1,6 +1,11 @@
 # Dockerfile pour TaskFlow Backend API
-# Image de base : Python 3.11 slim (Debian)
-FROM python:3.11-slim
+# Image de base : Python 3.12 Alpine
+#
+# Pourquoi Alpine plutôt que slim (Debian) : 0 CVE OS HIGH/CRITICAL contre 22.
+# Pourquoi 3.12 et pas 3.13 : psycopg2-binary 2.9.9 (requirements.txt) publie des
+# wheels musllinux jusqu'à cp312 seulement. En 3.13, pip compilerait depuis les
+# sources et le build échouerait. Monter en 3.13 impose psycopg2-binary >= 2.9.10.
+FROM python:3.12-alpine
 
 # Métadonnées
 LABEL maintainer="TaskFlow Team"
@@ -8,8 +13,9 @@ LABEL description="Backend API pour l'application TaskFlow (Flask + PostgreSQL +
 LABEL version="1.0"
 
 # Créer un utilisateur non-root
-RUN groupadd -g 1000 appuser && \
-    useradd -r -u 1000 -g appuser appuser && \
+# Alpine fournit addgroup/adduser (busybox) et non groupadd/useradd (Debian)
+RUN addgroup -g 1000 appuser && \
+    adduser -D -u 1000 -G appuser -h /home/appuser appuser && \
     mkdir -p /app /home/appuser && \
     chown -R appuser:appuser /app /home/appuser
 

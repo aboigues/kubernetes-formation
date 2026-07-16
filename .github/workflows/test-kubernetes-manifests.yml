@@ -815,6 +815,41 @@ jobs:
             fi
           done
 
+  build-dockerfiles:
+    name: Build TP Dockerfiles
+    runs-on: ubuntu-latest
+    # Les Dockerfiles déclenchaient déjà ce workflow (voir `paths` plus haut) mais
+    # aucun job ne les construisait : tp06/sample-app était cassé depuis longtemps
+    # (npm ci sans package-lock.json) sans que rien ne le signale.
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build tp06 sample-app
+        run: docker build -t tp06-sample-app:ci tp06/sample-app/
+
+      - name: Build tp10 TaskFlow backend
+        run: docker build -t tp10-backend:ci tp10/
+
+      - name: Verify images run as non-root
+        run: |
+          for img in tp06-sample-app:ci tp10-backend:ci; do
+            uid=$(docker run --rm "$img" id -u)
+            echo "$img -> uid $uid"
+            if [ "$uid" = "0" ]; then
+              echo "❌ $img tourne en root"
+              exit 1
+            fi
+          done
+
+      - name: Verify tp10 dependencies import
+        # psycopg2-binary dépend d'une wheel musllinux sur Alpine : si la version de
+        # Python monte au-delà de ce que couvre requirements.txt, l'import casse ici.
+        run: |
+          docker run --rm tp10-backend:ci \
+            python -c "import psycopg2, flask, redis, prometheus_client; print('imports OK')"
+
   security-scan:
     name: Security Scanning
     runs-on: ubuntu-latest
