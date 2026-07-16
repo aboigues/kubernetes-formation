@@ -142,7 +142,14 @@ jobs:
 
       - name: Build summary
         run: |
-          python3 .github/scripts/image-scan-report.py reports >> "$GITHUB_STEP_SUMMARY"
+          # --fail-on rend le scan bloquant. Le code de sortie est mis de côté le
+          # temps d'écrire le résumé complet, sinon `set -e` couperait le rapport
+          # au moment précis où il a quelque chose à dire.
+          set +e
+          python3 .github/scripts/image-scan-report.py reports \
+            --fail-on CRITICAL,HIGH >> "$GITHUB_STEP_SUMMARY"
+          report_status=$?
+          set -e
 
           scanned=$(find reports -name '*.json' | wc -l)
           expected=${{ needs.list-images.outputs.count }}
@@ -153,3 +160,5 @@ jobs:
               echo "> voir les jobs en erreur."
             } >> "$GITHUB_STEP_SUMMARY"
           fi
+
+          exit $report_status

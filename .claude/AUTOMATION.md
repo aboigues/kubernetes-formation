@@ -287,17 +287,37 @@ scan échouera en tentant de la puller.
 python3 .github/scripts/extract-images.py --verbose
 ```
 
-### Politique de résultat
+### Politique de résultat : bloquant sur HIGH et CRITICAL
 
-Le scan est **informatif** : il ne fait pas échouer le build. Les images des TPs sont
-volontairement pinnées sur des versions pédagogiques, et un `HIGH` non corrigeable en
-amont ne doit pas bloquer la formation.
+Le scan **échoue** (exit 1) dès qu'une vulnérabilité HIGH ou CRITICAL est trouvée, sur
+n'importe quelle image. C'est cohérent avec l'objectif du projet : 0 vulnérabilité
+HIGH/CRITICAL (voir `SECURITY.md`).
 
-Le rapport distingue les vulnérabilités **corrigeables** (un correctif existe → il suffit de
-monter le tag) des autres. C'est la colonne à regarder en premier.
+L'échec est porté par le job **`report`**, pas par les scans individuels. C'est
+volontaire : mettre `exit-code: '1'` sur l'étape Trivy interromprait le job avant
+l'upload SARIF, et on perdrait les résultats dans l'onglet Security au moment précis
+où il y a quelque chose à voir. Le job `report` échoue à la fin, une fois toutes les
+données collectées et le tableau publié.
 
-Pour rendre le scan bloquant sur les CRITICAL corrigeables, faire échouer le job `report`
-selon la sortie de `image-scan-report.py`.
+```bash
+# Reproduire la décision en local
+python3 .github/scripts/image-scan-report.py reports --fail-on CRITICAL,HIGH
+# exit 0 = aucune vulnérabilité bloquante | exit 1 = scan en échec
+```
+
+**Conséquence à assumer** : un HIGH publié sur une image amont rend le scan rouge le
+lundi suivant, même sans commit. C'est le comportement voulu (une CVE apparaît sans
+qu'on touche au code), mais cela demande de traiter les alertes pour que le rouge garde
+son sens.
+
+Le rapport distingue les vulnérabilités **corrigeables** (un correctif existe → monter le
+tag suffit) des autres. C'est la colonne à regarder en premier : les non-corrigeables
+demandent un changement d'image ou une acceptation du risque.
+
+**Pour ajuster le seuil**, modifier `--fail-on` dans le job `report` de
+`scan-images.yml` :
+- `--fail-on CRITICAL` → seuls les CRITICAL bloquent
+- (sans `--fail-on`) → scan purement informatif, ne bloque jamais
 
 ## 🛠️ Utilisation
 
