@@ -89,7 +89,9 @@ jobs:
 
       - name: Upload results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        # Si le scan a échoué (image introuvable...), le fichier SARIF n'existe pas :
+        # tenter l'upload ne ferait qu'ajouter une erreur parasite au vrai échec.
+        if: success()
         with:
           sarif_file: 'trivy-${{ matrix.slug }}.sarif'
           # Une catégorie par image : sans cela, chaque upload écraserait le précédent.
