@@ -14,9 +14,15 @@ spec:
     spec:
       containers:
       - name: php-apache
-        image: registry.k8s.io/hpa-example
+        # registry.k8s.io/hpa-example tourne sur Debian 8 "jessie", EOL depuis 2020 :
+        # ses dépôts apt sont archivés, l'image est indurcissable (801 CVE OS).
+        # Ce remplacement est un binaire statique dans une image scratch : aucun
+        # paquet OS, donc 0 CVE par construction. Même charge CPU par requête.
+        image: telemachlearning/hpa-example:1.0.0
         ports:
-        - containerPort: 80
+        # 8080 et non 80 : permet de tourner sans privilège de port réservé.
+        # Le Service expose toujours 80, les commandes du TP sont inchangées.
+        - containerPort: 8080
         resources:
           requests:
             cpu: 200m
@@ -34,7 +40,7 @@ spec:
     app: php-apache
   ports:
   - port: 80
-    targetPort: 80
+    targetPort: 8080
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
