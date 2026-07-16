@@ -1,0 +1,25 @@
+# Images exclues du scan de vulnérabilités hebdomadaire (scan-images.yml)
+#
+# Ces images n'existent sur aucun registre public : ce sont des exemples
+# pédagogiques ou des images construites localement pendant les TPs.
+# Tenter de les scanner ferait échouer le job pour rien.
+#
+# Format : un motif glob par ligne (fnmatch), commentaires avec #.
+# Toute image NON listée ici doit être une image réelle et scannable.
+
+# --- Images d'exemple des TPs (jamais construites/publiées) ---
+myapp:*
+backend:*
+frontend:*
+worker:*
+batch-worker:*
+critical-api:*
+backup-tool:*
+monitoring-agent:*
+
+# --- Images construites localement dans le TP10 (projet TaskFlow) ---
+taskflow-backend:*
+taskflow-frontend:*
+
+# --- Registres fictifs utilisés dans les exemples ---
+private-registry.example.com/*

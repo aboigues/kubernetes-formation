@@ -13,7 +13,9 @@ spec:
       default: default
   steps:
     - name: verify-deployment
-      image: bitnami/kubectl:1.32.0
+      # Bitnami a retiré les tags versionnés de son catalogue Docker Hub gratuit
+      # (changement de licence 2025) : bitnami/kubectl:1.32.0 n'est plus tirable.
+      image: rancher/kubectl:v1.32.13
       script: |
         #!/bin/sh
         set -e

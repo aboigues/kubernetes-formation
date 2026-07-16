@@ -1,0 +1,155 @@
+name: Weekly Image Vulnerability Scan
+
+# Scanne les CVE des images de conteneurs utilisées dans les manifests des TPs.
+# Complémentaire du job "security-scan" de test-kubernetes-manifests.yml, qui
+# lui analyse les misconfigurations des manifests (trivy config), pas les images.
+
+on:
+  schedule:
+    # Tous les lundis à 04:00 UTC (GitHub Actions n'accepte que l'UTC),
+    # soit 05:00 à Paris en hiver et 06:00 en été.
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+  # Sur modification du scan lui-même, pour le valider avant le lundi suivant.
+  push:
+    branches: [ main, claude/** ]
+    paths:
+      - '.github/workflows/scan-images.yml'
+      - '.github/scripts/extract-images.py'
+      - '.github/scripts/image-scan-report.py'
+      - '.github/image-scan-ignore.txt'
+
+permissions:
+  contents: read
+
+jobs:
+  list-images:
+    name: List Images to Scan
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.extract.outputs.matrix }}
+      count: ${{ steps.extract.outputs.count }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Extract container images from manifests
+        id: extract
+        run: |
+          matrix=$(python3 .github/scripts/extract-images.py --matrix)
+          count=$(echo "$matrix" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')
+
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+          echo "$count image(s) à scanner :"
+          python3 .github/scripts/extract-images.py --verbose
+
+          if [ "$count" -eq 0 ]; then
+            echo "❌ Aucune image trouvée : l'extraction est probablement cassée."
+            exit 1
+          fi
+
+  scan-image:
+    name: Scan ${{ matrix.image }}
+    needs: list-images
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+    strategy:
+      fail-fast: false
+      # Limité pour rester sous les quotas de pull anonymes des registres publics.
+      max-parallel: 5
+      matrix:
+        include: ${{ fromJson(needs.list-images.outputs.matrix) }}
+
+    steps:
+      - name: Scan image with Trivy (SARIF)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: 'image'
+          image-ref: ${{ matrix.image }}
+          format: 'sarif'
+          output: 'trivy-${{ matrix.slug }}.sarif'
+          severity: 'CRITICAL,HIGH'
+          limit-severities-for-sarif: true
+          exit-code: '0'
+          version: 'v0.72.0'
+          timeout: '15m'
+
+      - name: Upload results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        # Si le scan a échoué (image introuvable...), le fichier SARIF n'existe pas :
+        # tenter l'upload ne ferait qu'ajouter une erreur parasite au vrai échec.
+        if: success()
+        with:
+          sarif_file: 'trivy-${{ matrix.slug }}.sarif'
+          # Une catégorie par image : sans cela, chaque upload écraserait le précédent.
+          category: 'trivy-image:${{ matrix.image }}'
+
+      - name: Scan image with Trivy (JSON pour le rapport)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: 'image'
+          image-ref: ${{ matrix.image }}
+          format: 'json'
+          output: 'trivy-${{ matrix.slug }}.json'
+          severity: 'CRITICAL,HIGH,MEDIUM,LOW'
+          exit-code: '0'
+          version: 'v0.72.0'
+          timeout: '15m'
+          # L'image est déjà dans le cache Trivy du premier scan : ce second
+          # passage ne la retélécharge pas.
+
+      - name: Upload JSON report
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report-${{ matrix.slug }}
+          path: 'trivy-${{ matrix.slug }}.json'
+          retention-days: 30
+
+  report:
+    name: Vulnerability Report
+    needs: [ list-images, scan-image ]
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Download all scan reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: trivy-report-*
+          path: reports
+          merge-multiple: true
+
+      - name: Build summary
+        run: |
+          python3 .github/scripts/image-scan-report.py reports >> "$GITHUB_STEP_SUMMARY"
+
+          scanned=$(find reports -name '*.json' | wc -l)
+          expected=${{ needs.list-images.outputs.count }}
+          if [ "$scanned" -lt "$expected" ]; then
+            {
+              echo ""
+              echo "> ⚠️ $scanned/$expected image(s) scannée(s) : certains scans ont échoué,"
+              echo "> voir les jobs en erreur."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi

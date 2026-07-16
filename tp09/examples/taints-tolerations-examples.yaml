@@ -236,7 +236,8 @@ spec:
         effect: NoSchedule
       containers:
       - name: fluentd
-        image: fluent/fluentd:v1.16-alpine
+        # Fluentd ne publie plus de variante alpine : les tags actuels sont debian.
+        image: fluent/fluentd:v1.19.3-debian-2.2
         volumeMounts:
         - name: varlog
           mountPath: /var/log

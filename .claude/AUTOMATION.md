@@ -235,6 +235,69 @@ Les APIs Kubernetes évoluent rapidement :
 | **Local** | Chaque session Claude | session-start.sh |
 | **Git** | Chaque commit/PR | GitHub Actions |
 | **Continue** | Push sur branches | Workflow complet |
+| **Hebdomadaire** | Lundi 04:00 UTC | scan-images.yml (CVE des images) |
+
+## 🔎 Scan hebdomadaire des images
+
+### Emplacement
+`.github/workflows/scan-images.yml`
+
+### Pourquoi un workflow séparé
+
+Le job `security-scan` du workflow principal fait un `trivy config` : il détecte les
+**misconfigurations des manifests** (securityContext manquant, etc.). Il ne regarde
+**pas le contenu des images**. Les CVE des images (`postgres:15-alpine`, `grafana/grafana:10.2.0`…)
+apparaissent sans qu'on touche au code : d'où un scan **périodique** plutôt que sur commit.
+
+### Déclencheurs
+- **Schedule** : tous les lundis à `0 4 * * 1` (**UTC** — GitHub n'accepte pas d'autre fuseau,
+  soit 05:00 à Paris en hiver / 06:00 en été)
+- **Manuel** : bouton "Run workflow" (`workflow_dispatch`)
+- **Push** : uniquement si le scan lui-même est modifié
+
+> ⚠️ GitHub **désactive les workflows planifiés après 60 jours sans activité** sur le dépôt.
+> Si le scan ne tourne plus, le réactiver dans l'onglet Actions.
+
+### Jobs
+
+| Job | Rôle |
+|-----|------|
+| `list-images` | Extrait les images des manifests → matrice |
+| `scan-image` | Un job Trivy par image (5 en parallèle max), SARIF → onglet Security |
+| `report` | Agrège tous les rapports en un tableau récapitulatif |
+
+### Extraction des images
+
+`.github/scripts/extract-images.py` **parse le YAML** au lieu de faire un `grep image:`.
+C'est nécessaire : `tp03/14-network-storage-examples-secure.yaml` contient un
+`image: pv-data-001` qui est une **image RBD Ceph**, pas une image de conteneur.
+Le script ne retient que les champs `image` sous `containers`, `initContainers`,
+`ephemeralContainers`, `steps` et `sidecars`.
+
+Sont écartées automatiquement :
+- les images avec variables non résolues (`node:$(params.node-version)-alpine`)
+- les images fictives listées dans `.github/image-scan-ignore.txt` (`myapp:1.0.0`,
+  `taskflow-backend:latest`…) : elles n'existent sur aucun registre
+
+**Toute nouvelle image d'exemple dans un TP doit être ajoutée à l'ignore-list**, sinon le
+scan échouera en tentant de la puller.
+
+```bash
+# Vérifier localement ce qui sera scanné (et ce qui est écarté)
+python3 .github/scripts/extract-images.py --verbose
+```
+
+### Politique de résultat
+
+Le scan est **informatif** : il ne fait pas échouer le build. Les images des TPs sont
+volontairement pinnées sur des versions pédagogiques, et un `HIGH` non corrigeable en
+amont ne doit pas bloquer la formation.
+
+Le rapport distingue les vulnérabilités **corrigeables** (un correctif existe → il suffit de
+monter le tag) des autres. C'est la colonne à regarder en premier.
+
+Pour rendre le scan bloquant sur les CRITICAL corrigeables, faire échouer le job `report`
+selon la sortie de `image-scan-report.py`.
 
 ## 🛠️ Utilisation
 
@@ -271,6 +334,7 @@ Ajoutez au README :
 - ✅ 9 TPs complets
 - ✅ 7 scripts de test automatisés
 - ✅ 12 jobs GitHub Actions (incluant test-tp1, test-tp2)
+- ✅ Scan hebdomadaire des CVE sur ~38 images (scan-images.yml)
 
 ## 🎯 Règles de qualité
 

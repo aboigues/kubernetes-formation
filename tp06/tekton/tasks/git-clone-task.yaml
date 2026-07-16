@@ -18,7 +18,10 @@ spec:
       description: Branch, tag ou SHA à cloner
   steps:
     - name: clone
-      image: gcr.io/tekton-releases/github.com/tektoncd/pipeline/cmd/git-init:v0.37.0
+      # L'image git-init de Tekton a été supprimée en amont (retirée avec les
+      # PipelineResources dépréciées). Le script ci-dessous n'utilise que git et sh :
+      # une image git standard suffit.
+      image: alpine/git:v2.54.0
       script: |
         #!/bin/sh
         set -e
