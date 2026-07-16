@@ -23,7 +23,7 @@ spec:
     - name: source
   steps:
     - name: deploy
-      image: alpine/helm:3.17.0
+      image: alpine/helm:3.21.3
       script: |
         #!/bin/sh
         set -e
