@@ -197,7 +197,10 @@ spec:
       containers:
       # Container MySQL principal
       - name: mysql
-        image: mysql:8.4.0   # Version spécifique pour la reproductibilité
+        # mysql:8.4 et non mysql:8.4.0 : le tag de patch fige le build d'origine et
+        # ne reçoit plus les rebuilds de sécurité (mesuré : 92 CVE OS HIGH/CRITICAL
+        # contre 0 pour mysql:8.4, à version de MySQL identique).
+        image: mysql:8.4
         imagePullPolicy: IfNotPresent
 
         ports:

@@ -5,10 +5,15 @@ Lit tous les fichiers *.json d'un répertoire (un par image, produits par le
 workflow scan-images.yml) et produit un tableau récapitulatif trié par gravité,
 suivi de la liste des images à mettre à jour en priorité.
 
+Avec --fail-on, sort en code 1 si des vulnérabilités des gravités données sont
+trouvées : c'est ce qui fait échouer le scan hebdomadaire.
+
 Usage :
     python3 .github/scripts/image-scan-report.py <dossier-des-rapports>
+    python3 .github/scripts/image-scan-report.py reports --fail-on CRITICAL,HIGH
 """
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -52,11 +57,21 @@ def status_icon(counts: dict) -> str:
 
 
 def main() -> int:
-    if len(sys.argv) != 2:
-        print(__doc__, file=sys.stderr)
-        return 2
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("reports_dir", help="dossier contenant les rapports JSON de Trivy")
+    parser.add_argument(
+        "--fail-on",
+        default="",
+        help="gravités faisant sortir en code 1, séparées par des virgules (ex: CRITICAL,HIGH)",
+    )
+    args = parser.parse_args()
 
-    reports_dir = Path(sys.argv[1])
+    fail_on = [s.strip().upper() for s in args.fail_on.split(",") if s.strip()]
+    unknown = [s for s in fail_on if s not in SEVERITIES]
+    if unknown:
+        parser.error(f"gravité(s) inconnue(s) : {', '.join(unknown)}")
+
+    reports_dir = Path(args.reports_dir)
     report_files = sorted(reports_dir.rglob("*.json"))
 
     if not report_files:
@@ -114,7 +129,18 @@ def main() -> int:
             print(f"- `{item['image']}` — {item['fixable']['CRITICAL']} CRITICAL corrigeable(s)")
 
     print("\n> Détail complet des CVE : onglet **Security → Code scanning** du dépôt.")
-    return 0
+
+    if not fail_on:
+        return 0
+
+    blocking = {severity: totals[severity] for severity in fail_on if totals[severity]}
+    if not blocking:
+        print(f"\n✅ Aucune vulnérabilité {'/'.join(fail_on)} détectée.")
+        return 0
+
+    detail = ", ".join(f"{count} {severity}" for severity, count in blocking.items())
+    print(f"\n❌ **Scan en échec** : {detail} détectée(s) sur {len(summaries)} image(s).")
+    return 1
 
 
 if __name__ == "__main__":

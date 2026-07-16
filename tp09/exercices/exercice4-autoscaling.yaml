@@ -57,9 +57,13 @@ spec:
     spec:
       containers:
       - name: php-apache
-        image: registry.k8s.io/hpa-example
+        # registry.k8s.io/hpa-example est indurcissable (Debian 8 jessie, EOL 2020,
+        # dépôts apt archivés, 801 CVE OS). Remplacée par un binaire statique dans
+        # une image scratch : 0 CVE, même charge CPU par requête.
+        image: telemachlearning/hpa-example:1.0.0
         ports:
-        - containerPort: 80
+        # Le Service expose toujours 80 : commandes du TP inchangées.
+        - containerPort: 8080
         resources:
           requests:
             cpu: 200m
@@ -80,7 +84,7 @@ spec:
     app: php-apache
   ports:
   - port: 80
-    targetPort: 80
+    targetPort: 8080
   type: ClusterIP
 
 ---

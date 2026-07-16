@@ -287,17 +287,70 @@ scan échouera en tentant de la puller.
 python3 .github/scripts/extract-images.py --verbose
 ```
 
-### Politique de résultat
+### Politique de résultat : bloquant sur les CVE de paquets OS
 
-Le scan est **informatif** : il ne fait pas échouer le build. Les images des TPs sont
-volontairement pinnées sur des versions pédagogiques, et un `HIGH` non corrigeable en
-amont ne doit pas bloquer la formation.
+Le scan **échoue** (exit 1) sur les CVE HIGH/CRITICAL **de paquets OS**
+(`vuln-type: 'os'`). Les CVE de binaires embarqués (gobinary, jar, node-pkg…) sont
+scannées et publiées dans l'onglet Security, mais **ne bloquent pas**.
 
-Le rapport distingue les vulnérabilités **corrigeables** (un correctif existe → il suffit de
-monter le tag) des autres. C'est la colonne à regarder en premier.
+Ce n'est pas un assouplissement de complaisance, c'est ce que la mesure impose :
 
-Pour rendre le scan bloquant sur les CRITICAL corrigeables, faire échouer le job `report`
-selon la sortie de `image-scan-report.py`.
+| Seuil | Images vertes (sur 38) |
+|---|---|
+| Toutes les CVE HIGH/CRITICAL | 5 |
+| CVE de paquets OS uniquement | 17 |
+
+Sur les 38 images, **12 n'ont que des CVE de binaires** (`prom/prometheus`, `etcd`,
+`kaniko`, `rancher/kubectl`… sont des binaires Go statiques). Une CVE de binaire dans
+une image tierce ne part que si l'amont recompile : la signaler en rouge chaque
+semaine n'offre aucune action possible. Elles sont en outre largement non
+atteignables — un binaire qui n'appelle jamais `net/http` embarque quand même les
+CVE de la stdlib.
+
+⚠️ `--ignore-unfixed` **ne** répond **pas** à ce problème : il retient les CVE dont un
+correctif existe en amont, pas celles qu'on peut appliquer.
+
+**Le rouge est attribuable à une image précise.** Le job de chaque image devient rouge
+si cette image est vulnérable, et le job `report` rend le même verdict sur l'ensemble.
+Les deux lisent le même seuil, la variable `FAIL_ON_SEVERITY` définie en tête du
+workflow : ils ne peuvent donc pas diverger. Si toutes les images passent, `report`
+passe aussi.
+
+L'échec n'est jamais porté par les étapes de scan elles-mêmes, mais par une étape
+**gate placée en dernier**, après les uploads. C'est volontaire : mettre
+`exit-code: '1'` sur le scan Trivy interromprait le job avant l'upload SARIF, et on
+perdrait les résultats dans l'onglet Security au moment précis où il y a quelque
+chose à voir.
+
+Ordre des étapes d'un job `scan-image` :
+
+```
+scan SARIF (exit 0) -> upload Security tab -> scan JSON (exit 0)
+  -> upload artefact -> gate (exit 1 si CRITICAL/HIGH)   <- le job rougit ici
+```
+
+```bash
+# Reproduire la décision en local
+python3 .github/scripts/image-scan-report.py reports --fail-on CRITICAL,HIGH
+# exit 0 = aucune vulnérabilité bloquante | exit 1 = scan en échec
+```
+
+**Conséquence à assumer** : ~21 jobs restent rouges en permanence. Même le tag le plus
+récent d'une image amont porte des CVE OS corrigeables (`nginx:1.29-alpine` : 13), parce
+que l'image est en retard sur les paquets de sa distribution. Aucune action de ce dépôt
+ne les rend vertes — seule une **image dérivée** avec `apk/apt upgrade` le ferait, ce qui
+est un chantier à part.
+
+Le rouge ici veut donc dire « à surveiller », pas « à corriger avant de merger ».
+
+Le rapport distingue les vulnérabilités **corrigeables** (un correctif existe → monter le
+tag suffit) des autres. C'est la colonne à regarder en premier : les non-corrigeables
+demandent un changement d'image ou une acceptation du risque.
+
+**Pour ajuster le seuil**, modifier la variable `FAIL_ON_SEVERITY` en tête de
+`scan-images.yml` — un seul endroit, gate et rapport suivent :
+- `CRITICAL,HIGH` → valeur actuelle
+- `CRITICAL` → seuls les CRITICAL bloquent
 
 ## 🛠️ Utilisation
 

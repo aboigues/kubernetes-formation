@@ -300,7 +300,7 @@ spec:
     effect: "NoSchedule"
   containers:
   - name: debug
-    image: nicolaka/netshoot
+    image: telemachlearning/netshoot:v0.16
     command: ['sh', '-c', 'sleep infinity']
     resources:
       requests:

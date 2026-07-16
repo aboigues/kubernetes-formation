@@ -5,7 +5,7 @@ metadata:
 spec:
   containers:
   - name: secure-container
-    image: nginx:1.27-alpine
+    image: telemachlearning/nginx:1.29-alpine
     securityContext:
       runAsNonRoot: true
       runAsUser: 1000

@@ -60,7 +60,7 @@ spec:
   - operator: "Exists"
   containers:
   - name: admin
-    image: nicolaka/netshoot
+    image: telemachlearning/netshoot:v0.16
     command: ['sh', '-c', 'sleep infinity']
 
 ---
@@ -296,7 +296,7 @@ spec:
         effect: "NoSchedule"
       containers:
       - name: elasticsearch
-        image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+        image: docker.elastic.co/elasticsearch/elasticsearch:8.17.7
         ports:
         - containerPort: 9200
           name: http
