@@ -8,6 +8,7 @@ on:
       - 'tp*/**/*.yml'
       - 'tp*/**/*.sh'
       - 'tp*/**/Dockerfile'
+      - 'docker/hardened/**'
       - 'docs/**/*.yaml'
       - 'docs/**/*.yml'
       - '.github/workflows/**'
@@ -18,6 +19,7 @@ on:
       - 'tp*/**/*.yml'
       - 'tp*/**/*.sh'
       - 'tp*/**/Dockerfile'
+      - 'docker/hardened/**'
       - 'docs/**/*.yaml'
       - 'docs/**/*.yml'
       - '.github/workflows/**'
@@ -849,6 +851,36 @@ jobs:
         run: |
           docker run --rm tp10-backend:ci \
             python -c "import psycopg2, flask, redis, prometheus_client; print('imports OK')"
+
+      - name: Build hardened hpa-example
+        run: docker build -t hpa-example:ci docker/hardened/hpa-example/
+
+      - name: Verify hpa-example serves and burns CPU
+        # La charge CPU est le contrat de cette image : sans elle le HPA n'a rien à
+        # mesurer et la démo des TP4/TP9 ne scale pas. Une régression de calibration
+        # (ou une boucle éliminée par le compilateur) est invisible à la lecture.
+        run: |
+          docker run --rm -d --name hpa -p 8080:8080 hpa-example:ci
+          sleep 2
+
+          body=$(curl -s -m 60 localhost:8080)
+          if [ "$body" != "OK!" ]; then
+            echo "❌ réponse inattendue : '$body'"
+            exit 1
+          fi
+
+          # Une requête doit coûter un temps CPU significatif (~300 ms attendus).
+          start=$(date +%s%N)
+          curl -s -m 60 -o /dev/null localhost:8080
+          elapsed=$(( ($(date +%s%N) - start) / 1000000 ))
+          echo "durée d'une requête : ${elapsed} ms"
+
+          if [ "$elapsed" -lt 50 ]; then
+            echo "❌ trop rapide : la boucle de charge ne s'exécute plus"
+            exit 1
+          fi
+
+          docker rm -f hpa
 
   security-scan:
     name: Security Scanning
