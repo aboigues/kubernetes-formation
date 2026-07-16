@@ -293,11 +293,24 @@ Le scan **échoue** (exit 1) dès qu'une vulnérabilité HIGH ou CRITICAL est tr
 n'importe quelle image. C'est cohérent avec l'objectif du projet : 0 vulnérabilité
 HIGH/CRITICAL (voir `SECURITY.md`).
 
-L'échec est porté par le job **`report`**, pas par les scans individuels. C'est
-volontaire : mettre `exit-code: '1'` sur l'étape Trivy interromprait le job avant
-l'upload SARIF, et on perdrait les résultats dans l'onglet Security au moment précis
-où il y a quelque chose à voir. Le job `report` échoue à la fin, une fois toutes les
-données collectées et le tableau publié.
+**Le rouge est attribuable à une image précise.** Le job de chaque image devient rouge
+si cette image est vulnérable, et le job `report` rend le même verdict sur l'ensemble.
+Les deux lisent le même seuil, la variable `FAIL_ON_SEVERITY` définie en tête du
+workflow : ils ne peuvent donc pas diverger. Si toutes les images passent, `report`
+passe aussi.
+
+L'échec n'est jamais porté par les étapes de scan elles-mêmes, mais par une étape
+**gate placée en dernier**, après les uploads. C'est volontaire : mettre
+`exit-code: '1'` sur le scan Trivy interromprait le job avant l'upload SARIF, et on
+perdrait les résultats dans l'onglet Security au moment précis où il y a quelque
+chose à voir.
+
+Ordre des étapes d'un job `scan-image` :
+
+```
+scan SARIF (exit 0) -> upload Security tab -> scan JSON (exit 0)
+  -> upload artefact -> gate (exit 1 si CRITICAL/HIGH)   <- le job rougit ici
+```
 
 ```bash
 # Reproduire la décision en local
@@ -314,10 +327,10 @@ Le rapport distingue les vulnérabilités **corrigeables** (un correctif existe 
 tag suffit) des autres. C'est la colonne à regarder en premier : les non-corrigeables
 demandent un changement d'image ou une acceptation du risque.
 
-**Pour ajuster le seuil**, modifier `--fail-on` dans le job `report` de
-`scan-images.yml` :
-- `--fail-on CRITICAL` → seuls les CRITICAL bloquent
-- (sans `--fail-on`) → scan purement informatif, ne bloque jamais
+**Pour ajuster le seuil**, modifier la variable `FAIL_ON_SEVERITY` en tête de
+`scan-images.yml` — un seul endroit, gate et rapport suivent :
+- `CRITICAL,HIGH` → valeur actuelle
+- `CRITICAL` → seuls les CRITICAL bloquent
 
 ## 🛠️ Utilisation
 

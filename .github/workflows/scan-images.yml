@@ -22,6 +22,12 @@ on:
 permissions:
   contents: read
 
+env:
+  # Seuil de blocage, partagé par le gate de chaque image et par le rapport final :
+  # les deux doivent rendre le même verdict, sinon on retombe sur des images vertes
+  # avec un rapport rouge (ou l'inverse).
+  FAIL_ON_SEVERITY: 'CRITICAL,HIGH'
+
 jobs:
   list-images:
     name: List Images to Scan
@@ -118,6 +124,22 @@ jobs:
           path: 'trivy-${{ matrix.slug }}.json'
           retention-days: 30
 
+      # C'est ici que le job d'une image vulnérable devient rouge, et pas sur les
+      # étapes de scan ci-dessus : le SARIF et le rapport JSON sont déjà envoyés,
+      # donc rien n'est perdu au moment précis où il y a quelque chose à voir.
+      # L'image est en cache depuis le premier scan, ce passage ne la retélécharge pas.
+      - name: Fail if image has blocking vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: 'image'
+          image-ref: ${{ matrix.image }}
+          format: 'table'
+          severity: ${{ env.FAIL_ON_SEVERITY }}
+          scanners: 'vuln'
+          exit-code: '1'
+          version: 'v0.72.0'
+          timeout: '15m'
+
   report:
     name: Vulnerability Report
     needs: [ list-images, scan-image ]
@@ -147,7 +169,7 @@ jobs:
           # au moment précis où il a quelque chose à dire.
           set +e
           python3 .github/scripts/image-scan-report.py reports \
-            --fail-on CRITICAL,HIGH >> "$GITHUB_STEP_SUMMARY"
+            --fail-on "$FAIL_ON_SEVERITY" >> "$GITHUB_STEP_SUMMARY"
           report_status=$?
           set -e
 
