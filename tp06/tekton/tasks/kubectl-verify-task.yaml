@@ -26,7 +26,7 @@ spec:
         kubectl get pods -n $(params.namespace)
 
     - name: smoke-test
-      image: curlimages/curl:8.21.0
+      image: telemachlearning/curl:8.21.0
       script: |
         #!/bin/sh
         set -e

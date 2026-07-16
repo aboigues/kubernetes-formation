@@ -11,7 +11,7 @@ spec:
       description: Image à scanner
   steps:
     - name: scan
-      image: aquasec/trivy:0.72.0
+      image: telemachlearning/trivy:0.72.0
       script: |
         #!/bin/sh
         set -e

@@ -60,7 +60,7 @@ spec:
   - operator: "Exists"
   containers:
   - name: admin
-    image: nicolaka/netshoot
+    image: telemachlearning/netshoot:v0.16
     command: ['sh', '-c', 'sleep infinity']
 
 ---

@@ -21,7 +21,7 @@ spec:
       # L'image git-init de Tekton a été supprimée en amont (retirée avec les
       # PipelineResources dépréciées). Le script ci-dessous n'utilise que git et sh :
       # une image git standard suffit.
-      image: alpine/git:v2.54.0
+      image: telemachlearning/git:v2.54.0
       script: |
         #!/bin/sh
         set -e

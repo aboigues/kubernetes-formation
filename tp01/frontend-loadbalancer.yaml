@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: nginx
-        image: nginx:1.29-alpine
+        image: telemachlearning/nginx:1.29-alpine
         ports:
         - containerPort: 80
         resources:

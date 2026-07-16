@@ -3,7 +3,7 @@ version: '3.8'
 services:
   # Frontend web
   frontend:
-    image: nginx:1.29-alpine
+    image: telemachlearning/nginx:1.29-alpine
     container_name: myapp-frontend
     ports:
       - "8080:80"
