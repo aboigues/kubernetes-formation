@@ -103,7 +103,8 @@ spec:
       serviceAccountName: prometheus
       containers:
       - name: prometheus
-        image: prom/prometheus:v2.45.0
+        # Tag roulant v3 : voir 04-prometheus-deployment.yaml pour le pourquoi.
+        image: prom/prometheus:v3
         args:
           - '--config.file=/etc/prometheus/prometheus.yml'
           - '--storage.tsdb.path=/prometheus'

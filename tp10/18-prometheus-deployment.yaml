@@ -25,7 +25,9 @@ spec:
 
       containers:
       - name: prometheus
-        image: prom/prometheus:v2.48.0
+        # Tag roulant v3 : les CVE de Prometheus sont dans son binaire Go, qu'un
+        # tag de patch fige (mesuré : 87 CVE HIGH/CRITICAL sur v2.48.0, 0 sur v3).
+        image: prom/prometheus:v3
         args:
         - '--config.file=/etc/prometheus/prometheus.yml'
         - '--storage.tsdb.path=/prometheus'

@@ -105,7 +105,11 @@ spec:
       serviceAccountName: prometheus
       containers:
       - name: prometheus
-        image: prom/prometheus:v2.45.0
+        # v3 et non v3.13.1 : les CVE de Prometheus sont dans son binaire Go, et
+        # seule une nouvelle release les corrige. Un tag de patch se fige donc et
+        # pourrit (mesuré : 98 CVE HIGH/CRITICAL sur v2.45.0, 0 sur v3).
+        # La branche v2 ne reçoit plus de correctif : v2.55.1, la dernière, en porte 78.
+        image: prom/prometheus:v3
         args:
           - '--config.file=/etc/prometheus/prometheus.yml'
           - '--storage.tsdb.path=/prometheus'

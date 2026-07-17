@@ -23,9 +23,12 @@ permissions:
   contents: read
 
 env:
-  # Seuil de blocage, partagé par le gate de chaque image et par le rapport final :
-  # les deux doivent rendre le même verdict, sinon on retombe sur des images vertes
-  # avec un rapport rouge (ou l'inverse).
+  # Seuil de blocage, partagé par le gate de chaque image et par le rapport final.
+  #
+  # ⚠️ Partager la gravité ne suffit pas : les deux doivent aussi porter sur le même
+  # PÉRIMÈTRE (paquets OS, correctif publié), sinon ils divergent. C'est arrivé :
+  # le rapport comptait toutes les CVE et sortait en échec alors que toutes les
+  # images étaient vertes — exactement ce que cette variable prétendait empêcher.
   FAIL_ON_SEVERITY: 'CRITICAL,HIGH'
 
 jobs:
@@ -80,6 +83,12 @@ jobs:
         include: ${{ fromJson(needs.list-images.outputs.matrix) }}
 
     steps:
+      # Nécessaire au seul .trivyignore.yaml lu par la barrière en fin de job.
+      # Sans checkout, le fichier n'existe pas sur le runner et Trivy l'ignore en
+      # silence : les exceptions ne s'appliqueraient pas, sans la moindre erreur.
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Scan image with Trivy (SARIF)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
@@ -124,26 +133,39 @@ jobs:
           path: 'trivy-${{ matrix.slug }}.json'
           retention-days: 30
 
-      # BARRIÈRE : seules les CVE de paquets OS font rougir le job.
+      # BARRIÈRE : seules les CVE de paquets OS AVEC UN CORRECTIF PUBLIÉ font
+      # rougir le job. Autrement dit : le rouge signifie « il y a quelque chose à
+      # faire », jamais « il existe une CVE ».
       #
-      # Pourquoi pas toutes les CVE, ni --ignore-unfixed : sur une image tierce,
-      # une CVE de binaire (gobinary, jar...) ne part que si l'amont recompile.
-      # --ignore-unfixed ne filtre pas ça — il retient les CVE dont un correctif
-      # existe, pas celles qu'on peut appliquer. Mesuré sur ce dépôt : 33 images
-      # rouges avec toutes les CVE, dont 12 n'ont QUE des CVE de binaires Go.
-      # Ces CVE-là sont en plus largement non atteignables (un binaire qui
-      # n'appelle jamais net/http embarque quand même les CVE de la stdlib).
+      # Deux filtres complémentaires, et l'ordre du raisonnement compte :
       #
-      # Une CVE de paquet OS, elle, part avec une image plus récente : c'est la
-      # seule catégorie sur laquelle ce dépôt peut réellement agir.
+      # 1. vuln-type: os — une CVE de binaire (gobinary, jar...) ne part que si
+      #    l'amont recompile. Mesuré : 33 images rouges avec toutes les CVE, dont
+      #    12 n'ont QUE des CVE de binaires Go. Elles sont en plus largement non
+      #    atteignables (un binaire qui n'appelle jamais net/http embarque quand
+      #    même les CVE de la stdlib), et leur nombre suit l'âge du build, pas le
+      #    risque : ~5-6 nouvelles par mois sans que rien ne change dans l'image.
       #
-      # Le reste n'est pas perdu : le scan complet ci-dessus l'a déjà envoyé dans
-      # l'onglet Security, où il reste consultable pour jugement humain.
+      # 2. ignore-unfixed: true — une fois restreint aux paquets OS, « corrigeable »
+      #    veut enfin dire « applicable » : soit en montant le tag, soit par un
+      #    apk/apt upgrade (cf. docker/hardened/). Sans ce filtre, la barrière est
+      #    rouge à vie sur wordpress (156 CVE), cassandra (45) et fluentd (21), qui
+      #    n'ont AUCUN correctif publié : une alarme permanente qu'on finit par
+      #    ignorer, et qui masque les vraies.
+      #
+      # ⚠️ AUTOMATION.md rejetait --ignore-unfixed. Ce rejet visait une barrière
+      # TOUTES CATÉGORIES, où il aurait retenu des CVE de binaires « corrigeables »
+      # mais inapplicables. Appliqué APRÈS le filtre OS, il n'a plus ce défaut.
+      #
+      # Rien n'est masqué durablement : une CVE sans correctif aujourd'hui
+      # redevient bloquante le jour où la distribution en publie un — sans liste
+      # à maintenir. Et le scan complet ci-dessus a déjà tout envoyé dans l'onglet
+      # Security, où il reste consultable pour jugement humain.
       #
       # L'étape est en dernier : le SARIF et le JSON sont déjà uploadés, donc rien
       # n'est perdu au moment précis où il y a quelque chose à voir. L'image est en
       # cache depuis le premier scan, ce passage ne la retélécharge pas.
-      - name: Fail on OS package vulnerabilities
+      - name: Fail on fixable OS package vulnerabilities
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: 'image'
@@ -155,6 +177,11 @@ jobs:
           # trivy-action v0.36.0 (l'action le mappe vers TRIVY_PKG_TYPES). Un input
           # inconnu serait ignoré en silence et la barrière bloquerait sur tout.
           vuln-type: 'os'
+          ignore-unfixed: true
+          # Exceptions documentées et datées. Volontairement absent des étapes de
+          # scan ci-dessus : une exception lève le blocage, elle n'efface pas la
+          # CVE de l'onglet Security.
+          trivyignores: '.trivyignore.yaml'
           exit-code: '1'
           version: 'v0.72.0'
           timeout: '15m'
@@ -173,6 +200,12 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
+      # Le rapport lit .trivyignore.yaml pour appliquer les mêmes exceptions que la
+      # barrière. Sans pyyaml il ne planterait pas : il ignorerait les exceptions et
+      # rendrait un verdict divergent.
+      - name: Install dependencies
+        run: pip install pyyaml
 
       - name: Download all scan reports
         uses: actions/download-artifact@v4
