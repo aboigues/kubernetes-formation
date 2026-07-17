@@ -287,13 +287,15 @@ scan échouera en tentant de la puller.
 python3 .github/scripts/extract-images.py --verbose
 ```
 
-### Politique de résultat : bloquant sur les CVE de paquets OS
+### Politique de résultat : bloquant sur ce qui est actionnable, et rien d'autre
 
-Le scan **échoue** (exit 1) sur les CVE HIGH/CRITICAL **de paquets OS**
-(`vuln-type: 'os'`). Les CVE de binaires embarqués (gobinary, jar, node-pkg…) sont
-scannées et publiées dans l'onglet Security, mais **ne bloquent pas**.
+Le scan **échoue** (exit 1) sur les CVE HIGH/CRITICAL **de paquets OS ayant un
+correctif publié** (`vuln-type: 'os'` + `ignore-unfixed: true`). Autrement dit :
+**le rouge veut dire « il y a quelque chose à faire »**, jamais « il existe une CVE ».
 
-Ce n'est pas un assouplissement de complaisance, c'est ce que la mesure impose :
+Deux filtres, et l'ordre du raisonnement compte.
+
+**1. `vuln-type: os` — écarter ce qui ne dépend pas de nous.**
 
 | Seuil | Images vertes (sur 38) |
 |---|---|
@@ -305,16 +307,47 @@ Sur les 38 images, **12 n'ont que des CVE de binaires** (`prom/prometheus`, `etc
 une image tierce ne part que si l'amont recompile : la signaler en rouge chaque
 semaine n'offre aucune action possible. Elles sont en outre largement non
 atteignables — un binaire qui n'appelle jamais `net/http` embarque quand même les
-CVE de la stdlib.
+CVE de la stdlib. Leur nombre suit d'ailleurs **l'âge du build** (~5-6 par mois pour
+un binaire Go, mesuré le 2026-07-17) et non le risque : `etcd:v3.5.32`, publiée
+16 jours plus tôt, en portait 1 ; `mysqld-exporter:v0.19.0`, publiée 4 mois plus tôt,
+en portait 24.
 
-⚠️ `--ignore-unfixed` **ne** répond **pas** à ce problème : il retient les CVE dont un
-correctif existe en amont, pas celles qu'on peut appliquer.
+**2. `ignore-unfixed: true` — écarter ce sur quoi on ne peut rien.**
+
+Sans ce filtre, la barrière est rouge **à vie** sur `wordpress` (156 CVE OS),
+`cassandra:4.1` (45) et `fluent/fluentd` (21) : elles n'ont **aucun** correctif
+publié. Une alarme permanente qu'on n'a aucun moyen d'éteindre finit par être
+ignorée — et masque les vraies.
+
+⚠️ **Une version antérieure de ce document rejetait `--ignore-unfixed`**, au motif
+qu'il « retient les CVE dont un correctif existe en amont, pas celles qu'on peut
+appliquer ». Ce rejet visait une barrière **toutes catégories**, où il aurait laissé
+passer des CVE de binaires « corrigeables » mais inapplicables sans recompilation
+amont. Appliqué **après** le filtre OS, il n'a plus ce défaut : pour un paquet de
+distribution, un correctif publié **est** applicable — en montant le tag, ou par un
+`apk/apt upgrade` si l'image est déjà au tag le plus récent (cf. `docker/hardened/`).
+Les deux filtres sont complémentaires, pas concurrents.
+
+**Rien n'est masqué durablement.** Une CVE sans correctif aujourd'hui redevient
+bloquante le jour où la distribution en publie un, **sans liste à maintenir**. C'est
+le principal avantage sur un `.trivyignore` qui énumérerait ces CVE : une liste figée
+masquerait précisément le correctif qu'on attend.
+
+**Exceptions : `.trivyignore.yaml`.** Réservé au cas restant — une CVE OS *corrigeable*
+qu'on choisit de ne pas corriger tout de suite. Justification et `expired_at`
+obligatoires (le champ est vérifié : une entrée périmée rebloque le job). Ce fichier
+n'est lu que par l'étape de barrière, **jamais** par les scans qui alimentent l'onglet
+Security : une exception lève un blocage, elle n'efface pas une CVE.
 
 **Le rouge est attribuable à une image précise.** Le job de chaque image devient rouge
 si cette image est vulnérable, et le job `report` rend le même verdict sur l'ensemble.
-Les deux lisent le même seuil, la variable `FAIL_ON_SEVERITY` définie en tête du
-workflow : ils ne peuvent donc pas diverger. Si toutes les images passent, `report`
-passe aussi.
+
+⚠️ **Partager `FAIL_ON_SEVERITY` ne suffit pas à garantir ce même verdict** — il faut
+aussi le même **périmètre** et les mêmes **exceptions**. Ça a été un vrai bug : le
+rapport comptait *toutes* les CVE et sortait en échec alors que toutes les images
+étaient vertes. `image-scan-report.py` ventile donc les CVE en trois catégories
+(OS corrigeables / OS sans correctif / binaires) et lit le même `.trivyignore.yaml`
+que la barrière. Ne toucher à l'un des deux qu'en vérifiant l'autre.
 
 L'échec n'est jamais porté par les étapes de scan elles-mêmes, mais par une étape
 **gate placée en dernier**, après les uploads. C'est volontaire : mettre

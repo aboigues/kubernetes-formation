@@ -1,0 +1,54 @@
+# Exceptions à la barrière du scan d'images hebdomadaire (.github/workflows/scan-images.yml)
+#
+# ┌─ CE FICHIER N'EST PAS UN INTERRUPTEUR À BRUIT ─────────────────────────────┐
+# │ La barrière ne bloque déjà QUE sur les CVE de paquets OS ayant un correctif │
+# │ publié — c'est-à-dire uniquement sur ce qui est réellement actionnable.     │
+# │ Une CVE qui arrive ici est donc, par construction, une CVE qu'on POURRAIT   │
+# │ corriger et qu'on choisit de ne pas corriger tout de suite. Ça se justifie, │
+# │ ça se date, et ça ne se laisse pas traîner.                                 │
+# └────────────────────────────────────────────────────────────────────────────┘
+#
+# N'ONT RIEN À FAIRE ICI, parce que la barrière les écarte déjà toute seule :
+#
+#   - Les CVE de binaires embarqués (gobinary, jar, node-pkg…). Elles ne partent
+#     que si l'amont recompile, et leur nombre suit l'âge du build (~5-6 par mois
+#     pour un binaire Go) et non le risque. Filtrées par `vuln-type: os`.
+#   - Les CVE de paquets OS sans correctif publié (wordpress : 156, cassandra : 45,
+#     fluentd : 21). Filtrées par `ignore-unfixed: true`. Surtout, NE PAS les
+#     lister ici : elles doivent redevenir bloquantes automatiquement le jour où
+#     la distribution publie un correctif. Les figer ici masquerait précisément
+#     le correctif qu'on attend.
+#
+# PORTÉE : ce fichier n'est lu que par l'étape de barrière, jamais par les scans
+# qui alimentent l'onglet Security. Une exception lève un blocage ; elle n'efface
+# pas une CVE. Le détail reste consultable dans Security → Code scanning.
+#
+# `expired_at` est obligatoire et vérifié (testé : une entrée périmée rebloque
+# bien le job). C'est ce qui garantit qu'une exception est revue plutôt qu'oubliée.
+#
+# Format : https://trivy.dev/latest/docs/configuration/filtering/#by-finding-ids
+
+vulnerabilities:
+  # ── fluent/fluentd-kubernetes-daemonset:v1.19-debian-elasticsearch8-amd64-1 ──
+  # Debian a publié le correctif (libcurl4t64 8.14.1-2+deb13u3 → +deb13u4) ; c'est
+  # l'image fluentd qui n'a pas été reconstruite depuis. Le correctif est donc
+  # applicable, mais pas depuis un manifest : il faut durcir l'image
+  # (`docker/hardened/`, un simple `apt upgrade`) puis publier le résultat sur
+  # l'org partagée telemachlearning — ce qui demande une autorisation.
+  #
+  # Acceptation temporaire en attendant cette décision. À l'expiration, soit le
+  # durcissement est fait et ces deux entrées disparaissent, soit l'amont a
+  # reconstruit et elles deviennent sans objet.
+  - id: CVE-2026-5773
+    purl: "pkg:deb/debian/libcurl4t64"
+    statement: >-
+      libcurl4t64 8.14.1-2+deb13u3, corrigé en +deb13u4. Non corrigeable par un
+      bump de tag (l'image amont n'a pas été reconstruite) : nécessite un
+      durcissement apt upgrade + publication sur telemachlearning.
+    expired_at: 2026-08-31
+  - id: CVE-2026-6276
+    purl: "pkg:deb/debian/libcurl4t64"
+    statement: >-
+      Même paquet et même correctif que CVE-2026-5773 : libcurl4t64
+      8.14.1-2+deb13u3 → +deb13u4, en attente du durcissement de l'image.
+    expired_at: 2026-08-31

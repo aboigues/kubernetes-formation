@@ -432,6 +432,61 @@ de miroir airgap) ; 43 misconfigurations `trivy config` HIGH préexistantes dans
 `tp04/` et `tp09/examples/` — inchangées par cette session, mais elles contredisent
 l'objectif « 0 vulnérabilité HIGH/CRITICAL » affiché dans CLAUDE.md.
 
+### Session 2026-07-17 (suite) - Le rouge doit vouloir dire « à faire »
+
+**Origine** : en cherchant à documenter les CVE restantes, découverte que le job
+`report` **divergeait de la barrière** — et que sa formulation était la cause du
+malentendu qui a ouvert la session.
+
+**Deux bugs dans `image-scan-report.py`** :
+1. **Verdict divergent.** La barrière filtrait `vuln-type: os` ; le rapport comptait
+   **toutes** les CVE et sortait en échec. Reproduit : 3 images toutes vertes à la
+   barrière → rapport en code 1. Le commentaire de `FAIL_ON_SEVERITY` promettait
+   pourtant l'inverse. **Partager la gravité ne suffit pas : il faut le même
+   périmètre et les mêmes exceptions.**
+2. **Formulation trompeuse.** Le rapport annonçait « *disposant d'un correctif publié
+   (corrigeables en montant le tag de l'image)* » — faux pour une CVE de binaire, dont
+   le « correctif » désigne le toolchain Go. Il conseillait même de monter
+   `postgres:17-alpine`, **un tag roulant déjà au plus récent**. Le rapport enseignait
+   le mauvais modèle mental.
+
+**Correction : `ignore-unfixed: true` en complément du filtre OS.**
+
+Mesuré : les 4 images rouges l'étaient sur des CVE OS **sans correctif publié**
+(wordpress 0 corrigeable / 156, cassandra 0/45, fluentd 0/21, fluentd-daemonset 2/28).
+La barrière était donc rouge **à vie, sans action possible** — de la fatigue d'alarme.
+Avec `ignore-unfixed`, seul reste rouge ce qui est actionnable.
+
+⚠️ `AUTOMATION.md` **rejetait** `--ignore-unfixed`. Ce rejet visait une barrière
+*toutes catégories* (où « corrigeable » ≠ « applicable » pour un binaire Go).
+Appliqué **après** le filtre OS, il n'a plus ce défaut : pour un paquet de
+distribution, un correctif publié est applicable. Les deux filtres sont
+complémentaires. `AUTOMATION.md` a été corrigé en conséquence.
+
+**Réponse à « comment se passe la montée de version ? » : automatiquement.** Le jour
+où la distribution publie un correctif pour l'une des 45 CVE de cassandra, elle
+redevient corrigeable → la barrière repasse au rouge → on agit. **Aucune liste à
+maintenir**, et pas le risque qu'un `.trivyignore` figé masque le correctif attendu.
+
+**`.trivyignore.yaml`** (nouveau) : réservé au cas restant — une CVE OS *corrigeable*
+qu'on choisit de ne pas corriger tout de suite. `expired_at` obligatoire, **vérifié**
+(une entrée périmée rebloque bien le job). Lu **uniquement** par la barrière, jamais
+par les scans alimentant l'onglet Security : une exception lève un blocage, elle
+n'efface pas une CVE. Le job `scan-image` a reçu un `checkout` (il n'en avait pas :
+le fichier aurait été ignoré en silence) et le job `report` un `pip install pyyaml`.
+
+**Seule entrée à ce jour** : les 2 CVE `libcurl4t64` de `fluentd-kubernetes-daemonset`
+(8.14.1-2+deb13u3 → +deb13u4). Debian a publié le correctif, l'image fluentd n'a pas
+été reconstruite : le vrai remède est un durcissement `apt upgrade` publié sur
+telemachlearning. **Acceptation temporaire jusqu'au 2026-08-31.**
+
+**Nouveau rapport** : ventile en 3 catégories (OS corrigeables / OS sans correctif /
+binaires) + une colonne « exceptées ». Seule la 1ʳᵉ bloque. Le rapport lit le même
+`.trivyignore.yaml` que la barrière — les deux ne peuvent plus diverger. Sans
+fichier d'exceptions, il **bloque** (échoue fermé).
+
+**État** : barrière verte sur les 33 images. Tout rouge futur = réellement actionnable.
+
 ## Décisions importantes
 
 ### Architecture d'automatisation (2025-12-12)
