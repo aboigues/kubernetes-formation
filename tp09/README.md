@@ -1519,7 +1519,9 @@ spec:
         effect: NoSchedule
       containers:
       - name: ml-training
-        image: tensorflow/tensorflow:latest-gpu
+        # L'image est un simple décor : ce qui aiguille ce Job vers un nœud GPU,
+        # c'est la toleration et la ressource nvidia.com/gpu, pas l'image.
+        image: python:3.13-alpine
         command: ["python", "train.py"]
         resources:
           limits:

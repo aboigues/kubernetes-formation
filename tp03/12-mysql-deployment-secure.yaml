@@ -306,14 +306,17 @@ spec:
 
       # Sidecar pour exporter les métriques Prometheus (optionnel)
       - name: mysql-exporter
-        image: prom/mysqld-exporter:v0.15.1
+        image: prom/mysqld-exporter:v0.19.0
+        # L'exporter ne lit plus DATA_SOURCE_NAME depuis la v0.15.0 : la cible et
+        # l'utilisateur passent par des flags, le mot de passe par cette variable.
+        args:
+        - --mysqld.address=localhost:3306
+        - --mysqld.username=exporter
         ports:
         - containerPort: 9104
           name: metrics
         env:
-        - name: DATA_SOURCE_NAME
-          value: "exporter:$(MYSQL_EXPORTER_PASSWORD)@(localhost:3306)/"
-        - name: MYSQL_EXPORTER_PASSWORD
+        - name: MYSQLD_EXPORTER_PASSWORD
           valueFrom:
             secretKeyRef:
               name: mysql-secret-secure

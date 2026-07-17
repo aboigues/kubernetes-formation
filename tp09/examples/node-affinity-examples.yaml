@@ -179,7 +179,7 @@ spec:
                 - "3"
       containers:
       - name: prometheus
-        image: prom/prometheus:v2.45.0
+        image: prom/prometheus:v3
         resources:
           requests:
             memory: "2Gi"

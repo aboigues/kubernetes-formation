@@ -549,7 +549,7 @@ spec:
       serviceAccountName: prometheus
       containers:
       - name: prometheus
-        image: prom/prometheus:v2.45.0
+        image: prom/prometheus:v3
         args:
           - '--config.file=/etc/prometheus/prometheus.yml'
           - '--storage.tsdb.path=/prometheus'
@@ -1093,7 +1093,7 @@ spec:
     spec:
       containers:
       - name: app
-        image: quay.io/brancz/prometheus-example-app:v0.5.0
+        image: quay.io/brancz/prometheus-example-app:v0.6.0
         ports:
         - containerPort: 8080
           name: metrics
@@ -1216,7 +1216,7 @@ spec:
       serviceAccountName: prometheus
       containers:
       - name: prometheus
-        image: prom/prometheus:v2.45.0
+        image: prom/prometheus:v3
         args:
           - '--config.file=/etc/prometheus/prometheus.yml'
           - '--storage.tsdb.path=/prometheus'

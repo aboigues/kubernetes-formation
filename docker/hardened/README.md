@@ -50,8 +50,42 @@ Les Services des TPs exposent toujours 80 : les commandes des élèves sont inch
 - **`fluentd`** — durcissement construit et mesuré : il reste à **21 CVE**. Aucune n'a
   de correctif publié dans Debian, `apt upgrade` n'y change rien. Ne pas refaire ce test.
 - **`cassandra:4.1`** (45 CVE) — 0 corrigeable, même conclusion.
+- **`tensorflow/tensorflow:*-gpu`** — mesuré le 2026-07-17, **abandonnée** (elle ne
+  figure plus dans aucun manifest). Ne pas la réintroduire :
+
+  | Tag | CVE OS | dont corrigeables | Après `apt upgrade` |
+  |---|---|---|---|
+  | `2.18.0-gpu` | 381 | 199 | ~182 |
+  | `2.21.0-gpu` | 253 | 71 | ~182 |
+
+  Les deux tags convergent vers le même plancher de **~182 CVE Ubuntu sans correctif
+  amont** : durcir ne pouvait pas la rendre verte, pour 3,8 Go à construire, publier et
+  maintenir. La variante CPU n'aidait pas non plus (`2.21.0` : 252 CVE OS — les CVE sont
+  dans la base Ubuntu, pas dans les couches CUDA).
+
+  Elle servait de **décor** dans `tp09/examples/taints-tolerations-examples.yaml` : un
+  Job GPU qui ne peut pas s'exécuter (aucun nœud `gpu: nvidia` dans un cluster de
+  formation, et `train.py` n'existe dans aucune de ces images). Le fichier est appliqué
+  en `--dry-run=client`. Ce qui enseigne la planification GPU, c'est le `nodeSelector`,
+  la toleration et la ressource `nvidia.com/gpu` — pas l'image. Remplacée par
+  `python:3.13-alpine` : **0 CVE, 17 Mo**, et `command: ["python", "train.py"]` reste
+  cohérent.
 - **`wordpress`, `grafana`, `postgres`, `adminer`, `cadvisor`, `jenkins`** — publiées et
   maintenues ailleurs, hors de ce dépôt.
+
+## Images à ne PAS monter — le bump est contre-productif
+
+Mesuré le 2026-07-17. La barrière ne compte que les CVE **OS** : une image à 0 CVE OS
+est verte même si le scan complet lui trouve des CVE de binaires.
+
+- **`docker.elastic.co/elasticsearch/elasticsearch:8.17.7`** (et Kibana, qui doit rester
+  aligné) — **0 CVE OS aujourd'hui, donc verte**. Monter la ferait *rougir* :
+  `8.19.10` introduit 2 CVE OS Ubuntu, `9.2.4` bascule sur une base RedHat à 25 CVE OS
+  (dont 14 sans correctif). Le scan complet ne gagnerait que 7 CVE. Ne pas monter.
+- **`telemachlearning/netshoot:v0.16`** — déjà la dernière version amont. Ses ~167 CVE
+  sont dans les binaires Go des outils qu'elle embarque, pas dans l'OS : 0 CVE OS.
+- **`postgres:15/17-alpine`, `mysql:8.4`, `cassandra:4.1`** — tags roulants déjà à jour.
+  Leurs CVE viennent de binaires Go embarqués (`gosu`), pas des paquets OS.
 
 ## Construire et publier
 

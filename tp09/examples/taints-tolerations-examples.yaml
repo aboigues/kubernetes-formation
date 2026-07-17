@@ -134,7 +134,11 @@ spec:
         effect: "NoSchedule"
       containers:
       - name: ml-training
-        image: tensorflow/tensorflow:2.18.0-gpu
+        # Image générique : ce qui fait de ce Job une charge GPU, c'est le
+        # nodeSelector, la toleration et la ressource nvidia.com/gpu ci-dessus —
+        # pas l'image. tensorflow:*-gpu tenait ce rôle de décor pour 3,8 Go et
+        # ~400 CVE dont ~182 sans correctif amont (voir docker/hardened/README.md).
+        image: python:3.13-alpine
         command: ["python", "train.py"]
         resources:
           limits:

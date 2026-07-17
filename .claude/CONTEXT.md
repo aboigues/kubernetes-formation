@@ -370,6 +370,68 @@ Le problème persistait après la première correction. Investigation complémen
 - PGDATA pointe vers `/var/lib/postgresql/data/pgdata` (sous-répertoire)
 - PostgreSQL peut créer ce sous-répertoire avec les bonnes permissions
 
+### Session 2026-07-17 - Réduction des CVE d'images
+
+**Objectif** : traiter les images encore vulnérables au scan hebdomadaire.
+
+**Point de départ, et le malentendu à ne pas refaire** : le rapport lu était le **scan
+complet** (onglet Security : 118 CRITICAL / 1478 HIGH sur 17 images). La **barrière CI
+ne bloque que sur les CVE de paquets OS** (`vuln-type: 'os'`), et n'était rouge que sur
+**5 images**. Les deux périmètres ne se comparent pas.
+
+**La colonne « corrigeables » de Trivy ne veut pas dire « corrigeable en montant le
+tag »** : elle compte les CVE ayant un correctif *publié*. Pour une CVE de binaire Go,
+le correctif n'arrive que si l'amont recompile. D'où la règle : **mesurer chaque bump**.
+
+**Mesures (2026-07-17)** :
+
+| Image | Avant (C/H) | Après | Résultat |
+|---|---|---|---|
+| `prom/prometheus` v2.45.0 / v2.48.0 | 8/90, 8/79 | **v3** | **0 / 0** |
+| `quay.io/coreos/etcd` v3.5.10 | 9/109 | **v3.5.32** | 0 / 3 |
+| `quay.io/brancz/prometheus-example-app` v0.5.0 | 4/52 | **v0.6.0** | 0 / 17 |
+| `prom/mysqld-exporter` v0.15.1 | 2/35 | **v0.19.0** | 0 / 25 |
+| `tensorflow/tensorflow:2.18.0-gpu` | 21/378 | **supprimée** | — |
+
+**Décisions** :
+1. **Prometheus v2 → v3** : la branche v2 ne reçoit plus de correctif (v2.55.1, la
+   dernière, porte encore 78 CVE). Les 3 configs du dépôt sont **valides en v3 sans
+   modification** (`promtool check config` + `check rules`, v3.13.1). Tag **roulant
+   `v3`** et non `v3.13.1` : les CVE de Prometheus sont dans son binaire Go, qu'un tag
+   de patch fige — c'est exactement ce qui a fait pourrir v2.45.0 (cf. la leçon
+   `mysql:8.4` vs `mysql:8.4.0` dans `tp03/12-mysql-deployment-secure.yaml`).
+   ⚠️ v3 est **strict sur le `Content-Type`** au scrape : une cible tolérée en v2 peut
+   échouer en v3. Vérifié pour `prometheus-example-app` (`text/plain; version=0.0.4`).
+2. **TensorFlow abandonnée** plutôt que durcie. Durcir ne pouvait pas la rendre verte :
+   ~182 CVE Ubuntu **sans correctif amont** subsistent quel que soit le tag. Elle
+   servait de décor dans un Job GPU qui ne peut pas s'exécuter (pas de nœud
+   `gpu: nvidia`, `train.py` inexistant, fichier appliqué en `--dry-run=client`).
+   Remplacée par `python:3.13-alpine` : **0 CVE, 17 Mo** contre 3,8 Go.
+3. **Elasticsearch / Kibana laissées en 8.17.7** : monter serait **contre-productif**.
+   8.17.7 a **0 CVE OS** (donc verte) ; 8.19.10 en introduit 2, et 9.2.4 bascule sur une
+   base RedHat à 25 CVE OS dont 14 sans correctif. Le scan complet n'y gagnerait que 7.
+
+**Bug préexistant corrigé au passage** : le sidecar `mysql-exporter` du TP3 était
+**cassé**. `DATA_SOURCE_NAME` n'est plus lu depuis la v0.15.0 — l'exporter échouait sur
+`no user specified in section or parent`, y compris en v0.15.1. Remplacé par
+`--mysqld.username` + `MYSQLD_EXPORTER_PASSWORD`, **vérifié contre un vrai MySQL 8.4
+(`mysql_up 1`)**.
+
+**Impasses documentées** dans `docker/hardened/README.md` (ne pas re-tester) :
+`netshoot:v0.16` (déjà la dernière version amont, 0 CVE OS, ses CVE sont dans les
+binaires Go embarqués), `postgres:15/17-alpine`, `mysql:8.4`, `cassandra:4.1` (tags
+roulants à jour, CVE dans `gosu`), `wordpress` et `fluentd` (0 corrigeable).
+
+**Barrière CI : 5 images rouges → 4** (wordpress, cassandra, les 2 fluentd). Aucune
+n'est actionnable depuis ce dépôt.
+
+**Non traité** : `gcr.io/kaniko-project/executor:v1.23.2` (v1.24.0 ne gagne que 117→111,
+0 CVE OS donc déjà vert) ; `docs/AIRGAP_DEPLOYMENT.md` et `docs/IMAGE_REGISTRY_DMZ.md`
+citent encore `quay.io/prometheus/prometheus:v2.45.0` (markdown non scanné, illustration
+de miroir airgap) ; 43 misconfigurations `trivy config` HIGH préexistantes dans
+`tp04/` et `tp09/examples/` — inchangées par cette session, mais elles contredisent
+l'objectif « 0 vulnérabilité HIGH/CRITICAL » affiché dans CLAUDE.md.
+
 ## Décisions importantes
 
 ### Architecture d'automatisation (2025-12-12)
