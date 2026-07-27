@@ -23,7 +23,14 @@ ces Dockerfiles : **entrypoint, commande et utilisateur restent inchangés**.
 | `trivy` | `aquasec/trivy:0.72.0` | 13 → **0** |
 | `netshoot` | `nicolaka/netshoot:v0.16` | 7 → **0** |
 | `curl` | `curlimages/curl:8.21.0` | 1 → **0** |
+| `wordpress` | `wordpress:6.8-php8.3-apache` | 652 → **0** *(corrigeables)* |
 | `hpa-example` | *(remplacement, voir plus bas)* | 801 → **0** |
+
+`wordpress` est le seul cas où la colonne compte les CVE **corrigeables** et non le
+total : l'image garde **163 CVE OS sans correctif publié** dans Debian 13, avant comme
+après. Aucun `apt upgrade` ne les enlèvera, et la barrière ne bloque pas dessus — elle
+ne compte que le corrigeable. Le durcissement en retire tout de même 652, dont les 401
+de `linux-libc-dev` et les 53 d'ImageMagick.
 
 ## Le cas `hpa-example`
 
@@ -70,8 +77,10 @@ Les Services des TPs exposent toujours 80 : les commandes des élèves sont inch
   la toleration et la ressource `nvidia.com/gpu` — pas l'image. Remplacée par
   `python:3.13-alpine` : **0 CVE, 17 Mo**, et `command: ["python", "train.py"]` reste
   cohérent.
-- **`wordpress`, `grafana`, `postgres`, `adminer`, `cadvisor`, `jenkins`** — publiées et
-  maintenues ailleurs, hors de ce dépôt.
+- **`grafana`, `postgres`, `adminer`, `cadvisor`, `jenkins`** — publiées et maintenues
+  ailleurs, hors de ce dépôt. (`wordpress` était dans ce cas jusqu'au 2026-07-27 : sa
+  source est désormais versionnée ici, parce que le rebuild mensuel ne peut reconstruire
+  que ce dont il a le Dockerfile.)
 
 ## Images à ne PAS monter — le bump est contre-productif
 
@@ -87,11 +96,31 @@ est verte même si le scan complet lui trouve des CVE de binaires.
 - **`postgres:15/17-alpine`, `mysql:8.4`, `cassandra:4.1`** — tags roulants déjà à jour.
   Leurs CVE viennent de binaires Go embarqués (`gosu`), pas des paquets OS.
 
+## Un durcissement se périme — d'où le rebuild mensuel
+
+**Une image durcie est une photo, pas un état.** `apk/apt upgrade` applique les
+correctifs disponibles le jour du build ; dès que la distribution en publie d'autres,
+l'image publiée est en retard sans que rien n'ait changé ici.
+
+Ce n'est pas théorique : `netshoot` et `wordpress`, publiées à **0 CVE OS corrigeable
+le 2026-07-16**, en portaient **15 et 3 le 2026-07-27** — onze jours.
+
+`.github/workflows/rebuild-hardened-images.yml` reconstruit et republie donc toutes ces
+images **le 1er de chaque mois** (et à la demande). Il tourne à 02:00 UTC, avant le
+premier scan hebdomadaire possible. Il exige les secrets `DOCKERHUB_USERNAME` et
+`DOCKERHUB_TOKEN`, avec droit d'écriture sur l'org `telemachlearning`.
+
+⚠️ **`--no-cache --pull` n'est pas une précaution, c'est la condition du durcissement.**
+Sans eux, Docker réutilise le layer `apk/apt upgrade` du build précédent : l'image
+reconstruite est **identique** à l'ancienne et le rebuild est un no-op silencieux.
+Mesuré le 2026-07-27 sur `netshoot` — 15 CVE avant, **15 après avec cache**, 0 sans.
+`build.sh` les passe systématiquement.
+
 ## Construire et publier
 
 ```bash
-# Construire une image
-docker build -t telemachlearning/nginx:1.29-alpine docker/hardened/nginx/
+# Construire une image (--no-cache --pull, voir ci-dessus)
+docker build --no-cache --pull -t telemachlearning/nginx:1.29-alpine docker/hardened/nginx/
 
 # Toutes, avec vérification et mesure
 ./docker/hardened/build.sh
@@ -99,6 +128,11 @@ docker build -t telemachlearning/nginx:1.29-alpine docker/hardened/nginx/
 # Publier (droits sur l'org telemachlearning requis)
 ./docker/hardened/build.sh --push
 ```
+
+`build.sh` affiche `corrigeables/total` et **sort en échec si une image garde des CVE
+OS corrigeables** — exactement ce sur quoi la barrière de `scan-images.yml` bloquera.
+Le chiffre qui décide est le premier : le total inclut des CVE sans correctif publié,
+sur lesquelles ni le durcissement ni la barrière n'ont prise.
 
 **Convention de tag : le tag reflète celui de l'amont** (`nginx:1.29-alpine`,
 `trivy:0.72.0`). `hpa-example` est versionnée à part (`1.0.0`) puisqu'elle ne dérive

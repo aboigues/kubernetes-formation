@@ -1,0 +1,136 @@
+name: Rebuild Hardened Images
+
+# Reconstruit et republie les images durcies de docker/hardened/.
+#
+# POURQUOI CE WORKFLOW EXISTE
+#
+# Un durcissement est une PHOTO, pas un état. `apk/apt upgrade` applique les
+# correctifs disponibles le jour du build ; dès que la distribution en publie
+# d'autres, l'image publiée redevient en retard sans que rien n'ait changé dans
+# le dépôt. Mesuré le 2026-07-27 : netshoot et wordpress, publiées à 0 CVE OS
+# corrigeable le 2026-07-16, en portaient 15 et 3 onze jours plus tard.
+#
+# Sans ce workflow, chaque lundi de scan rouge demandait un rebuild manuel — et
+# c'est le scan hebdomadaire qui servait de rappel, donc toujours a posteriori.
+#
+# COMPLÉMENTAIRE DE scan-images.yml, PAS REDONDANT : ce workflow répare l'amont
+# des images qu'on maîtrise, le scan constate l'état de TOUTES les images des TPs.
+
+on:
+  schedule:
+    # Le 1er de chaque mois à 02:00 UTC, soit deux heures avant le premier scan
+    # hebdomadaire possible (lundi 04:00 UTC) : quand le scan passe, les images
+    # fraîchement publiées sont déjà en place.
+    - cron: '0 2 1 * *'
+  workflow_dispatch:
+    inputs:
+      push:
+        description: 'Publier les images sur Docker Hub'
+        type: boolean
+        default: true
+  # Sur modification des sources durcies, pour valider le build sans publier.
+  push:
+    branches: [ main, claude/** ]
+    paths:
+      - 'docker/hardened/**'
+      - '.github/workflows/rebuild-hardened-images.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  rebuild:
+    name: Rebuild and publish hardened images
+    runs-on: ubuntu-latest
+    # Huit images reconstruites sans cache, dont wordpress (~1,2 Go) : le défaut
+    # de 6 h est large, mais une image qui pend ne doit pas bloquer un runner.
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # build.sh mesure chaque image avec Trivy avant de la publier ; sans le
+      # binaire, le script rendrait « ?/? » pour tout et publierait à l'aveugle.
+      - name: Install Trivy
+        uses: aquasecurity/setup-trivy@v0.3.1
+        with:
+          version: 'v0.72.0'
+
+      # Un push sur une branche ne publie jamais : il valide seulement que les
+      # Dockerfiles construisent encore et mesure la dérive.
+      - name: Decide whether to publish
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            publish=false
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            publish="${{ inputs.push }}"
+          else
+            publish=true
+          fi
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          echo "Publication : $publish"
+
+      # Échec explicite plutôt qu'un `docker push` qui échouerait image par image
+      # après 40 minutes de build : les secrets manquants sont une erreur de
+      # configuration du dépôt, pas un incident de sécurité.
+      - name: Check Docker Hub credentials
+        if: steps.mode.outputs.publish == 'true'
+        env:
+          USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -z "$USERNAME" ] || [ -z "$TOKEN" ]; then
+            echo "❌ Secrets DOCKERHUB_USERNAME / DOCKERHUB_TOKEN absents."
+            echo "   Les créer dans Settings → Secrets and variables → Actions,"
+            echo "   avec un token ayant le droit d'écriture sur l'org telemachlearning."
+            exit 1
+          fi
+
+      - name: Log in to Docker Hub
+        if: steps.mode.outputs.publish == 'true'
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build, measure and publish
+        id: build
+        run: |
+          args=""
+          [ "${{ steps.mode.outputs.publish }}" = "true" ] && args="--push"
+
+          # build.sh sort en 1 si une image garde des CVE OS corrigeables. Le code
+          # est mis de côté le temps d'écrire le résumé : `set -e` couperait le
+          # rapport au moment précis où il a quelque chose à dire (même raison que
+          # dans le job `report` de scan-images.yml).
+          set +e
+          ./docker/hardened/build.sh $args 2>&1 | tee build.log
+          status=${PIPESTATUS[0]}
+          set -e
+
+          {
+            echo "## Reconstruction des images durcies"
+            echo ""
+            echo "Publication : \`${{ steps.mode.outputs.publish }}\`"
+            echo ""
+            echo '```'
+            cat build.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$status" -ne 0 ]; then
+            {
+              echo ""
+              echo "> ⚠️ Une image au moins garde des **CVE OS corrigeables** après"
+              echo "> \`apk/apt upgrade\`. La barrière de \`scan-images.yml\` bloquera"
+              echo "> dessus au prochain scan."
+              echo ">"
+              echo "> Un durcissement qui ne suffit plus veut souvent dire que l'amont"
+              echo "> a bougé : vérifier s'il existe un tag plus récent **en mesurant**,"
+              echo "> un bump pouvant aggraver (voir \`docker/hardened/README.md\`)."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          exit "$status"
