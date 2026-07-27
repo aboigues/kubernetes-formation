@@ -26,6 +26,14 @@
 #
 # Format : https://trivy.dev/latest/docs/configuration/filtering/#by-finding-ids
 
+# DEUXIÈME CRITÈRE D'ENTRÉE, ajouté le 2026-07-27 : un fichier qui N'EST PAS un
+# manifest complet. Trivy analyse chaque fichier isolément ; un patch Kustomize,
+# lui, n'a de sens que fusionné avec sa base. L'alerte porte alors sur un objet
+# qui n'existe nulle part — ni dans le dépôt, ni dans le cluster.
+#
+# Ce critère n'est recevable que VÉRIFIÉ : il faut montrer que le résultat de
+# `kustomize build` est bien durci. Sinon c'est un blanc-seing.
+
 misconfigurations:
   # ── tp05/05-clusterrole-secret-reader.yaml ──
   # Ce fichier existe pour démontrer un ClusterRole, et le fait sur l'exemple le
@@ -58,3 +66,33 @@ misconfigurations:
       Démonstration pédagogique du type de Service ExternalName (TP8 - Réseau).
       Le manifest ne contient que cet objet : respecter la règle reviendrait à
       supprimer l'exemple.
+
+  # ── tp06/07-gitops-structure/overlays/*/patch-deployment.yaml ──
+  # Patchs Kustomize (`patchesStrategicMerge`), pas des manifests déployables : ils
+  # ne redéclarent que l'image et les ressources, tout le reste vient de la base.
+  #
+  # Vérifié le 2026-07-27 avec `kustomize build` sur les trois overlays : le
+  # Deployment produit porte bien le securityContext du pod ET du conteneur, les
+  # volumeMounts et les volumes hérités de `base/deployment.yaml`. Dupliquer ces
+  # blocs dans chaque patch serait redondant, et enseignerait à l'élève l'inverse
+  # de ce que Kustomize sert à faire.
+  #
+  # Pour le revérifier :
+  #   kustomize build tp06/07-gitops-structure/overlays/dev | grep -A4 securityContext
+  - id: KSV-0118
+    paths:
+      - "tp06/07-gitops-structure/overlays/dev/patch-deployment.yaml"
+      - "tp06/07-gitops-structure/overlays/staging/patch-deployment.yaml"
+      - "tp06/07-gitops-structure/overlays/production/patch-deployment.yaml"
+    statement: >-
+      Patch Kustomize partiel, pas un manifest complet. Le securityContext vient de
+      base/deployment.yaml et est présent dans le résultat de `kustomize build`,
+      vérifié sur les trois overlays.
+  - id: KSV-0014
+    paths:
+      - "tp06/07-gitops-structure/overlays/dev/patch-deployment.yaml"
+      - "tp06/07-gitops-structure/overlays/staging/patch-deployment.yaml"
+      - "tp06/07-gitops-structure/overlays/production/patch-deployment.yaml"
+    statement: >-
+      Patch Kustomize partiel : readOnlyRootFilesystem est déclaré dans la base et
+      présent dans le résultat de `kustomize build`, vérifié sur les trois overlays.
