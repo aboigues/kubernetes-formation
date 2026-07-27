@@ -12,8 +12,8 @@ Le scan hebdomadaire (`.github/workflows/scan-images.yml`) bloque sur les CVE de
   amont est en retard sur les paquets Alpine.
 - `grafana` **empire** en montant : 18 CVE en 10.0.0, 25 en 12.3.8.
 
-Une image dérivée qui fait `apk/apk upgrade` corrige ce retard. C'est tout ce que font
-ces Dockerfiles : **entrypoint, commande et utilisateur restent inchangés**.
+Une image dérivée qui fait `apk/apt upgrade` corrige ce retard. **Entrypoint et commande
+restent inchangés** ; l'utilisateur, lui, est ramené à un non-root (voir plus bas).
 
 | Image | Amont | CVE OS avant → après |
 |---|---|---|
@@ -31,6 +31,44 @@ total : l'image garde **163 CVE OS sans correctif publié** dans Debian 13, avan
 après. Aucun `apt upgrade` ne les enlèvera, et la barrière ne bloque pas dessus — elle
 ne compte que le corrigeable. Le durcissement en retire tout de même 652, dont les 401
 de `linux-libc-dev` et les 53 d'ImageMagick.
+
+## Un utilisateur final non-root, en UID numérique
+
+Trivy signalait **DS-0002 (HIGH)** sur 6 de ces Dockerfiles : *« last USER should not be
+root »*. Toutes tournaient en root — non par choix, mais par héritage de leur amont.
+
+Chaque UID ci-dessous a été **testé au runtime avant d'être écrit**, jamais déduit :
+
+| Image | USER | Ce qu'il a fallu en plus | Vérification |
+|---|---|---|---|
+| `nginx` | `101` | `chown` de `/var/cache/nginx`, `/run`, `/etc/nginx/conf.d` | HTTP 200 |
+| `httpd` | `82` | `chown` de `/usr/local/apache2/logs` | HTTP 200 |
+| `wordpress` | `33` | — | HTTP 302 (installeur) |
+| `trivy` | `65534` | — | `trivy --version` |
+| `git` | `65534` | — | `git --version` |
+| `netshoot` | `65534` | — | `ping` + `curl` |
+| `curl` | `100` | *(l'amont était déjà non-root)* | HTTP 200 |
+
+**Les deux `chown` ne sont pas cosmétiques** : sans eux, nginx meurt sur
+`mkdir() "/var/cache/nginx/client_temp" failed` puis `open() "/run/nginx.pid" failed`,
+et httpd sur `could not create logs/httpd.pid`. Un `USER` posé sans les tester aurait
+livré des images qui ne démarrent pas.
+
+⚠️ **UID numériques, jamais un nom.** `runAsNonRoot: true` demande au kubelet de refuser
+un conteneur qui tournerait en root, et il ne sait le vérifier **avant démarrage** que
+sur un UID numérique. Un `USER nginx` passerait au travers du contrôle.
+
+Ces valeurs **rejoignent ce que les manifests imposaient déjà** :
+`tp01/webapp-nodeport.yaml` déclare `runAsUser: 101` avec des `emptyDir` sur
+`/var/cache/nginx` et `/var/run` ; `tp02/exercice10/wordpress-app.yaml` déclare
+`runAsUser: 33`. L'image et le manifest disent enfin la même chose — et là où un
+manifest fixe son propre `runAsUser`, c'est lui qui gagne, le `USER` de l'image n'est
+qu'un défaut plus sûr.
+
+**`netshoot` mérite une note** : les outils qui exigent `CAP_NET_RAW` ou `CAP_NET_ADMIN`
+(tcpdump en mode promiscuité, iptables) demandent désormais que le manifest les accorde
+explicitement. C'est le bon endroit pour ce choix — visible dans le YAML que lit
+l'élève, plutôt qu'implicite dans l'image.
 
 ## Le cas `hpa-example`
 
