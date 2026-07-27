@@ -12,11 +12,30 @@ spec:
       labels:
         app: my-app
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101       # nginx
+        fsGroup: 101         # rend les emptyDir ci-dessous inscriptibles par nginx
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: app
         image: nginx:alpine
         ports:
         - containerPort: 80
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        # nginx écrit son cache et son PID au démarrage : sans ces volumes il
+        # refuse de démarrer en racine lecture seule.
+        - name: cache
+          mountPath: /var/cache/nginx
+        - name: run
+          mountPath: /var/run
         resources:
           requests:
             memory: "64Mi"
@@ -24,3 +43,8 @@ spec:
           limits:
             memory: "128Mi"
             cpu: "200m"
+      volumes:
+      - name: cache
+        emptyDir: {}
+      - name: run
+        emptyDir: {}

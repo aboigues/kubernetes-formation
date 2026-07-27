@@ -18,12 +18,31 @@ spec:
         app: rolling-app
         version: v1
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534     # nobody
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: app
         image: hashicorp/http-echo:0.2.3
         args: ["-text=Version 1"]
         ports:
         - containerPort: 5678
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "16Mi"
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+            cpu: "100m"
         readinessProbe:
           httpGet:
             path: /

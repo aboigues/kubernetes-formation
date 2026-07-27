@@ -12,11 +12,25 @@ spec:
       labels:
         app: production-app
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101       # nginx
+        fsGroup: 101         # rend les emptyDir ci-dessous inscriptibles par nginx
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: app
         image: nginx:alpine
         ports:
         - containerPort: 80
+        volumeMounts:
+        # readOnlyRootFilesystem etait deja declare plus bas, mais SANS ces volumes :
+        # nginx echouait sur mkdir() /var/cache/nginx/client_temp et le pod ne
+        # demarrait pas. Un durcissement incomplet est une panne, pas une securite.
+        - name: cache
+          mountPath: /var/cache/nginx
+        - name: run
+          mountPath: /var/run
 
         # Startup probe - vérifie le démarrage initial
         startupProbe:
@@ -65,6 +79,12 @@ spec:
           capabilities:
             drop:
             - ALL
+
+      volumes:
+      - name: cache
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
 ---
 # Service pour exposer production-app
 apiVersion: v1
