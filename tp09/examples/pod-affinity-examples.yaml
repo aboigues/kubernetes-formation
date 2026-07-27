@@ -22,15 +22,36 @@ spec:
         app: redis
         tier: cache
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: redis
         image: redis:alpine
         ports:
         - containerPort: 6379
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: data
+          mountPath: /data
         resources:
           requests:
             memory: "256Mi"
             cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: data
+        emptyDir: {}
 
 ---
 # Web server qui doit être sur le même nœud que Redis
@@ -67,15 +88,40 @@ spec:
                 values:
                 - cache
             topologyKey: kubernetes.io/hostname
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: nginx
         image: nginx:alpine
         ports:
         - containerPort: 80
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: cache
+          mountPath: /var/cache/nginx
+        - name: run
+          mountPath: /var/run
         resources:
           requests:
             memory: "128Mi"
             cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+      volumes:
+      - name: cache
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
 
 ---
 # Exemple 2 : Pod Anti-Affinity - Haute disponibilité
@@ -106,11 +152,26 @@ spec:
                 values:
                 - critical-service
             topologyKey: kubernetes.io/hostname
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: service
         image: myapp:1.0.0
         ports:
         - containerPort: 8080
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
         resources:
           requests:
             memory: "256Mi"
@@ -118,6 +179,9 @@ spec:
           limits:
             memory: "512Mi"
             cpu: "500m"
+      volumes:
+      - name: tmp
+        emptyDir: {}
 
 ---
 # Exemple 3 : Anti-Affinity préférée (soft)
@@ -148,13 +212,34 @@ spec:
                   values:
                   - worker-service
               topologyKey: kubernetes.io/hostname
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: worker
         image: worker:v1
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
         resources:
           requests:
             memory: "128Mi"
             cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+      volumes:
+      - name: tmp
+        emptyDir: {}
 
 ---
 # Exemple 4 : Architecture 3-tiers complète avec affinités
@@ -203,14 +288,42 @@ spec:
                 values:
                 - database
             topologyKey: kubernetes.io/hostname
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: postgres
         image: postgres:15-alpine
         ports:
         - containerPort: 5432
         env:
+        # Jamais de mot de passe en clair, même dans un exemple : c'est la ligne
+        # que l'élève copiera.
         - name: POSTGRES_PASSWORD
-          value: "changeme"
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: password
+        # PGDATA doit être un SOUS-répertoire du volume monté : initdb exige un
+        # répertoire vide, or un point de montage ne l'est jamais tout à fait.
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+        - name: run
+          mountPath: /var/run/postgresql
+        - name: tmp
+          mountPath: /tmp
         resources:
           requests:
             memory: "1Gi"
@@ -218,6 +331,13 @@ spec:
           limits:
             memory: "2Gi"
             cpu: "1"
+      volumes:
+      - name: data
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
 
 ---
 # Tier 2 : Backend (proche de la DB, réparti entre eux)
@@ -273,15 +393,36 @@ spec:
                   values:
                   - backend
               topologyKey: kubernetes.io/hostname
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: backend
         image: backend:v2
         ports:
         - containerPort: 8080
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
         resources:
           requests:
             memory: "512Mi"
             cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+      volumes:
+      - name: tmp
+        emptyDir: {}
 
 ---
 # Tier 3 : Frontend (proche du backend)
@@ -337,15 +478,36 @@ spec:
                   values:
                   - frontend
               topologyKey: kubernetes.io/hostname
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: frontend
         image: frontend:v2
         ports:
         - containerPort: 80
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
         resources:
           requests:
             memory: "128Mi"
             cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+      volumes:
+      - name: tmp
+        emptyDir: {}
 
 ---
 # Exemple 5 : topologyKey par zone (répartition géographique)
@@ -386,10 +548,31 @@ spec:
                   values:
                   - geo-distributed
               topologyKey: kubernetes.io/hostname
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: app
         image: myapp:1.0.0
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
         resources:
           requests:
             memory: "256Mi"
             cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: tmp
+        emptyDir: {}
