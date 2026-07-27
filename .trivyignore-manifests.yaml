@@ -1,0 +1,60 @@
+# Exceptions aux MISCONFIGURATIONS de manifests (job `security-scan` de
+# .github/workflows/test-kubernetes-manifests.yml, `trivy config`).
+#
+# ┌─ POURQUOI UN FICHIER SÉPARÉ DE .trivyignore.yaml ──────────────────────────┐
+# │ `.trivyignore.yaml` couvre les CVE d'IMAGES et n'est lu que par la barrière │
+# │ du scan hebdomadaire. Les deux régimes n'ont ni le même périmètre, ni la    │
+# │ même règle d'expiration (voir plus bas). Les mélanger rendrait chacun des   │
+# │ deux fichiers illisible, et une exception d'image pourrait taire une        │
+# │ misconfiguration par accident.                                             │
+# └────────────────────────────────────────────────────────────────────────────┘
+#
+# CE QUI PEUT ENTRER ICI, et rien d'autre : une règle dont le respect
+# SUPPRIMERAIT LA NOTION QUE LE FICHIER ENSEIGNE. C'est un critère strict, pas
+# un jugement de commodité. Un `securityContext` manquant n'y a pas sa place :
+# l'ajouter alourdit un exemple, ça ne le détruit pas — et la décision prise le
+# 2026-07-27 est de durcir ces cas-là (KSV-0014, KSV-0118), pas de les excepter.
+#
+# PAS D'`expired_at` ICI, contrairement à `.trivyignore.yaml`. Une CVE exceptée
+# est un report : la date force la reprise. Une exception pédagogique est
+# structurelle — elle ne cessera pas d'être vraie à une date donnée. Lui coller
+# une échéance ne créerait qu'un rendez-vous où l'on reconduirait la même
+# décision. Ce qui la périme, c'est la suppression du fichier concerné.
+#
+# Chaque entrée doit avoir son pendant : un commentaire dans le manifest lui-même,
+# pour que l'élève qui lit le fichier comprenne pourquoi Trivy proteste.
+#
+# Format : https://trivy.dev/latest/docs/configuration/filtering/#by-finding-ids
+
+misconfigurations:
+  # ── tp05/05-clusterrole-secret-reader.yaml ──
+  # Ce fichier existe pour démontrer un ClusterRole, et le fait sur l'exemple le
+  # plus parlant qui soit : la lecture de secrets à l'échelle du cluster. Trivy
+  # condamne tout accès aux secrets par ClusterRole, quelle que soit la
+  # restriction — vérifié le 2026-07-27 : avec `resourceNames` limité à un seul
+  # secret ET le verbe `get` seul, KSV-0041 se déclenche encore. Il n'existe donc
+  # aucune écriture de ce manifest qui conserve la démonstration et éteigne
+  # l'alerte : c'est excepter ou supprimer le TP.
+  #
+  # Le manifest applique déjà le moindre privilège atteignable : `get` et `list`
+  # uniquement, aucun verbe d'écriture.
+  - id: KSV-0041
+    paths:
+      - "tp05/05-clusterrole-secret-reader.yaml"
+    statement: >-
+      Démonstration pédagogique d'un ClusterRole (TP5 - RBAC). L'alerte porte sur
+      la notion même qu'enseigne le fichier. Aucune écriture ne l'éteint, testé
+      avec resourceNames + get seul. Le rôle est déjà en lecture seule.
+
+  # ── tp08/examples/04-externalname-service.yaml ──
+  # Le fichier entier EST un Service de type ExternalName — huit lignes dont le
+  # seul objet est d'enseigner ce type de Service, aux côtés de ClusterIP,
+  # NodePort et LoadBalancer dans le même répertoire. Respecter KSV-0108 revient
+  # à supprimer le fichier.
+  - id: KSV-0108
+    paths:
+      - "tp08/examples/04-externalname-service.yaml"
+    statement: >-
+      Démonstration pédagogique du type de Service ExternalName (TP8 - Réseau).
+      Le manifest ne contient que cet objet : respecter la règle reviendrait à
+      supprimer l'exemple.

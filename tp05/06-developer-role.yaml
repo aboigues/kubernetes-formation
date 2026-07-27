@@ -14,17 +14,22 @@ rules:
 - apiGroups: [""]
   resources: ["pods", "pods/log"]
   verbs: ["get", "list", "watch"]
-- apiGroups: [""]
-  resources: ["pods/exec"]
-  verbs: ["create"]
+# Pas de `pods/exec` (KSV-0053) : ouvrir un shell dans un conteneur contourne tout
+# ce que le Deployment déclare — securityContext, image scannée, variables — et
+# n'apparaît dans aucun audit de ressource. Un développeur diagnostique avec
+# `kubectl logs` (autorisé ci-dessus) et `kubectl describe`. Si un exec est
+# vraiment nécessaire, il doit être une élévation explicite et tracée, pas un
+# droit permanent.
 # Deployments
 - apiGroups: ["apps"]
   resources: ["deployments", "replicasets"]
   verbs: ["get", "list", "watch", "create", "update", "patch"]
-# Services
+# Services : lecture seule (KSV-0056). Créer ou modifier un Service permet de
+# détourner le trafic d'une application vers un autre pod — c'est une opération
+# de plateforme, pas de développement.
 - apiGroups: [""]
   resources: ["services"]
-  verbs: ["get", "list", "watch", "create", "update"]
+  verbs: ["get", "list", "watch"]
 # ConfigMaps et Secrets
 - apiGroups: [""]
   resources: ["configmaps"]

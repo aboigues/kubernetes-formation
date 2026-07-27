@@ -165,7 +165,9 @@ rules:
 - apiGroups: [""]
   resources:
   - nodes
-  - nodes/proxy
+  # Pas de `nodes/proxy` : il autorise le proxy vers N'IMPORTE QUEL endpoint du
+  # kubelet, pas seulement /metrics — d'où KSV-0047 (escalade de privilèges).
+  # Les jobs ci-dessus scrapent le kubelet en direct, `nodes/metrics` suffit.
   - nodes/metrics
   - services
   - endpoints

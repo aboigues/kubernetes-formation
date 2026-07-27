@@ -12,8 +12,10 @@ rules:
 - apiGroups: [""]
   resources:
   - nodes
+  # Pas de `nodes/proxy` : il autorise le proxy vers N'IMPORTE QUEL endpoint du
+  # kubelet, pas seulement /metrics — d'où KSV-0047 (escalade de privilèges).
+  # Le job cadvisor scrape le kubelet en direct, `nodes/metrics` suffit.
   - nodes/metrics
-  - nodes/proxy
   - services
   - endpoints
   - pods
