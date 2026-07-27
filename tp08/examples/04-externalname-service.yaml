@@ -1,6 +1,16 @@
 # Exemple : ExternalName Service
 # Utilisation : kubectl apply -f 04-externalname-service.yaml
 # Test : kubectl run tmp --image=busybox --rm -it -- nslookup external-db
+#
+# 🔐 Trivy signale KSV-0108 (« Service with External IP ») sur ce fichier : un
+# Service qui pointe hors du cluster échappe aux NetworkPolicies, et son nom DNS
+# peut être détourné si le domaine change de main. Mais c'est précisément le type
+# de Service que cet exemple enseigne — le respecter reviendrait à supprimer le
+# fichier. Exception dans `.trivyignore-manifests.yaml`.
+#
+# En production : vérifier que le domaine visé est bien maîtrisé, et se souvenir
+# qu'ExternalName ne fait AUCUN contrôle (ni TLS, ni autorisation) — c'est un
+# simple alias DNS (CNAME).
 
 apiVersion: v1
 kind: Service

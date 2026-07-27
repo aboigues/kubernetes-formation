@@ -910,6 +910,15 @@ jobs:
           # prétend pas surveiller. C'est ainsi qu'un DS-0026 (LOW, « pas de
           # HEALTHCHECK ») s'est retrouvé signalé sur une PR.
           limit-severities-for-sarif: true
+          # Exceptions aux misconfigurations. Fichier SÉPARÉ de .trivyignore.yaml,
+          # qui couvre les CVE d'images et n'est lu que par la barrière du scan
+          # hebdomadaire : deux régimes, deux périmètres, deux règles d'expiration.
+          #
+          # Contrairement au scan d'images, ce job n'a PAS de barrière (exit-code 0) :
+          # il ne fait qu'alimenter l'onglet Security. L'exception agit donc bien sur
+          # ce qui est rapporté — sans quoi elle n'aurait aucun effet. N'y entre que
+          # ce dont le respect supprimerait la notion enseignée par le fichier.
+          trivyignores: '.trivyignore-manifests.yaml'
 
       - name: Upload Trivy results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3

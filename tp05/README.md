@@ -317,17 +317,15 @@ rules:
 - apiGroups: [""]
   resources: ["pods", "pods/log"]
   verbs: ["get", "list", "watch"]
-- apiGroups: [""]
-  resources: ["pods/exec"]
-  verbs: ["create"]
+# Pas de `pods/exec` (KSV-0053) : voir l'encadré ci-dessous.
 # Deployments
 - apiGroups: ["apps"]
   resources: ["deployments", "replicasets"]
   verbs: ["get", "list", "watch", "create", "update", "patch"]
-# Services
+# Services : lecture seule (KSV-0056)
 - apiGroups: [""]
   resources: ["services"]
-  verbs: ["get", "list", "watch", "create", "update"]
+  verbs: ["get", "list", "watch"]
 # ConfigMaps et Secrets
 - apiGroups: [""]
   resources: ["configmaps"]
@@ -350,6 +348,28 @@ roleRef:
   name: developer-role
   apiGroup: rbac.authorization.k8s.io
 ```
+
+> 🔐 **Pourquoi ce Role n'accorde ni `pods/exec` ni l'écriture sur les Services**
+>
+> Les deux sont tentants pour un profil « développeur », et tous deux sont signalés
+> par Trivy (KSV-0053 et KSV-0056).
+>
+> **`pods/exec`** ouvre un shell dans le conteneur : cela contourne tout ce que le
+> Deployment déclare — `securityContext`, image scannée, variables d'environnement —
+> et n'apparaît dans aucun audit de ressource, puisque rien n'est créé ni modifié.
+> Diagnostiquer se fait avec `kubectl logs` et `kubectl describe`, tous deux
+> autorisés ici. Si un `exec` est réellement nécessaire, il doit être une élévation
+> explicite et tracée, pas un droit permanent.
+>
+> **Créer ou modifier un Service** permet de changer le sélecteur d'un Service
+> existant, donc de détourner le trafic d'une application vers un pod contrôlé par
+> l'attaquant, sans toucher au Deployment. C'est une opération de plateforme.
+>
+> Vérifiez-le après avoir appliqué le manifest :
+> ```bash
+> kubectl auth can-i create pods/exec --as=system:serviceaccount:default:developer-sa
+> # no
+> ```
 
 **Exercice 4 : Tester le role développeur**
 

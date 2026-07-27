@@ -63,10 +63,13 @@ data:
           regex: '(.*):10250'
           replacement: '${1}:10250'
           target_label: __address__
-        - source_labels: [__meta_kubernetes_node_name]
-          regex: (.+)
-          target_label: __metrics_path__
-          replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+        # Le kubelet expose /metrics/cadvisor directement sur son port 10250.
+        # La version précédente demandait /api/v1/nodes/<node>/proxy/metrics/cadvisor
+        # — un chemin de l'APISERVER — à une adresse qui est celle du KUBELET :
+        # celui-ci répondait 404, le job ne remontait aucune métrique. Passer par
+        # l'apiserver aurait en plus exigé `nodes/proxy` dans le ClusterRole.
+        - target_label: __metrics_path__
+          replacement: /metrics/cadvisor
         # Ajouter le nom du node comme label
         - source_labels: [__meta_kubernetes_node_name]
           target_label: node

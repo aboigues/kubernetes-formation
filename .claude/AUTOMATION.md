@@ -385,6 +385,33 @@ non-corrigeables demandent un changement d'image ou une acceptation du risque.
 - `CRITICAL,HIGH` → valeur actuelle
 - `CRITICAL` → seuls les CRITICAL bloquent
 
+## 🧾 Exceptions aux misconfigurations : `.trivyignore-manifests.yaml`
+
+**Ne pas confondre avec `.trivyignore.yaml`**, qui couvre les CVE d'images et n'est lu
+que par la barrière du scan hebdomadaire. Deux régimes distincts :
+
+| | `.trivyignore.yaml` | `.trivyignore-manifests.yaml` |
+|---|---|---|
+| Couvre | CVE d'images | Misconfigurations `trivy config` |
+| Lu par | la barrière de `scan-images.yml` | le job `security-scan` |
+| Effet | lève un blocage, **n'efface pas** la CVE de l'onglet Security | retire l'alerte du rapport — ce job **n'a pas de barrière**, sans quoi l'exception n'aurait aucun effet |
+| `expired_at` | **obligatoire** | **absent, volontairement** |
+
+**Pourquoi pas d'`expired_at` côté manifests** : une CVE exceptée est un report, la date
+force la reprise. Une exception pédagogique est structurelle — elle ne cessera pas d'être
+vraie à une date donnée. Lui coller une échéance ne créerait qu'un rendez-vous où l'on
+reconduirait la même décision. Ce qui la périme, c'est la suppression du fichier visé.
+
+**Critère d'entrée, strict** : n'y entre qu'une règle dont le respect **supprimerait la
+notion que le fichier enseigne**. Un `securityContext` manquant n'y a pas sa place —
+l'ajouter alourdit un exemple, ça ne le détruit pas.
+
+Deux entrées à ce jour, toutes deux vérifiées irréductibles :
+`KSV-0041` sur `tp05/05-clusterrole-secret-reader.yaml` (même avec `resourceNames` et le
+seul verbe `get`, l'alerte persiste) et `KSV-0108` sur
+`tp08/examples/04-externalname-service.yaml` (le fichier entier *est* l'objet visé).
+Chaque entrée a son pendant en commentaire dans le manifest lui-même.
+
 ## 🔁 Re-durcissement mensuel des images
 
 ### Emplacement
