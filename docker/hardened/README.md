@@ -70,6 +70,25 @@ qu'un défaut plus sûr.
 explicitement. C'est le bon endroit pour ce choix — visible dans le YAML que lit
 l'élève, plutôt qu'implicite dans l'image.
 
+## Pas de `HEALTHCHECK`, volontairement (DS-0026)
+
+Trivy signale **DS-0026 (LOW)** — *« Add HEALTHCHECK instruction »* — sur ces 8
+Dockerfiles et sur `tp06/sample-app/`. On ne l'ajoute pas : **Kubernetes ignore purement
+et simplement le `HEALTHCHECK` d'une image.** Le kubelet ne lit que les `livenessProbe`,
+`readinessProbe` et `startupProbe` du manifest. En mettre un dans une image destinée à
+un cluster, c'est écrire du code mort — et dans un dépôt de formation, enseigner un
+réflexe qui ne sert à rien là où l'élève croira qu'il sert.
+
+Une nuance honnête : `tp07/docker-compose-app/` utilise `telemachlearning/nginx` sous
+Docker Compose, qui **exécute** bien le `HEALTHCHECK` d'une image. Ce compose n'en
+définit aucun aujourd'hui. Si on veut y enseigner les health checks, l'endroit juste
+reste le `healthcheck:` du service dans le compose — visible dans le fichier que lit
+l'élève — et non une instruction cachée dans l'image.
+
+Cette alerte ne devrait d'ailleurs plus remonter : le job `security-scan` déclarait
+`severity: CRITICAL,HIGH` sans `limit-severities-for-sarif`, ce qui envoyait **toutes**
+les sévérités dans l'onglet Security.
+
 ## Le cas `hpa-example`
 
 `registry.k8s.io/hpa-example` tourne sur **Debian 8 « jessie », en fin de vie depuis

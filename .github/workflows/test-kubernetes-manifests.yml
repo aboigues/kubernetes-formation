@@ -894,7 +894,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        # Épinglée, comme dans scan-images.yml : @master fait dépendre la CI de ce que
+        # l'amont pousse le jour même.
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: 'config'
           scan-ref: '.'
@@ -902,6 +904,12 @@ jobs:
           output: 'trivy-results.sarif'
           exit-code: '0'
           severity: 'CRITICAL,HIGH'
+          # ⚠️ `severity` ne filtre QUE l'affichage : sans limit-severities-for-sarif,
+          # le SARIF contient toutes les sévérités et l'onglet Security reçoit
+          # 1981 alertes au lieu de 261 — 1419 LOW et 301 MEDIUM que ce job ne
+          # prétend pas surveiller. C'est ainsi qu'un DS-0026 (LOW, « pas de
+          # HEALTHCHECK ») s'est retrouvé signalé sur une PR.
+          limit-severities-for-sarif: true
 
       - name: Upload Trivy results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
