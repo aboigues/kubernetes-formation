@@ -300,7 +300,12 @@ spec:
     effect: "NoSchedule"
   containers:
   - name: debug
-    image: telemachlearning/netshoot:v0.16
+    # busybox et non netshoot : ce pod ne fait que `sleep infinity`, il démontre
+    # qu'une toleration `Exists` sur la clé `environment` permet d'être planifié
+    # sur tous les nœuds d'environnement. Aucun outil réseau n'est exécuté dessus.
+    # netshoot coûterait ~174 CVE HIGH/CRITICAL dans ses binaires Go embarqués ;
+    # busybox donne un shell, ping, nslookup et wget pour 0 CVE.
+    image: busybox:1.36
     command: ['sh', '-c', 'sleep infinity']
     resources:
       requests:

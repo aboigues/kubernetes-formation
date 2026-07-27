@@ -17,7 +17,13 @@ spec:
       description: Chemin vers le Dockerfile
   steps:
     - name: build-and-push
-      image: gcr.io/kaniko-project/executor:v1.23.2
+      # kaniko et non buildah, malgré les 112 CVE de son binaire Go : mesuré le
+      # 2026-07-27, buildah:v1.41 est à 0 CVE mais exige `seccompProfile: Unconfined`
+      # pour son unshare(CLONE_NEWUSER) — les capabilities et /dev/fuse n'y suffisent
+      # pas. Échanger des CVE non atteignables (un builder ne sert aucun trafic)
+      # contre la désactivation de seccomp serait une régression. kaniko construit
+      # sans daemon ni privilèges, ce qui est justement le sujet de ce TP.
+      image: gcr.io/kaniko-project/executor:v1.24.0
       workingDir: $(workspaces.source.path)
       env:
         - name: DOCKER_CONFIG

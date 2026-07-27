@@ -60,7 +60,14 @@ spec:
   - operator: "Exists"
   containers:
   - name: admin
-    image: telemachlearning/netshoot:v0.16
+    # busybox et non netshoot : ce pod ne fait que `sleep infinity`, il sert à
+    # montrer qu'une toleration `operator: Exists` le laisse être planifié partout.
+    # netshoot embarque des dizaines d'outils réseau compilés en Go, soit ~174 CVE
+    # HIGH/CRITICAL dans des binaires qu'aucun exercice n'exécute ici. busybox
+    # fournit un shell, ping, nslookup et wget — 0 CVE.
+    # Pour un VRAI diagnostic réseau, netshoot reste l'outil de référence :
+    # voir tp09/exercices/exercice5-troubleshooting.md.
+    image: busybox:1.36
     command: ['sh', '-c', 'sleep infinity']
 
 ---
