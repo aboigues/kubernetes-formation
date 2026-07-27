@@ -1,4 +1,9 @@
 # Exemples de PodDisruptionBudgets (PDB) pour le TP9
+#
+# 🔐 securityContext complet sur tous les pods bien que le sujet soit la
+# DISPONIBILITÉ (.claude/SECURITY.md) : un exemple applicable tel quel ne doit pas
+# enseigner une régression par omission. Chaque readOnlyRootFilesystem est
+# accompagné des emptyDir que l'image exige pour démarrer.
 
 ---
 # Exemple 1 : minAvailable - Nombre minimum de pods disponibles
@@ -84,11 +89,26 @@ spec:
         app: myapp
         tier: backend
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: myapp
         image: myapp:v2
         ports:
         - containerPort: 8080
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
         resources:
           requests:
             memory: "256Mi"
@@ -108,6 +128,9 @@ spec:
             port: 8080
           initialDelaySeconds: 5
           periodSeconds: 5
+      volumes:
+      - name: tmp
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -149,6 +172,12 @@ spec:
       labels:
         app: etcd
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: etcd
         image: quay.io/coreos/etcd:v3.5.32
@@ -157,10 +186,28 @@ spec:
           name: client
         - containerPort: 2380
           name: peer
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        # /var/lib/etcd est le WorkingDir de l'image : c'est là qu'etcd crée son
+        # data-dir. Sans ce volume, il ne peut rien écrire en racine read-only.
+        - name: data
+          mountPath: /var/lib/etcd
         resources:
           requests:
             memory: "1Gi"
             cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1"
+      volumes:
+      # emptyDir : cet exemple illustre les PDB, pas la persistance d'etcd.
+      - name: data
+        emptyDir: {}
 ---
 # PDB pour maintenir le quorum (minimum 3 sur 5)
 apiVersion: policy/v1
@@ -191,13 +238,34 @@ spec:
         app: batch-worker
         role: processing
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: worker
         image: batch-worker:v1
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
         resources:
           requests:
             memory: "512Mi"
             cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1"
+      volumes:
+      - name: tmp
+        emptyDir: {}
 ---
 # Autorise jusqu'à 30% d'indisponibilité
 apiVersion: policy/v1
@@ -239,11 +307,26 @@ spec:
                 values:
                 - critical-api
             topologyKey: kubernetes.io/hostname
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: api
         image: critical-api:v3
         ports:
         - containerPort: 443
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
         resources:
           requests:
             memory: "1Gi"
@@ -251,6 +334,9 @@ spec:
           limits:
             memory: "2Gi"
             cpu: "2"
+      volumes:
+      - name: tmp
+        emptyDir: {}
 ---
 # PDB très strict - maximum 1 pod indisponible à la fois
 apiVersion: policy/v1
@@ -284,13 +370,34 @@ spec:
         component: frontend
         version: v2
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: frontend
         image: frontend:v2
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
         resources:
           requests:
             memory: "256Mi"
             cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: tmp
+        emptyDir: {}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -309,13 +416,34 @@ spec:
         component: backend
         version: v2
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: backend
         image: backend:v2
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
         resources:
           requests:
             memory: "512Mi"
             cpu: "500m"
+          limits:
+            memory: "1Gi"
+            cpu: "1"
+      volumes:
+      - name: tmp
+        emptyDir: {}
 ---
 # PDB pour le frontend
 apiVersion: policy/v1
@@ -384,13 +512,34 @@ spec:
         app: monitoring
         critical: "false"
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: agent
         image: monitoring-agent:1.0.0
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
         resources:
           requests:
             memory: "128Mi"
             cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+      volumes:
+      - name: tmp
+        emptyDir: {}
 ---
 # Ce PDB ne bloquera pas les drains car DaemonSet
 # mais documente l'intention

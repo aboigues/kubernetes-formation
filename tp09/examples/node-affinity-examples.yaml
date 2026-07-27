@@ -1,4 +1,9 @@
 # Exemples d'affinité de nœuds pour le TP9
+#
+# 🔐 Les pods portent un securityContext complet bien que le sujet soit le
+# SCHEDULING : un exemple applicable tel quel ne doit pas enseigner une régression
+# de sécurité par omission (.claude/SECURITY.md). Chaque readOnlyRootFilesystem
+# s'accompagne des emptyDir que l'image exige réellement pour démarrer.
 
 ---
 # Exemple 1 : Affinité stricte (required) - Production seulement
@@ -29,9 +34,28 @@ spec:
                 operator: In
                 values:
                 - production
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101       # nginx
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: webapp
         image: nginx:alpine
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        # nginx écrit son cache et son PID : sans ces volumes, il ne démarre pas
+        # en système de fichiers racine en lecture seule.
+        - name: cache
+          mountPath: /var/cache/nginx
+        - name: run
+          mountPath: /var/run
         resources:
           requests:
             memory: "128Mi"
@@ -39,6 +63,11 @@ spec:
           limits:
             memory: "256Mi"
             cpu: "200m"
+      volumes:
+      - name: cache
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
 
 ---
 # Exemple 2 : Affinité préférée (preferred) - Préfère SSD
@@ -75,13 +104,35 @@ spec:
                 operator: In
                 values:
                 - zone-a
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999       # redis
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: redis
         image: redis:alpine
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        # Redis écrit son dump RDB dans /data, même sans persistance configurée.
+        - name: data
+          mountPath: /data
         resources:
           requests:
             memory: "256Mi"
             cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: data
+        emptyDir: {}
 
 ---
 # Exemple 3 : Combinaison required + preferred
@@ -132,9 +183,25 @@ spec:
                 operator: In
                 values:
                 - high-performance
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: app
+        # Image fictive : voir .github/image-scan-ignore.txt.
         image: myapp:1.0.0
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
         resources:
           requests:
             memory: "512Mi"
@@ -142,6 +209,9 @@ spec:
           limits:
             memory: "1Gi"
             cpu: "1"
+      volumes:
+      - name: tmp
+        emptyDir: {}
 
 ---
 # Exemple 4 : Opérateurs multiples
@@ -177,10 +247,32 @@ spec:
                 operator: Gt
                 values:
                 - "3"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534     # nobody, l'utilisateur des images Prometheus
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: prometheus
         image: prom/prometheus:v3
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        # Prometheus écrit sa base TSDB dans /prometheus.
+        - name: data
+          mountPath: /prometheus
         resources:
           requests:
             memory: "2Gi"
             cpu: "1"
+          limits:
+            memory: "4Gi"
+            cpu: "2"
+      volumes:
+      - name: data
+        emptyDir: {}

@@ -1,9 +1,20 @@
 # Exemples de Taints et Tolerations pour le TP9
-
+#
 # Pour appliquer les taints, utilisez ces commandes :
 # kubectl taint nodes worker1 dedicated=database:NoSchedule
 # kubectl taint nodes worker2 gpu=nvidia:NoSchedule
 # kubectl taint nodes worker3 maintenance=true:NoExecute
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# 🔐 Tous les pods ci-dessous portent un securityContext complet, même si le
+# sujet du fichier est le SCHEDULING. C'est la règle du dépôt (.claude/SECURITY.md) :
+# un exemple qu'on peut appliquer tel quel doit être applicable SANS régression de
+# sécurité, sinon il enseigne le mauvais réflexe par omission.
+#
+# Chaque `readOnlyRootFilesystem: true` s'accompagne des emptyDir que l'image exige
+# vraiment pour démarrer. Un durcissement qui passe le `--dry-run` mais produit un
+# CrashLoopBackOff serait pire que pas de durcissement du tout.
+# ─────────────────────────────────────────────────────────────────────────────
 
 ---
 # Exemple 1 : Toleration simple avec Equal
@@ -19,12 +30,41 @@ spec:
     operator: "Equal"
     value: "database"
     effect: "NoSchedule"
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 70        # postgres, dans les images Alpine
+    fsGroup: 70
+    seccompProfile:
+      type: RuntimeDefault
   containers:
   - name: postgres
     image: postgres:15-alpine
     env:
+    # Jamais de mot de passe en clair, même dans un exemple : c'est la ligne que
+    # l'élève copiera. Créer le secret avec :
+    #   kubectl create secret generic postgres-secret --from-literal=password=...
     - name: POSTGRES_PASSWORD
-      value: "mysecretpassword"
+      valueFrom:
+        secretKeyRef:
+          name: postgres-secret
+          key: password
+    # PGDATA doit être un SOUS-répertoire du volume monté : initdb exige un
+    # répertoire vide, or un point de montage ne l'est jamais tout à fait.
+    - name: PGDATA
+      value: /var/lib/postgresql/data/pgdata
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+    volumeMounts:
+    - name: data
+      mountPath: /var/lib/postgresql/data
+    - name: run
+      mountPath: /var/run/postgresql
+    - name: tmp
+      mountPath: /tmp
     resources:
       requests:
         memory: "1Gi"
@@ -32,6 +72,14 @@ spec:
       limits:
         memory: "2Gi"
         cpu: "1"
+  volumes:
+  # emptyDir et non PVC : cet exemple illustre le scheduling, pas la persistance.
+  - name: data
+    emptyDir: {}
+  - name: run
+    emptyDir: {}
+  - name: tmp
+    emptyDir: {}
 
 ---
 # Exemple 2 : Toleration avec Exists (tolère toute valeur)
@@ -44,10 +92,29 @@ spec:
   - key: "dedicated"
     operator: "Exists"
     effect: "NoSchedule"
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534     # nobody
+    fsGroup: 65534
+    seccompProfile:
+      type: RuntimeDefault
   containers:
   - name: admin
     image: busybox:1.36
     command: ['sh', '-c', 'sleep 3600']
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      requests:
+        memory: "16Mi"
+        cpu: "10m"
+      limits:
+        memory: "64Mi"
+        cpu: "100m"
 
 ---
 # Exemple 3 : Tolérer tous les taints (super admin)
@@ -58,6 +125,12 @@ metadata:
 spec:
   tolerations:
   - operator: "Exists"
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    fsGroup: 65534
+    seccompProfile:
+      type: RuntimeDefault
   containers:
   - name: admin
     # busybox et non netshoot : ce pod ne fait que `sleep infinity`, il sert à
@@ -69,6 +142,19 @@ spec:
     # voir tp09/exercices/exercice5-troubleshooting.md.
     image: busybox:1.36
     command: ['sh', '-c', 'sleep infinity']
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+    resources:
+      requests:
+        memory: "16Mi"
+        cpu: "10m"
+      limits:
+        memory: "64Mi"
+        cpu: "100m"
 
 ---
 # Exemple 4 : Deployment pour nœuds dédiés base de données
@@ -98,6 +184,12 @@ spec:
         operator: "Equal"
         value: "database"
         effect: "NoSchedule"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: postgres
         image: postgres:15-alpine
@@ -109,6 +201,21 @@ spec:
             secretKeyRef:
               name: postgres-secret
               key: password
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+        - name: run
+          mountPath: /var/run/postgresql
+        - name: tmp
+          mountPath: /tmp
         resources:
           requests:
             memory: "2Gi"
@@ -116,6 +223,13 @@ spec:
           limits:
             memory: "4Gi"
             cpu: "2"
+      volumes:
+      - name: data
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
 
 ---
 # Exemple 5 : Job GPU avec toleration
@@ -139,6 +253,12 @@ spec:
         operator: "Equal"
         value: "true"
         effect: "NoSchedule"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: ml-training
         # Image générique : ce qui fait de ce Job une charge GPU, c'est le
@@ -147,11 +267,27 @@ spec:
         # ~400 CVE dont ~182 sans correctif amont (voir docker/hardened/README.md).
         image: python:3.13-alpine
         command: ["python", "train.py"]
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        # Python écrit ses caches de bytecode et ses fichiers temporaires.
+        - name: tmp
+          mountPath: /tmp
         resources:
           limits:
             nvidia.com/gpu: 1
             memory: "8Gi"
             cpu: "4"
+          requests:
+            memory: "4Gi"
+            cpu: "2"
+      volumes:
+      - name: tmp
+        emptyDir: {}
 
 ---
 # Exemple 6 : NoExecute avec tolerationSeconds
@@ -167,13 +303,40 @@ spec:
     value: "true"
     effect: "NoExecute"
     tolerationSeconds: 3600
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 101       # nginx, dans les images Alpine
+    fsGroup: 101
+    seccompProfile:
+      type: RuntimeDefault
   containers:
   - name: app
     image: nginx:alpine
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
+    volumeMounts:
+    # nginx écrit son cache et son PID au démarrage : sans ces deux volumes, le
+    # master refuse de démarrer en lecture seule.
+    - name: cache
+      mountPath: /var/cache/nginx
+    - name: run
+      mountPath: /var/run
     resources:
       requests:
         memory: "128Mi"
         cpu: "100m"
+      limits:
+        memory: "256Mi"
+        cpu: "200m"
+  volumes:
+  - name: cache
+    emptyDir: {}
+  - name: run
+    emptyDir: {}
 
 ---
 # Exemple 7 : Deployment avec tolerations multiples
@@ -206,13 +369,37 @@ spec:
       - key: "gpu"
         operator: "Exists"
         effect: "PreferNoSchedule"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: app
+        # Image fictive : remplacer par la vôtre. Elle est listée dans
+        # .github/image-scan-ignore.txt, sans quoi le scan hebdomadaire échouerait
+        # en tentant de la tirer.
         image: myapp:1.0.0
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
         resources:
           requests:
             memory: "256Mi"
             cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: tmp
+        emptyDir: {}
 
 ---
 # Exemple 8 : DaemonSet avec toleration pour tous les nœuds
@@ -245,13 +432,33 @@ spec:
         effect: NoExecute
       - operator: Exists
         effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000      # fluent
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: fluentd
         # Fluentd ne publie plus de variante alpine : les tags actuels sont debian.
         image: fluent/fluentd:v1.19.3-debian-2.2
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
         volumeMounts:
+        # Lecture seule : un collecteur de logs LIT /var/log, il n'a aucune raison
+        # d'y écrire — et un hostPath inscriptible sur un nœud est une porte ouverte.
         - name: varlog
           mountPath: /var/log
+          readOnly: true
+        # Fluentd écrit ses buffers de position et ses fichiers temporaires.
+        - name: fluentd-buffer
+          mountPath: /fluentd/log
+        - name: tmp
+          mountPath: /tmp
         resources:
           requests:
             memory: "200Mi"
@@ -263,6 +470,10 @@ spec:
       - name: varlog
         hostPath:
           path: /var/log
+      - name: fluentd-buffer
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
 
 ---
 # Exemple 9 : StatefulSet pour nœuds SSD avec affinity + toleration
@@ -305,6 +516,12 @@ spec:
         operator: "Equal"
         value: "elasticsearch"
         effect: "NoSchedule"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000      # elasticsearch
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: elasticsearch
         image: docker.elastic.co/elasticsearch/elasticsearch:8.17.7
@@ -316,6 +533,21 @@ spec:
         env:
         - name: discovery.type
           value: "single-node"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        # Elasticsearch écrit ses index, ses logs et son fichier de config généré
+        # au démarrage. Les trois sont indispensables en lecture seule.
+        - name: data
+          mountPath: /usr/share/elasticsearch/data
+        - name: logs
+          mountPath: /usr/share/elasticsearch/logs
+        - name: tmp
+          mountPath: /tmp
         resources:
           requests:
             memory: "2Gi"
@@ -323,6 +555,15 @@ spec:
           limits:
             memory: "4Gi"
             cpu: "2"
+      volumes:
+      # emptyDir et non volumeClaimTemplates : cet exemple illustre le placement
+      # des pods, pas la persistance des données.
+      - name: data
+        emptyDir: {}
+      - name: logs
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
 
 ---
 # Exemple 10 : CronJob qui tolère les nœuds de maintenance
@@ -345,8 +586,15 @@ spec:
           - key: "maintenance"
             operator: "Exists"
             effect: "NoExecute"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
           containers:
           - name: backup
+            # Image fictive : voir .github/image-scan-ignore.txt.
             image: backup-tool:1.0.0
             command: ["/bin/sh"]
             args:
@@ -355,7 +603,22 @@ spec:
               echo "Starting backup..."
               # Script de backup ici
               echo "Backup completed"
+            securityContext:
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities:
+                drop:
+                - ALL
+            volumeMounts:
+            - name: tmp
+              mountPath: /tmp
             resources:
               requests:
                 memory: "512Mi"
                 cpu: "250m"
+              limits:
+                memory: "1Gi"
+                cpu: "500m"
+          volumes:
+          - name: tmp
+            emptyDir: {}
