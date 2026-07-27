@@ -12,8 +12,8 @@ Le scan hebdomadaire (`.github/workflows/scan-images.yml`) bloque sur les CVE de
   amont est en retard sur les paquets Alpine.
 - `grafana` **empire** en montant : 18 CVE en 10.0.0, 25 en 12.3.8.
 
-Une image dérivée qui fait `apk/apk upgrade` corrige ce retard. C'est tout ce que font
-ces Dockerfiles : **entrypoint, commande et utilisateur restent inchangés**.
+Une image dérivée qui fait `apk/apt upgrade` corrige ce retard. **Entrypoint et commande
+restent inchangés** ; l'utilisateur, lui, est ramené à un non-root (voir plus bas).
 
 | Image | Amont | CVE OS avant → après |
 |---|---|---|
@@ -23,7 +23,71 @@ ces Dockerfiles : **entrypoint, commande et utilisateur restent inchangés**.
 | `trivy` | `aquasec/trivy:0.72.0` | 13 → **0** |
 | `netshoot` | `nicolaka/netshoot:v0.16` | 7 → **0** |
 | `curl` | `curlimages/curl:8.21.0` | 1 → **0** |
+| `wordpress` | `wordpress:6.8-php8.3-apache` | 652 → **0** *(corrigeables)* |
 | `hpa-example` | *(remplacement, voir plus bas)* | 801 → **0** |
+
+`wordpress` est le seul cas où la colonne compte les CVE **corrigeables** et non le
+total : l'image garde **163 CVE OS sans correctif publié** dans Debian 13, avant comme
+après. Aucun `apt upgrade` ne les enlèvera, et la barrière ne bloque pas dessus — elle
+ne compte que le corrigeable. Le durcissement en retire tout de même 652, dont les 401
+de `linux-libc-dev` et les 53 d'ImageMagick.
+
+## Un utilisateur final non-root, en UID numérique
+
+Trivy signalait **DS-0002 (HIGH)** sur 6 de ces Dockerfiles : *« last USER should not be
+root »*. Toutes tournaient en root — non par choix, mais par héritage de leur amont.
+
+Chaque UID ci-dessous a été **testé au runtime avant d'être écrit**, jamais déduit :
+
+| Image | USER | Ce qu'il a fallu en plus | Vérification |
+|---|---|---|---|
+| `nginx` | `101` | `chown` de `/var/cache/nginx`, `/run`, `/etc/nginx/conf.d` | HTTP 200 |
+| `httpd` | `82` | `chown` de `/usr/local/apache2/logs` | HTTP 200 |
+| `wordpress` | `33` | — | HTTP 302 (installeur) |
+| `trivy` | `65534` | — | `trivy --version` |
+| `git` | `65534` | — | `git --version` |
+| `netshoot` | `65534` | — | `ping` + `curl` |
+| `curl` | `100` | *(l'amont était déjà non-root)* | HTTP 200 |
+
+**Les deux `chown` ne sont pas cosmétiques** : sans eux, nginx meurt sur
+`mkdir() "/var/cache/nginx/client_temp" failed` puis `open() "/run/nginx.pid" failed`,
+et httpd sur `could not create logs/httpd.pid`. Un `USER` posé sans les tester aurait
+livré des images qui ne démarrent pas.
+
+⚠️ **UID numériques, jamais un nom.** `runAsNonRoot: true` demande au kubelet de refuser
+un conteneur qui tournerait en root, et il ne sait le vérifier **avant démarrage** que
+sur un UID numérique. Un `USER nginx` passerait au travers du contrôle.
+
+Ces valeurs **rejoignent ce que les manifests imposaient déjà** :
+`tp01/webapp-nodeport.yaml` déclare `runAsUser: 101` avec des `emptyDir` sur
+`/var/cache/nginx` et `/var/run` ; `tp02/exercice10/wordpress-app.yaml` déclare
+`runAsUser: 33`. L'image et le manifest disent enfin la même chose — et là où un
+manifest fixe son propre `runAsUser`, c'est lui qui gagne, le `USER` de l'image n'est
+qu'un défaut plus sûr.
+
+**`netshoot` mérite une note** : les outils qui exigent `CAP_NET_RAW` ou `CAP_NET_ADMIN`
+(tcpdump en mode promiscuité, iptables) demandent désormais que le manifest les accorde
+explicitement. C'est le bon endroit pour ce choix — visible dans le YAML que lit
+l'élève, plutôt qu'implicite dans l'image.
+
+## Pas de `HEALTHCHECK`, volontairement (DS-0026)
+
+Trivy signale **DS-0026 (LOW)** — *« Add HEALTHCHECK instruction »* — sur ces 8
+Dockerfiles et sur `tp06/sample-app/`. On ne l'ajoute pas : **Kubernetes ignore purement
+et simplement le `HEALTHCHECK` d'une image.** Le kubelet ne lit que les `livenessProbe`,
+`readinessProbe` et `startupProbe` du manifest. En mettre un dans une image destinée à
+un cluster, c'est écrire du code mort — et dans un dépôt de formation, enseigner un
+réflexe qui ne sert à rien là où l'élève croira qu'il sert.
+
+Une nuance honnête : `tp07/docker-compose-app/` utilise `telemachlearning/nginx` sous
+Docker Compose, qui **exécute** bien le `HEALTHCHECK` d'une image. Ce compose n'en
+définit aucun aujourd'hui. Si on veut y enseigner les health checks, l'endroit juste
+reste le `healthcheck:` du service dans le compose — visible dans le fichier que lit
+l'élève — et non une instruction cachée dans l'image.
+
+Cette alerte ne devrait d'ailleurs plus remonter : le job `security-scan` déclarait
+`severity: CRITICAL,HIGH` sans `limit-severities-for-sarif`, ce qui envoyait **toutes**
+les sévérités dans l'onglet Security.
 
 ## Le cas `hpa-example`
 
@@ -70,8 +134,10 @@ Les Services des TPs exposent toujours 80 : les commandes des élèves sont inch
   la toleration et la ressource `nvidia.com/gpu` — pas l'image. Remplacée par
   `python:3.13-alpine` : **0 CVE, 17 Mo**, et `command: ["python", "train.py"]` reste
   cohérent.
-- **`wordpress`, `grafana`, `postgres`, `adminer`, `cadvisor`, `jenkins`** — publiées et
-  maintenues ailleurs, hors de ce dépôt.
+- **`grafana`, `postgres`, `adminer`, `cadvisor`, `jenkins`** — publiées et maintenues
+  ailleurs, hors de ce dépôt. (`wordpress` était dans ce cas jusqu'au 2026-07-27 : sa
+  source est désormais versionnée ici, parce que le rebuild mensuel ne peut reconstruire
+  que ce dont il a le Dockerfile.)
 
 ## Images à ne PAS monter — le bump est contre-productif
 
@@ -87,11 +153,31 @@ est verte même si le scan complet lui trouve des CVE de binaires.
 - **`postgres:15/17-alpine`, `mysql:8.4`, `cassandra:4.1`** — tags roulants déjà à jour.
   Leurs CVE viennent de binaires Go embarqués (`gosu`), pas des paquets OS.
 
+## Un durcissement se périme — d'où le rebuild mensuel
+
+**Une image durcie est une photo, pas un état.** `apk/apt upgrade` applique les
+correctifs disponibles le jour du build ; dès que la distribution en publie d'autres,
+l'image publiée est en retard sans que rien n'ait changé ici.
+
+Ce n'est pas théorique : `netshoot` et `wordpress`, publiées à **0 CVE OS corrigeable
+le 2026-07-16**, en portaient **15 et 3 le 2026-07-27** — onze jours.
+
+`.github/workflows/rebuild-hardened-images.yml` reconstruit et republie donc toutes ces
+images **le 1er de chaque mois** (et à la demande). Il tourne à 02:00 UTC, avant le
+premier scan hebdomadaire possible. Il exige les secrets `DOCKERHUB_USERNAME` et
+`DOCKERHUB_TOKEN`, avec droit d'écriture sur l'org `telemachlearning`.
+
+⚠️ **`--no-cache --pull` n'est pas une précaution, c'est la condition du durcissement.**
+Sans eux, Docker réutilise le layer `apk/apt upgrade` du build précédent : l'image
+reconstruite est **identique** à l'ancienne et le rebuild est un no-op silencieux.
+Mesuré le 2026-07-27 sur `netshoot` — 15 CVE avant, **15 après avec cache**, 0 sans.
+`build.sh` les passe systématiquement.
+
 ## Construire et publier
 
 ```bash
-# Construire une image
-docker build -t telemachlearning/nginx:1.29-alpine docker/hardened/nginx/
+# Construire une image (--no-cache --pull, voir ci-dessus)
+docker build --no-cache --pull -t telemachlearning/nginx:1.29-alpine docker/hardened/nginx/
 
 # Toutes, avec vérification et mesure
 ./docker/hardened/build.sh
@@ -99,6 +185,11 @@ docker build -t telemachlearning/nginx:1.29-alpine docker/hardened/nginx/
 # Publier (droits sur l'org telemachlearning requis)
 ./docker/hardened/build.sh --push
 ```
+
+`build.sh` affiche `corrigeables/total` et **sort en échec si une image garde des CVE
+OS corrigeables** — exactement ce sur quoi la barrière de `scan-images.yml` bloquera.
+Le chiffre qui décide est le premier : le total inclut des CVE sans correctif publié,
+sur lesquelles ni le durcissement ni la barrière n'ont prise.
 
 **Convention de tag : le tag reflète celui de l'amont** (`nginx:1.29-alpine`,
 `trivy:0.72.0`). `hpa-example` est versionnée à part (`1.0.0`) puisqu'elle ne dérive

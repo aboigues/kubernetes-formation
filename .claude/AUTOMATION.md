@@ -236,6 +236,7 @@ Les APIs Kubernetes évoluent rapidement :
 | **Git** | Chaque commit/PR | GitHub Actions |
 | **Continue** | Push sur branches | Workflow complet |
 | **Hebdomadaire** | Lundi 04:00 UTC | scan-images.yml (CVE des images) |
+| **Mensuel** | 1er du mois 02:00 UTC | rebuild-hardened-images.yml (re-durcissement) |
 
 ## 🔎 Scan hebdomadaire des images
 
@@ -368,22 +369,59 @@ python3 .github/scripts/image-scan-report.py reports --fail-on CRITICAL,HIGH
 # exit 0 = aucune vulnérabilité bloquante | exit 1 = scan en échec
 ```
 
-**Conséquence à assumer** : ~21 jobs restent rouges en permanence. Même le tag le plus
-récent d'une image amont porte des CVE OS corrigeables (`nginx:1.29-alpine` : 13), parce
-que l'image est en retard sur les paquets de sa distribution. Aucune action de ce dépôt
-ne les rend vertes — seule une **image dérivée** avec `apk/apt upgrade` le ferait, ce qui
-est un chantier à part.
-
-Le rouge ici veut donc dire « à surveiller », pas « à corriger avant de merger ».
+**Le rouge est censé être rare et temporaire.** Même le tag le plus récent d'une image
+amont porte des CVE OS corrigeables (`nginx:1.29-alpine` : 13), parce que l'image est en
+retard sur les paquets de sa distribution. C'est précisément pourquoi les images durcies
+de `docker/hardened/` existent : le chantier « image dérivée avec `apk/apt upgrade` »
+que ce document décrivait autrefois comme « à part » a été fait, et les TPs consomment
+désormais ces images.
 
 Le rapport distingue les vulnérabilités **corrigeables** (un correctif existe → monter le
-tag suffit) des autres. C'est la colonne à regarder en premier : les non-corrigeables
-demandent un changement d'image ou une acceptation du risque.
+tag, ou re-durcir) des autres. C'est la colonne à regarder en premier : les
+non-corrigeables demandent un changement d'image ou une acceptation du risque.
 
 **Pour ajuster le seuil**, modifier la variable `FAIL_ON_SEVERITY` en tête de
 `scan-images.yml` — un seul endroit, gate et rapport suivent :
 - `CRITICAL,HIGH` → valeur actuelle
 - `CRITICAL` → seuls les CRITICAL bloquent
+
+## 🔁 Re-durcissement mensuel des images
+
+### Emplacement
+`.github/workflows/rebuild-hardened-images.yml`
+
+### Pourquoi il existe
+
+**Un durcissement est une photo, pas un état.** `apk/apt upgrade` applique les
+correctifs disponibles le jour du build ; dès qu'Alpine ou Debian en publient
+d'autres, l'image publiée est en retard sans que rien n'ait changé dans le dépôt.
+
+Mesuré le **2026-07-27** : `telemachlearning/netshoot:v0.16` et
+`telemachlearning/wordpress:6.8-php8.3-apache`, publiées à **0 CVE OS corrigeable le
+2026-07-16**, en portaient **15 et 3** onze jours plus tard. Sans ce workflow, chaque
+lundi rouge demandait un rebuild manuel — le scan servait de rappel, donc toujours
+après coup.
+
+### Déclencheurs
+- **Schedule** : `0 2 1 * *` (1er du mois, 02:00 UTC), deux heures avant le premier
+  scan hebdomadaire possible
+- **Manuel** : `workflow_dispatch`, avec une case `push` pour construire sans publier
+- **Push** : sur modification de `docker/hardened/**` — **construit sans jamais publier**
+
+### Secrets requis
+`DOCKERHUB_USERNAME` et `DOCKERHUB_TOKEN`, avec droit d'écriture sur l'org
+`telemachlearning`. Le workflow vérifie leur présence **avant** de construire : sans
+cette étape, l'échec n'apparaîtrait qu'après ~40 minutes de build.
+
+### ⚠️ `--no-cache --pull` conditionne tout
+
+Sans ces deux options, Docker réutilise le layer `apk/apt upgrade` du build précédent :
+l'image reconstruite est **identique** à l'ancienne et le re-durcissement est un **no-op
+silencieux**. Mesuré sur `netshoot` — 15 CVE avant, **15 après avec cache**, 0 sans.
+`docker/hardened/build.sh` les passe systématiquement.
+
+`build.sh` sort en échec si une image garde des CVE OS corrigeables : c'est le même
+verdict que la barrière du scan, rendu un mois plus tôt.
 
 ## 🛠️ Utilisation
 

@@ -487,6 +487,52 @@ fichier d'exceptions, il **bloque** (échoue fermé).
 
 **État** : barrière verte sur les 33 images. Tout rouge futur = réellement actionnable.
 
+### Session 2026-07-27 - Le durcissement se périme, d'où un rebuild mensuel
+
+**Point de départ** : premier scan rouge depuis la mise en place de la barrière — et il
+a bien signalé du **réellement actionnable**, sur 3 images :
+
+| Image | OS corrigeables (C/H) | Action | Après |
+|---|---|---|---|
+| `amazon/aws-cli:2.35.24` | 0/19 | bump → **2.36.8** | **0 CVE, toutes catégories** |
+| `telemachlearning/netshoot:v0.16` | 0/15 | re-durcie et republiée | **0/0** |
+| `telemachlearning/wordpress:6.8-php8.3-apache` | 0/3 | re-durcie et republiée | **0/163** |
+
+**Le fait marquant** : les deux images durcies avaient été publiées **à 0 CVE OS
+corrigeable le 2026-07-16**. Onze jours plus tard, 15 et 3. Rien n'avait changé dans le
+dépôt : Alpine et Debian avaient simplement publié des correctifs. **Un durcissement est
+une photo, pas un état.**
+
+**Le piège qui a failli passer inaperçu** : le premier rebuild de netshoot a rendu
+**exactement les mêmes 15 CVE**. Docker avait réutilisé le layer `apk upgrade` du build
+précédent — le re-durcissement était un **no-op silencieux**. Avec `--no-cache --pull` :
+0. `build.sh` passe désormais les deux options systématiquement, et le README comme
+`AUTOMATION.md` expliquent pourquoi ce n'est pas une précaution mais la condition du
+durcissement.
+
+**Décisions** :
+1. **`amazon/aws-cli` : tag de patch assumé, faute de mieux.** Le dépôt n'expose que
+   `latest`, `amd64`, `arm64` et des tags de patch — publiés **quotidiennement**. Pas de
+   tag roulant `2` ou `2.36` sur lequel s'appuyer comme pour `mysql:8.4` ou `prometheus:v3`.
+   Cette image repourrira, et le scan hebdomadaire le dira.
+2. **Source de `wordpress` versionnée ici** (`docker/hardened/wordpress/`). Elle était
+   « maintenue ailleurs » : personne ne savait la reconstruire. Le rebuild mensuel ne
+   peut reconstruire que ce dont il a le Dockerfile.
+3. **Rebuild mensuel automatique** — `.github/workflows/rebuild-hardened-images.yml`,
+   le 1er du mois à 02:00 UTC, avant le premier scan hebdomadaire possible. Sur `push`
+   il construit sans publier. Exige `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN`.
+4. **`build.sh` aligné sur la barrière** : il comptait *toutes* les CVE OS et aurait
+   crié au feu sur wordpress (163 sans correctif). Il affiche maintenant
+   `corrigeables/total` et **sort en échec** sur le premier chiffre uniquement — même
+   invariant que celui qui lie le rapport et la barrière du scan.
+
+**Vérifié depuis le registre distant** (`trivy --image-src remote`, pas le cache local) :
+les 3 images sont à 0 CVE OS corrigeable.
+
+**Reste à faire** : créer les deux secrets Docker Hub dans le dépôt, sans quoi le
+rebuild mensuel échouera dès sa première exécution — volontairement, et avec le message
+qui dit quoi faire.
+
 ## Décisions importantes
 
 ### Architecture d'automatisation (2025-12-12)
