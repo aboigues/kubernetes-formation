@@ -584,7 +584,7 @@ spec:
               type: RuntimeDefault
           containers:
           - name: backup
-            image: amazon/aws-cli:2.36.8
+            image: amazon/aws-cli:2.36.21
             command:
             - /bin/sh
             - -c

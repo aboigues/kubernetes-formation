@@ -35,7 +35,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: wordpress
-        image: telemachlearning/wordpress:6.8-php8.3-apache
+        image: telemachlearning/wordpress:7.0-php8.5-apache
         env:
         - name: WORDPRESS_DB_HOST
           value: mysql-service

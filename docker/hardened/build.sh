@@ -21,7 +21,7 @@ IMAGES=(
   "netshoot|telemachlearning/netshoot:v0.16|nicolaka/netshoot:v0.16"
   "curl|telemachlearning/curl:8.21.0|curlimages/curl:8.21.0"
   "httpd|telemachlearning/httpd:2.4-alpine|httpd:2.4-alpine"
-  "wordpress|telemachlearning/wordpress:6.8-php8.3-apache|wordpress:6.8-php8.3-apache"
+  "wordpress|telemachlearning/wordpress:7.0-php8.5-apache|wordpress:7.0-php8.5-apache"
   "hpa-example|telemachlearning/hpa-example:1.0.0|—"
 )
 
