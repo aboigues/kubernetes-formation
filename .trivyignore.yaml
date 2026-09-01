@@ -28,27 +28,9 @@
 #
 # Format : https://trivy.dev/latest/docs/configuration/filtering/#by-finding-ids
 
-vulnerabilities:
-  # ── fluent/fluentd-kubernetes-daemonset:v1.19-debian-elasticsearch8-amd64-1 ──
-  # Debian a publié le correctif (libcurl4t64 8.14.1-2+deb13u3 → +deb13u4) ; c'est
-  # l'image fluentd qui n'a pas été reconstruite depuis. Le correctif est donc
-  # applicable, mais pas depuis un manifest : il faut durcir l'image
-  # (`docker/hardened/`, un simple `apt upgrade`) puis publier le résultat sur
-  # l'org partagée telemachlearning — ce qui demande une autorisation.
-  #
-  # Acceptation temporaire en attendant cette décision. À l'expiration, soit le
-  # durcissement est fait et ces deux entrées disparaissent, soit l'amont a
-  # reconstruit et elles deviennent sans objet.
-  - id: CVE-2026-5773
-    purl: "pkg:deb/debian/libcurl4t64"
-    statement: >-
-      libcurl4t64 8.14.1-2+deb13u3, corrigé en +deb13u4. Non corrigeable par un
-      bump de tag (l'image amont n'a pas été reconstruite) : nécessite un
-      durcissement apt upgrade + publication sur telemachlearning.
-    expired_at: 2026-08-31
-  - id: CVE-2026-6276
-    purl: "pkg:deb/debian/libcurl4t64"
-    statement: >-
-      Même paquet et même correctif que CVE-2026-5773 : libcurl4t64
-      8.14.1-2+deb13u3 → +deb13u4, en attente du durcissement de l'image.
-    expired_at: 2026-08-31
+# Aucune exception active au 2026-09-01. Les 2 entrées fluentd/libcurl4t64
+# (CVE-2026-5773, CVE-2026-6276) ont été retirées : l'amont a reconstruit
+# l'image entre-temps (libcurl4t64 est passé en 8.14.1-2+deb13u4), et leur
+# expired_at du 2026-08-31 les aurait de toute façon rebloquées. Voir la note
+# de mémoire « barriere-scan-images-actionnable » pour l'historique.
+vulnerabilities: []
