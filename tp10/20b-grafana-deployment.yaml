@@ -24,7 +24,7 @@ spec:
 
       containers:
       - name: grafana
-        image: telemachlearning/grafana:13.0.2
+        image: grafana/grafana:13.2.1
         ports:
         - containerPort: 3000
           name: http
