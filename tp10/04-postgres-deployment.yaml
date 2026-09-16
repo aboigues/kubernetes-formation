@@ -38,8 +38,7 @@ spec:
           echo "InitContainer completed successfully"
         securityContext:
           allowPrivilegeEscalation: false
-          # Note: readOnlyRootFilesystem is not set for init container
-          # This allows the container to perform initialization tasks if needed
+          readOnlyRootFilesystem: true
           runAsNonRoot: true
           runAsUser: 70
           capabilities:
@@ -62,9 +61,7 @@ spec:
           name: postgres
         securityContext:
           allowPrivilegeEscalation: false
-          # Note: readOnlyRootFilesystem is not set for PostgreSQL
-          # PostgreSQL needs write access to manage its data directory
-          # Security is maintained through: runAsNonRoot, capabilities drop, and volume isolation
+          readOnlyRootFilesystem: true
           runAsNonRoot: true
           runAsUser: 70
           capabilities:
