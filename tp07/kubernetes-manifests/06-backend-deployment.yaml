@@ -24,9 +24,21 @@ spec:
         tier: api
         version: "1.0"
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
       - name: wait-for-database
         image: busybox:1.36
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
         command:
           - sh
           - -c
@@ -42,6 +54,12 @@ spec:
         # Alpine plutôt que slim : 0 CVE OS contre 22 pour python:3.11-slim.
         # server.py n'utilise que la stdlib, aucune dépendance compilée en jeu.
         image: python:3.13-alpine
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
         command:
           - python
           - /app/server.py

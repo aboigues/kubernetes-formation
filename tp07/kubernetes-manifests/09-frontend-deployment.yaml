@@ -24,9 +24,21 @@ spec:
         tier: web
         version: "1.0"
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: nginx
         image: telemachlearning/nginx:1.29-alpine
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
         ports:
         - containerPort: 80
           name: http
@@ -42,6 +54,10 @@ spec:
           mountPath: /etc/nginx/conf.d/default.conf
           subPath: default.conf
           readOnly: true
+        - name: cache
+          mountPath: /var/cache/nginx
+        - name: run
+          mountPath: /var/run
         resources:
           requests:
             memory: "64Mi"
@@ -72,3 +88,7 @@ spec:
       - name: nginx-config
         configMap:
           name: frontend-nginx-config
+      - name: cache
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
