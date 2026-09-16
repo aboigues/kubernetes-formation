@@ -20,9 +20,21 @@ spec:
         app: database
         tier: data
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: postgres
         image: postgres:15-alpine
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
         ports:
         - containerPort: 5432
           name: postgres
@@ -30,10 +42,18 @@ spec:
         envFrom:
         - secretRef:
             name: database-credentials
+        env:
+        # PGDATA doit pointer vers un sous-répertoire : subPath cassait
+        # l'application de fsGroup au volume (cf. tp10/04-postgres-deployment.yaml).
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
         volumeMounts:
         - name: database-storage
           mountPath: /var/lib/postgresql/data
-          subPath: postgres
+        - name: tmp
+          mountPath: /tmp
+        - name: run
+          mountPath: /var/run/postgresql
         resources:
           requests:
             memory: "256Mi"
@@ -65,3 +85,7 @@ spec:
       - name: database-storage
         persistentVolumeClaim:
           claimName: database-pvc
+      - name: tmp
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
