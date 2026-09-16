@@ -441,7 +441,7 @@ spec:
       containers:
       - name: fluentd
         # Fluentd ne publie plus de variante alpine : les tags actuels sont debian.
-        image: fluent/fluentd:v1.19.3-debian-2.2
+        image: fluent/fluentd:v1.19.3-debian-2.3
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
