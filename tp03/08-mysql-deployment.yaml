@@ -35,9 +35,21 @@ spec:
       labels:
         app: mysql
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: mysql
         image: mysql:8.4
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
         ports:
         - containerPort: 3306
           name: mysql
@@ -55,6 +67,10 @@ spec:
         volumeMounts:
         - name: mysql-storage
           mountPath: /var/lib/mysql
+        - name: tmp
+          mountPath: /tmp
+        - name: run
+          mountPath: /var/run/mysqld
         resources:
           requests:
             memory: "256Mi"
@@ -66,6 +82,10 @@ spec:
       - name: mysql-storage
         persistentVolumeClaim:
           claimName: mysql-pvc
+      - name: tmp
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
