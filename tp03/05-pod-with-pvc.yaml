@@ -3,14 +3,34 @@ kind: Pod
 metadata:
   name: pod-with-pvc
 spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+    fsGroup: 101
+    seccompProfile:
+      type: RuntimeDefault
   containers:
   - name: app
     image: telemachlearning/nginx:1.29-alpine
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
     volumeMounts:
     - name: persistent-storage
       mountPath: /usr/share/nginx/html
+    - name: cache
+      mountPath: /var/cache/nginx
+    - name: run
+      mountPath: /var/run
 
   volumes:
   - name: persistent-storage
     persistentVolumeClaim:
       claimName: pvc-demo
+  - name: cache
+    emptyDir: {}
+  - name: run
+    emptyDir: {}

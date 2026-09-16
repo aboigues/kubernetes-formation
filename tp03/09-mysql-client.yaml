@@ -3,7 +3,25 @@ kind: Pod
 metadata:
   name: mysql-client
 spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    fsGroup: 999
+    seccompProfile:
+      type: RuntimeDefault
   containers:
   - name: mysql-client
     image: mysql:8.4
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
     command: ['sh', '-c', 'sleep 3600']
+    volumeMounts:
+    - name: tmp
+      mountPath: /tmp
+  volumes:
+  - name: tmp
+    emptyDir: {}
