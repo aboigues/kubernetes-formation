@@ -41,6 +41,7 @@ spec:
         image: postgres:17-alpine
         securityContext:
           allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
           capabilities:
             drop:
             - ALL
