@@ -1,0 +1,129 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: microservices
+  labels:
+    app: backend
+    component: config
+data:
+  DATABASE_HOST: "database"
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: "microservices"
+  REDIS_HOST: "cache"
+  REDIS_PORT: "6379"
+  PORT: "5000"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-code
+  namespace: microservices
+  labels:
+    app: backend
+    component: code
+data:
+  server.js: |
+    'use strict';
+    const http = require('http');
+    const os = require('os');
+
+    const PORT = process.env.PORT || 5000;
+
+    const server = http.createServer((req, res) => {
+      if (req.url === '/api/health' || req.url === '/health') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          status: 'healthy',
+          timestamp: new Date().toISOString(),
+          hostname: os.hostname(),
+          database: {
+            host: process.env.DATABASE_HOST || 'not set',
+            port: process.env.DATABASE_PORT || 'not set',
+            name: process.env.DATABASE_NAME || 'not set',
+          },
+          cache: {
+            host: process.env.REDIS_HOST || 'not set',
+            port: process.env.REDIS_PORT || 'not set',
+          },
+        }));
+        return;
+      }
+
+      if (req.url === '/api/info') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          service: 'backend-api',
+          version: '1.0.0',
+          endpoints: ['/api/health', '/api/info'],
+        }));
+        return;
+      }
+
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Not found', path: req.url }));
+    });
+
+    server.listen(PORT, '0.0.0.0', () => {
+      console.log(`Backend API listening on port ${PORT}`);
+    });
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-nginx-config
+  namespace: microservices
+  labels:
+    app: frontend
+    component: nginx-config
+data:
+  default.conf: |
+    server {
+        listen 80;
+        server_name _;
+
+        location / {
+            root /usr/share/nginx/html;
+            index index.html;
+        }
+
+        # Proxifie les requêtes API vers le backend
+        location /api/ {
+            proxy_pass http://backend:5000/api/;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        location /health {
+            access_log off;
+            return 200 "OK\n";
+            add_header Content-Type text/plain;
+        }
+    }
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-html
+  namespace: microservices
+  labels:
+    app: frontend
+    component: html
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="fr">
+    <head>
+      <meta charset="UTF-8">
+      <title>Microservices Demo</title>
+    </head>
+    <body>
+      <h1>Frontend (Nginx) → Backend (Node.js) → Database (PostgreSQL) / Cache (Redis)</h1>
+      <p>Statut backend : <a href="/api/health">/api/health</a></p>
+    </body>
+    </html>

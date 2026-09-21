@@ -3040,6 +3040,218 @@ echo "http://$NODE_IP:$NODE_PORT"
 </details>
 
 <details>
+<summary>Solution Exercice 11 : Application avec microservices</summary>
+
+> Solution complète et durcie (securityContext, resources, probes) dans
+> [`tp02/exercice11/`](./exercice11/). Version simplifiée ci-dessous pour se concentrer sur les
+> concepts K8s (ConfigMap, Secret, chaînage des services).
+
+**00-namespace.yaml**
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: microservices
+```
+
+**01-configmaps.yaml**
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: microservices
+data:
+  DATABASE_HOST: "database"
+  DATABASE_PORT: "5432"
+  REDIS_HOST: "cache"
+  REDIS_PORT: "6379"
+```
+
+**02-secrets.yaml**
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: database-credentials
+  namespace: microservices
+type: Opaque
+stringData:
+  POSTGRES_USER: admin
+  POSTGRES_PASSWORD: changeme123
+```
+
+**03-redis.yaml**
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cache
+  namespace: microservices
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cache
+  template:
+    metadata:
+      labels:
+        app: cache
+    spec:
+      containers:
+      - name: redis
+        image: redis:7.4-alpine
+        ports:
+        - containerPort: 6379
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cache
+  namespace: microservices
+spec:
+  type: ClusterIP
+  selector:
+    app: cache
+  ports:
+  - port: 6379
+```
+
+**04-database.yaml**
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: database
+  namespace: microservices
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: database
+  template:
+    metadata:
+      labels:
+        app: database
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:17-alpine
+        envFrom:
+        - secretRef:
+            name: database-credentials
+        ports:
+        - containerPort: 5432
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: database
+  namespace: microservices
+spec:
+  type: ClusterIP
+  selector:
+    app: database
+  ports:
+  - port: 5432
+```
+
+**05-backend.yaml**
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: microservices
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+      - name: backend
+        image: node:24-alpine
+        command: ["node", "-e", "require('http').createServer((req,res)=>res.end('OK')).listen(5000)"]
+        envFrom:
+        - configMapRef:
+            name: backend-config
+        - secretRef:
+            name: database-credentials
+        ports:
+        - containerPort: 5000
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: microservices
+spec:
+  type: ClusterIP
+  selector:
+    app: backend
+  ports:
+  - port: 5000
+```
+
+**06-frontend.yaml**
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: microservices
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: microservices
+spec:
+  type: NodePort
+  selector:
+    app: frontend
+  ports:
+  - port: 80
+    targetPort: 80
+```
+
+**Déploiement :**
+```bash
+kubectl apply -f 00-namespace.yaml
+kubectl apply -f 01-configmaps.yaml
+kubectl apply -f 02-secrets.yaml
+kubectl apply -f 03-redis.yaml
+kubectl apply -f 04-database.yaml
+kubectl apply -f 05-backend.yaml
+kubectl apply -f 06-frontend.yaml
+```
+</details>
+
+<details>
 <summary>Solution Exercice de debugging</summary>
 
 **Version corrigée** `17-buggy-manifest-fixed.yaml` :

@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: database
+  namespace: microservices
+  labels:
+    app: database
+    tier: data
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # Important pour les bases de données
+  selector:
+    matchLabels:
+      app: database
+  template:
+    metadata:
+      labels:
+        app: database
+        tier: data
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: postgres
+        image: postgres:17-alpine
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        ports:
+        - containerPort: 5432
+          name: postgres
+        envFrom:
+        - secretRef:
+            name: database-credentials
+        env:
+        # PGDATA doit pointer vers un sous-répertoire, sinon fsGroup ne
+        # s'applique pas correctement au volume monté.
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        volumeMounts:
+        - name: database-storage
+          mountPath: /var/lib/postgresql/data
+        - name: tmp
+          mountPath: /tmp
+        - name: run
+          mountPath: /var/run/postgresql
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          exec:
+            command: ["pg_isready", "-U", "admin"]
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command: ["pg_isready", "-U", "admin"]
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
+      volumes:
+      # Exercice de base : pas de PVC (voir la Structure suggérée). En
+      # production, remplacez cet emptyDir par un PersistentVolumeClaim
+      # comme dans l'Exercice 10, sinon les données sont perdues à chaque
+      # redémarrage du pod.
+      - name: database-storage
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: database
+  namespace: microservices
+  labels:
+    app: database
+    tier: data
+spec:
+  type: ClusterIP
+  selector:
+    app: database
+  ports:
+  - port: 5432
+    targetPort: 5432
+    name: postgres
