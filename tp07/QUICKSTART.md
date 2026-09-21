@@ -22,17 +22,17 @@ minikube addons enable metrics-server
 cd tp7/docker-compose-app
 
 # Démarrer l'application
-docker-compose up -d
+docker compose up -d
 
 # Vérifier que tout fonctionne
-docker-compose ps
+docker compose ps
 curl http://localhost:8080
 
 # Voir les logs
-docker-compose logs -f
+docker compose logs -f
 
 # Arrêter
-docker-compose down
+docker compose down
 ```
 
 ## Option 2 : Déploiement sur Kubernetes (après migration)

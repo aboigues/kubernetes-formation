@@ -1024,8 +1024,8 @@ curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 # kustomize - Configuration management
 kubectl apply -k ./kustomize/
 
-# kubeval - Valider les manifests
-kubeval deployment.yaml
+# kubeconform - Valider les manifests (successeur de kubeval, déprécié et non maintenu)
+kubeconform deployment.yaml
 
 # yamllint - Linter YAML
 yamllint deployment.yaml
