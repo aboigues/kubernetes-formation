@@ -1158,12 +1158,17 @@ kubectl get services
 # - backend-api-service (ClusterIP)
 # - frontend-service (LoadBalancer avec EXTERNAL-IP)
 
-# Tester la connectivité interne
+# Tester la connectivité interne vers le backend (HTTP)
 kubectl run test-pod --rm -it --image=busybox -- sh
 # Dans le pod :
 # wget -qO- http://backend-api-service:8080
-# wget -qO- http://database-service:5432
 # exit
+
+# Tester la connectivité vers la base de données (protocole PostgreSQL,
+# pas HTTP : wget échoue toujours sur ce port même quand la base est saine)
+kubectl run test-pg --rm -it --image=postgres:17-alpine \
+  --env="PGPASSWORD=changeme-use-a-strong-password" \
+  -- psql -h database-service -p 5432 -U postgres -d appdb -c "SELECT 1;"
 
 # Accéder au frontend depuis l'extérieur
 # Avec minikube tunnel
