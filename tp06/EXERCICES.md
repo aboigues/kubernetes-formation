@@ -16,8 +16,12 @@ Avant de commencer, assurez-vous d'avoir:
 minikube start --cpus=2 --memory=4096
 
 # Activer les addons nécessaires
-minikube addons enable ingress
 minikube addons enable metrics-server
+
+# Gateway API : CRDs + NGINX Gateway Fabric (voir tp06/README.md §2.2 pour le détail)
+kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard?ref=v2.7.2" | kubectl apply -f -
+helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
+  --create-namespace --namespace nginx-gateway --set nginx.service.type=NodePort
 ```
 
 ## Test Rapide
@@ -60,20 +64,28 @@ helm install my-app-prod ./01-helm/my-app -f 01-helm/my-app/values-prod.yaml
 helm uninstall my-release
 ```
 
-### 2. Ingress - Exercices 5 et 6
+### 2. Gateway API - Exercices 5 et 6
 
-#### Exercice 5: Ingress simple
+> ingress-nginx est retiré depuis mars 2026 : ces exercices utilisent la Gateway API avec
+> NGINX Gateway Fabric. Voir `tp06/README.md` Partie 2 pour le détail et §2.7 pour un rappel
+> de l'Ingress classique (connaissance CKAD, non déployé ici).
+
+#### Exercice 5: Gateway + HTTPRoute simple
 
 ```bash
 # Déployer l'application
-kubectl apply -f 02-ingress/01-app-deployment.yaml
+kubectl apply -f 02-gateway-api/01-app-deployment.yaml
 
-# Créer l'Ingress
-kubectl apply -f 02-ingress/02-ingress-simple.yaml
+# Créer le Gateway (une seule fois, partagé par tous les exercices suivants)
+kubectl apply -f 02-gateway-api/02-gateway.yaml
+
+# Créer la HTTPRoute
+kubectl apply -f 02-gateway-api/03-httproute-simple.yaml
 
 # Vérifier
-kubectl get ingress
-kubectl describe ingress web-app-ingress
+kubectl get gateway main-gateway
+kubectl get httproute web-app-route
+kubectl describe httproute web-app-route
 
 # Ajouter l'entrée dans /etc/hosts
 echo "$(minikube ip) myapp.local" | sudo tee -a /etc/hosts
@@ -82,7 +94,7 @@ echo "$(minikube ip) myapp.local" | sudo tee -a /etc/hosts
 curl http://myapp.local
 ```
 
-#### Exercice 6: Ingress avec TLS
+#### Exercice 6: HTTPRoute avec TLS
 
 ```bash
 # Créer un certificat auto-signé
@@ -90,34 +102,34 @@ openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
   -keyout tls.key -out tls.crt \
   -subj "/CN=myapp.local/O=myapp"
 
-# Créer le Secret TLS
+# Créer le Secret TLS référencé par le listener https du Gateway
 kubectl create secret tls myapp-tls \
   --cert=tls.crt \
   --key=tls.key
 
-# Appliquer l'Ingress TLS
-kubectl apply -f 02-ingress/04-ingress-tls.yaml
+# Appliquer la HTTPRoute TLS
+kubectl apply -f 02-gateway-api/05-httproute-tls.yaml
 
 # Tester HTTPS
 curl -k https://myapp.local
 ```
 
-#### Multi-service Ingress
+#### Multi-service HTTPRoute
 
 ```bash
 # Déployer frontend et API
-kubectl apply -f 02-ingress/03-multi-service-ingress.yaml
+kubectl apply -f 02-gateway-api/04-httproute-multi-service.yaml
 
 # Tester les routes
 curl http://myapp.local/
 curl http://myapp.local/api
 ```
 
-#### Ingress avancé
+#### HTTPRoute avancée
 
 ```bash
-# Appliquer avec annotations avancées
-kubectl apply -f 02-ingress/05-ingress-advanced.yaml
+# Appliquer avec filtres CORS / en-têtes / timeouts (natifs, canal standard)
+kubectl apply -f 02-gateway-api/06-httproute-advanced.yaml
 
 # Tester avec headers
 curl -v http://myapp.local
@@ -195,7 +207,7 @@ kubectl scale deployment app-canary --replicas=0
 kubectl scale deployment app-stable --replicas=10
 ```
 
-#### A/B Testing avec Ingress
+#### A/B Testing avec la Gateway API
 
 ```bash
 kubectl apply -f 03-deployment-strategies/09-ab-testing.yaml
@@ -315,7 +327,8 @@ Pour nettoyer toutes les ressources créées:
 # Supprimer tous les déploiements
 kubectl delete deployment --all
 kubectl delete service --all
-kubectl delete ingress --all
+kubectl delete httproute --all
+kubectl delete gateway --all
 kubectl delete hpa --all
 kubectl delete pdb --all
 
@@ -341,7 +354,7 @@ Pour valider la syntaxe de tous les fichiers YAML sans les appliquer:
 helm lint 01-helm/my-app/
 
 # Valider les fichiers Kubernetes
-kubectl apply --dry-run=client -f 02-ingress/
+kubectl apply --dry-run=client -f 02-gateway-api/
 kubectl apply --dry-run=client -f 03-deployment-strategies/
 kubectl apply --dry-run=client -f 04-production-best-practices/
 
@@ -361,6 +374,8 @@ kubectl kustomize 07-gitops-structure/overlays/production
 ## Ressources
 
 - [Documentation Helm](https://helm.sh/docs/)
-- [Documentation Ingress NGINX](https://kubernetes.github.io/ingress-nginx/)
+- [Documentation Gateway API](https://gateway-api.sigs.k8s.io/)
+- [Documentation NGINX Gateway Fabric](https://docs.nginx.com/nginx-gateway-fabric/)
+- [Documentation Ingress NGINX](https://kubernetes.github.io/ingress-nginx/) (archivé, projet retiré depuis mars 2026)
 - [Documentation ArgoCD](https://argo-cd.readthedocs.io/)
 - [Documentation Kustomize](https://kustomize.io/)

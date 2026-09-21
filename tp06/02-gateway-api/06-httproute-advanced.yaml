@@ -1,33 +1,46 @@
-apiVersion: networking.k8s.io/v1
-kind: Ingress
+# Équivalent portable (canal standard Gateway API) des annotations nginx.ingress.kubernetes.io/*
+# de l'ancien 05-ingress-advanced.yaml : en-têtes personnalisés, CORS et timeouts sont ici des
+# champs typés et validés par l'API, pas des chaînes libres injectées dans la config nginx.
+#
+# Ce qui N'A PAS d'équivalent dans le canal standard : le rate limiting et les sessions
+# collantes (nginx.ingress.kubernetes.io/limit-rps, affinity: cookie). Ce sont des extensions
+# propres à chaque implémentation (ex. ClientSettingsPolicy de NGINX Gateway Fabric), attachées
+# explicitement via policy attachment plutôt que dissimulées dans des annotations libres non
+# validées — c'est exactement ce type de choix (configuration-snippet = injection de config
+# arbitraire) qui a coûté sa retraite à ingress-nginx.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
 metadata:
-  name: advanced-ingress
-  annotations:
-    # Rate limiting
-    nginx.ingress.kubernetes.io/limit-rps: "10"
-    # Sticky sessions
-    nginx.ingress.kubernetes.io/affinity: "cookie"
-    nginx.ingress.kubernetes.io/session-cookie-name: "route"
-    # CORS
-    nginx.ingress.kubernetes.io/enable-cors: "true"
-    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE"
-    # Timeouts
-    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "30"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
-    # Custom headers
-    nginx.ingress.kubernetes.io/configuration-snippet: |
-      more_set_headers "X-Custom-Header: MyValue";
+  name: advanced-route
 spec:
-  ingressClassName: nginx
+  parentRefs:
+  - name: main-gateway
+    sectionName: http
+  hostnames:
+  - myapp.local
   rules:
-  - host: myapp.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: web-app-service
-            port:
-              number: 80
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    filters:
+    - type: RequestHeaderModifier
+      requestHeaderModifier:
+        add:
+        - name: X-Custom-Header
+          value: MyValue
+    - type: CORS
+      cors:
+        allowOrigins:
+        - "*"
+        allowMethods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+    timeouts:
+      request: 30s
+      backendRequest: 30s
+    backendRefs:
+    - name: web-app-service
+      port: 80

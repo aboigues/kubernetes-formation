@@ -4,11 +4,11 @@ Votre release s'appelle {{ .Release.Name }}.
 
 Pour accéder à votre application :
 
-{{- if .Values.ingress.enabled }}
+{{- if .Values.gateway.route.enabled }}
 
-  L'application est accessible via Ingress :
-  {{- range $host := .Values.ingress.hosts }}
-    http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ (index $host.paths 0).path }}
+  L'application est accessible via la Gateway API (HTTPRoute) :
+  {{- range $host := .Values.gateway.route.hostnames }}
+    http://{{ $host }}{{ (index $.Values.gateway.route.paths 0).path }}
   {{- end }}
 
 {{- else if contains "NodePort" .Values.service.type }}

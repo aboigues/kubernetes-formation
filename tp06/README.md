@@ -4,7 +4,7 @@
 
 À la fin de ce TP, vous serez capable de :
 - Déployer et gérer des applications avec Helm
-- Configurer des Ingress Controllers pour l'exposition des services
+- Exposer vos applications avec la **Gateway API** (et connaître l'Ingress classique pour le CKAD)
 - Mettre en place un pipeline CI/CD avec GitHub Actions
 - Implémenter des stratégies de déploiement avancées (Blue-Green, Canary)
 - Gérer les environnements (dev, staging, production)
@@ -148,7 +148,7 @@ tree my-app/
 # ├── templates/          # Templates Kubernetes
 # │   ├── deployment.yaml
 # │   ├── service.yaml
-# │   ├── ingress.yaml
+# │   ├── httproute.yaml
 # │   ├── _helpers.tpl
 # │   └── NOTES.txt
 # └── charts/             # Dépendances
@@ -189,16 +189,20 @@ service:
   type: ClusterIP
   port: 80
 
-ingress:
-  enabled: false
-  className: "nginx"
-  annotations: {}
-  hosts:
-    - host: myapp.local
-      paths:
-        - path: /
-          pathType: Prefix
-  tls: []
+# HTTPRoute Gateway API — nécessite qu'un Gateway ("main-gateway") soit déjà provisionné
+# (voir Partie 2). L'ancien champ ingress: (ingressClassName + annotations nginx.ingress.*)
+# n'existe plus : ingress-nginx est retiré depuis mars 2026.
+gateway:
+  route:
+    enabled: false
+    parentRefs:
+      - name: main-gateway
+        namespace: default
+    hostnames:
+      - myapp.local
+    paths:
+      - path: /
+        pathType: PathPrefix
 
 resources:
   limits:
@@ -300,11 +304,11 @@ spec:
 > - `capabilities: drop: ALL` - Suppression de toutes les capabilities Linux
 > - `seccompProfile: RuntimeDefault` - Profil Seccomp par défaut
 
-Les autres templates générés par `helm create` sont déjà fonctionnels (`service.yaml`, `ingress.yaml`, `hpa.yaml`, `_helpers.tpl`). Vous pouvez les consulter avec :
+Les autres templates générés par `helm create` sont déjà fonctionnels (`service.yaml`, `httproute.yaml`, `hpa.yaml`, `_helpers.tpl`). Vous pouvez les consulter avec :
 
 ```bash
 cat my-app/templates/service.yaml
-cat my-app/templates/ingress.yaml
+cat my-app/templates/httproute.yaml
 cat my-app/templates/hpa.yaml
 cat my-app/templates/_helpers.tpl
 ```
@@ -395,15 +399,25 @@ helm install my-app-prod ./my-app -f values-prod.yaml
 helm list
 ```
 
-## Partie 2 : Ingress Controllers et Gateway API
+## Partie 2 : Exposer vos applications avec la Gateway API
+
+> **⚠️ ingress-nginx est retiré depuis mars 2026.** Le Kubernetes Steering Committee a annoncé
+> la retraite du projet **ingress-nginx** (plus aucun correctif, y compris de sécurité) — c'est
+> justement le contrôleur qu'installait `minikube addons enable ingress` et que ce TP utilisait
+> jusqu'ici. **L'API Kubernetes `Ingress` elle-même reste valide** et fait toujours partie du
+> programme CKAD (§2.7 ci-dessous la couvre pour l'examen), mais ne déployez plus ingress-nginx
+> nulle part, y compris en local. Ce TP utilise désormais la **Gateway API**, avec **NGINX
+> Gateway Fabric** comme contrôleur.
 
 ### 2.1 Ingress vs Gateway API — Comprendre l'évolution
 
 Kubernetes propose deux approches pour exposer des services HTTP/HTTPS :
 
-#### Ingress (API stable, largement déployé)
+#### Ingress (API stable, mais son contrôleur historique est retiré)
 
 Un **Ingress** expose les routes HTTP/HTTPS depuis l'extérieur vers les services internes.
+L'API `networking.k8s.io/v1 Ingress` reste supportée par Kubernetes — c'est le contrôleur
+ingress-nginx qui a cessé d'exister, pas l'API.
 
 **Avantages** :
 - Un seul point d'entrée
@@ -414,10 +428,10 @@ Un **Ingress** expose les routes HTTP/HTTPS depuis l'extérieur vers les service
 
 **Limites de l'Ingress** :
 - Un seul objet `Ingress` par contrôleur — difficile à partager entre équipes
-- Les fonctionnalités avancées (timeout, retry, header matching) passent par des annotations propriétaires à chaque contrôleur
+- Les fonctionnalités avancées (timeout, retry, header matching) passent par des annotations propriétaires à chaque contrôleur — c'est justement l'`configuration-snippet` d'ingress-nginx (injection de config nginx arbitraire) qui illustre le risque de sécurité de ce modèle
 - Pas de notion de séparation des rôles (qui gère les routes vs qui gère le contrôleur)
 
-#### Gateway API (stable depuis K8s 1.31 — la voie future)
+#### Gateway API (stable depuis K8s 1.31 — la voie recommandée)
 
 La **Gateway API** est le successeur de l'Ingress, conçu pour les environnements multi-équipes et multi-tenants. Elle introduit une hiérarchie de rôles claire :
 
@@ -429,43 +443,49 @@ GatewayClass  ← Créé par l'admin infrastructure (type de contrôleur)
 
 **Avantages sur l'Ingress** :
 - **Séparation des rôles** : les équipes app gèrent leurs HTTPRoutes sans toucher au Gateway
-- **API standardisée** : les fonctionnalités avancées sont dans la spec, pas dans des annotations
+- **API standardisée** : les fonctionnalités avancées (headers, CORS, timeouts, pondération de trafic) sont des champs typés de la spec, validés par l'API — pas des annotations libres propres à chaque contrôleur
 - **Multi-protocoles** : HTTP, TCP, TLS, gRPC natifs (vs plugins pour Ingress)
 - **Portable** : un seul manifest fonctionne avec NGINX, Envoy, Istio, etc.
 
 | Aspect | Ingress | Gateway API |
 |--------|---------|-------------|
 | Stabilité | Stable | Stable (K8s 1.31) |
+| Contrôleur historique | ingress-nginx (retiré mars 2026) | NGINX Gateway Fabric (activement maintenu) |
 | Séparation rôles | Non | Oui |
 | Header matching | Via annotations | Natif |
+| CORS | Via annotations | Natif (canal standard depuis v1.5) |
 | Retry/Timeout | Via annotations | Natif |
+| Répartition de trafic (canary) | Via annotations + 2 objets | Natif (`backendRefs[].weight`) |
+| Rate limiting / sticky sessions | Via annotations | Extension propre à l'implémentation (policy attachment) |
 | Multi-cluster | Non | Oui (extensible) |
 | Migration | — | `ingress2gateway` tool disponible |
 
-> **Conseil :** Pour un nouveau cluster, démarrez avec la **Gateway API**. Pour un cluster existant avec Ingress, la migration est progressive — les deux peuvent coexister.
-
-### 2.2 Installation de NGINX Ingress Controller
+### 2.2 Installation de la Gateway API et de NGINX Gateway Fabric
 
 ```bash
-# Activer l'addon ingress dans minikube
-minikube addons enable ingress
+# 1. Installer les CRDs de la Gateway API (canal standard)
+kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard?ref=v2.7.2" | kubectl apply -f -
+
+# 2. Installer NGINX Gateway Fabric via Helm (registre OCI officiel)
+helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
+  --create-namespace \
+  --namespace nginx-gateway \
+  --set nginx.service.type=NodePort
 
 # Vérifier l'installation
-kubectl get pods -n ingress-nginx
+kubectl get pods -n nginx-gateway
+kubectl get gatewayclass
 
-# Attendre que le controller soit prêt
-kubectl wait --namespace ingress-nginx \
-  --for=condition=ready pod \
-  --selector=app.kubernetes.io/component=controller \
-  --timeout=120s
-
-# Vérifier le service
-kubectl get svc -n ingress-nginx
+# La GatewayClass "nginx" doit apparaître avec ACCEPTED=True
 ```
 
-### 2.3 Créer un Ingress simple
+> Sur minikube, exposez le service NodePort avec `kubectl port-forward` ou `minikube service`,
+> comme vous le faisiez avec le service `ingress-nginx-controller`. Pour un cluster kubeadm/
+> cloud, préférez `nginx.service.type=LoadBalancer`.
 
-**Exercice 5 : Déployer une application avec Ingress**
+### 2.3 Créer un Gateway et une HTTPRoute simple
+
+**Exercice 5 : Déployer une application avec la Gateway API**
 
 Créer `01-app-deployment.yaml` :
 
@@ -502,38 +522,82 @@ spec:
     targetPort: 80
 ```
 
-Créer `02-ingress-simple.yaml` :
+Créer `02-gateway.yaml` — le Gateway est une ressource d'infrastructure, provisionnée une seule
+fois et partagée par toutes les HTTPRoutes des exercices suivants (rôle "admin cluster") :
 
 ```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
 metadata:
-  name: web-app-ingress
-  annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
+  name: nginx
 spec:
-  ingressClassName: nginx
+  controllerName: gateway.nginx.org/nginx-gateway-controller
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: main-gateway
+  namespace: default
+spec:
+  gatewayClassName: nginx
+  listeners:
+  - name: http
+    protocol: HTTP
+    port: 80
+    allowedRoutes:
+      namespaces:
+        from: Same
+  - name: https
+    protocol: HTTPS
+    port: 443
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - name: myapp-tls
+    allowedRoutes:
+      namespaces:
+        from: Same
+```
+
+Le listener `https` référence un Secret `myapp-tls` qui n'existe pas encore : c'est normal, il
+sera créé à l'exercice 2.5 (TLS). En attendant, `kubectl describe gateway main-gateway` montrera
+ce listener avec la condition `ResolvedRefs: False`, alors que le listener `http` reste
+opérationnel — un bon exemple du modèle de *status conditions* par listener de la Gateway API.
+
+Créer `03-httproute-simple.yaml` :
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: web-app-route
+spec:
+  parentRefs:
+  - name: main-gateway
+    sectionName: http
+  hostnames:
+  - myapp.local
   rules:
-  - host: myapp.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: web-app-service
-            port:
-              number: 80
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: web-app-service
+      port: 80
 ```
 
 ```bash
 # Appliquer
 kubectl apply -f 01-app-deployment.yaml
-kubectl apply -f 02-ingress-simple.yaml
+kubectl apply -f 02-gateway.yaml
+kubectl apply -f 03-httproute-simple.yaml
 
-# Vérifier l'Ingress
-kubectl get ingress
-kubectl describe ingress web-app-ingress
+# Vérifier
+kubectl get gateway main-gateway
+kubectl get httproute web-app-route
+kubectl describe httproute web-app-route
+# Les conditions "Accepted" et "ResolvedRefs" doivent être True
 
 # Obtenir l'IP de minikube
 minikube ip
@@ -545,17 +609,17 @@ echo "$(minikube ip) myapp.local" | sudo tee -a /etc/hosts
 curl http://myapp.local
 ```
 
-### 2.4 Ingress avec plusieurs services
+### 2.4 HTTPRoute avec plusieurs services
 
-**Important** : Avant de continuer, supprimez les ressources précédentes pour éviter les conflits d'Ingress sur le même host :
+**Important** : Supprimez la route précédente pour éviter les conflits sur le même host (le
+Gateway, lui, reste en place — il est partagé) :
 
 ```bash
-# Supprimer les ressources de l'exercice précédent
 kubectl delete -f 01-app-deployment.yaml
-kubectl delete -f 02-ingress-simple.yaml
+kubectl delete httproute web-app-route
 ```
 
-Créer `03-multi-service-ingress.yaml` :
+Créer `04-httproute-multi-service.yaml` :
 
 ```yaml
 apiVersion: apps/v1
@@ -622,10 +686,178 @@ spec:
   - port: 80
     targetPort: 80
 ---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: multi-service-route
+spec:
+  parentRefs:
+  - name: main-gateway
+    sectionName: http
+  hostnames:
+  - myapp.local
+  rules:
+  # Règle la plus spécifique en premier : évaluée avant la racine "/"
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /api
+    backendRefs:
+    - name: api-service
+      port: 80
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: frontend-service
+      port: 80
+```
+
+```bash
+# Appliquer
+kubectl apply -f 04-httproute-multi-service.yaml
+
+# Tester les routes
+curl http://myapp.local/
+curl http://myapp.local/api
+```
+
+### 2.5 HTTPRoute avec TLS/SSL
+
+**Exercice 6 : Configurer HTTPS**
+
+**Important** : Supprimez la route précédente :
+
+```bash
+kubectl delete httproute multi-service-route
+```
+
+```bash
+# Créer un certificat auto-signé
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout tls.key -out tls.crt \
+  -subj "/CN=myapp.local/O=myapp"
+
+# Créer le Secret TLS référencé par le listener "https" du Gateway (02-gateway.yaml)
+kubectl create secret tls myapp-tls \
+  --cert=tls.crt \
+  --key=tls.key
+
+# Vérifier que le listener https passe à ResolvedRefs=True
+kubectl describe gateway main-gateway
+```
+
+**Différence importante avec l'Ingress** : le TLS n'est plus déclaré par route, mais une seule
+fois sur le **Gateway** (rôle admin cluster) — toutes les HTTPRoutes qui s'y attachent en
+bénéficient. Créer `05-httproute-tls.yaml` :
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: web-app-route-tls
+spec:
+  parentRefs:
+  - name: main-gateway
+    sectionName: https
+  hostnames:
+  - myapp.local
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: web-app-service
+      port: 80
+```
+
+```bash
+# Appliquer
+kubectl apply -f 05-httproute-tls.yaml
+
+# Tester HTTPS
+curl -k https://myapp.local
+```
+
+### 2.6 HTTPRoute avancée — fonctionnalités portables vs extensions propriétaires
+
+Avec l'Ingress, les en-têtes personnalisés, le CORS et les timeouts passaient par des
+annotations `nginx.ingress.kubernetes.io/*` propres au contrôleur — c'est justement
+l'annotation `configuration-snippet` (injection de config nginx arbitraire) qui a été
+identifiée comme un risque de sécurité et désactivée par défaut. Avec la Gateway API, ces
+fonctionnalités sont des **filtres typés et validés**, faisant partie du canal standard :
+
+Créer `06-httproute-advanced.yaml` :
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: advanced-route
+spec:
+  parentRefs:
+  - name: main-gateway
+    sectionName: http
+  hostnames:
+  - myapp.local
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    filters:
+    - type: RequestHeaderModifier
+      requestHeaderModifier:
+        add:
+        - name: X-Custom-Header
+          value: MyValue
+    - type: CORS
+      cors:
+        allowOrigins:
+        - "*"
+        allowMethods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+    timeouts:
+      request: 30s
+      backendRequest: 30s
+    backendRefs:
+    - name: web-app-service
+      port: 80
+```
+
+```bash
+kubectl apply -f 06-httproute-advanced.yaml
+kubectl describe httproute advanced-route
+```
+
+**Ce qui reste une extension propre au contrôleur** : le rate limiting et les sessions
+collantes (l'ancien `nginx.ingress.kubernetes.io/limit-rps` et `affinity: cookie`) n'ont pas
+d'équivalent dans le canal standard de la Gateway API — NGINX Gateway Fabric les expose via ses
+propres CRD de policy (ex. `ClientSettingsPolicy`, voir [sa documentation](https://docs.nginx.com/nginx-gateway-fabric/)).
+C'est un compromis assumé de la Gateway API : le cœur de l'API reste portable et validé, les
+extensions avancées restent explicitement attachées à un contrôleur via policy attachment,
+plutôt que dissimulées dans des annotations libres non validées — exactement le type de choix
+(`configuration-snippet`) qui a coûté sa retraite à ingress-nginx.
+
+### 2.7 Pour mémoire : l'Ingress classique (connaissance utile pour le CKAD)
+
+L'examen CKAD couvre toujours l'API `Ingress`. Voici, à titre de référence, la forme d'un
+Ingress minimal — **ne le déployez pas** : cela nécessiterait un contrôleur, et ingress-nginx
+(le seul que ce TP utilisait) est retiré depuis mars 2026, sans plus aucun correctif de
+sécurité. Si vous devez administrer un cluster existant qui tourne encore sur ingress-nginx,
+migrez-le avec l'outil [`ingress2gateway`](https://github.com/kubernetes-sigs/ingress2gateway)
+vers la Gateway API plutôt que de le laisser en production.
+
+```yaml
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: multi-service-ingress
+  name: web-app-ingress
   annotations:
     nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
@@ -638,339 +870,15 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: frontend-service
-            port:
-              number: 80
-      - path: /api
-        pathType: Prefix
-        backend:
-          service:
-            name: api-service
-            port:
-              number: 80
-```
-
-```bash
-# Appliquer
-kubectl apply -f 03-multi-service-ingress.yaml
-
-# Tester les routes
-curl http://myapp.local/
-curl http://myapp.local/api
-```
-
-### 2.5 Ingress avec TLS/SSL
-
-**Exercice 6 : Configurer HTTPS**
-
-**Important** : Supprimez l'Ingress précédent pour éviter les conflits :
-
-```bash
-# Supprimer l'Ingress de l'exercice 2.4
-kubectl delete ingress multi-service-ingress
-```
-
-```bash
-# Créer un certificat auto-signé
-openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-  -keyout tls.key -out tls.crt \
-  -subj "/CN=myapp.local/O=myapp"
-
-# Créer un Secret TLS
-kubectl create secret tls myapp-tls \
-  --cert=tls.crt \
-  --key=tls.key
-
-# Vérifier le secret
-kubectl get secret myapp-tls
-```
-
-Créer `04-ingress-tls.yaml` :
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: web-app-ingress-tls
-  annotations:
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-spec:
-  ingressClassName: nginx
-  tls:
-  - hosts:
-    - myapp.local
-    secretName: myapp-tls
-  rules:
-  - host: myapp.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
             name: web-app-service
             port:
               number: 80
-```
-
-```bash
-# Appliquer
-kubectl apply -f 04-ingress-tls.yaml
-
-# Tester HTTPS
-curl -k https://myapp.local
-```
-
-### 2.6 Ingress avancé avec annotations
-
-**Note importante sur la sécurité** : L'annotation `configuration-snippet` est désactivée par défaut dans les versions récentes de NGINX Ingress Controller pour des raisons de sécurité (risque d'injection de configuration). Cette section montre comment utiliser des annotations sûres.
-
-Créer d'abord un ConfigMap pour les headers personnalisés `05-custom-headers.yaml` :
-
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: custom-headers
-  namespace: default
-data:
-  X-Custom-Header: "MyValue"
-  X-Application: "Kubernetes-Demo"
-  X-Environment: "Production"
-```
-
-Créer `05-ingress-advanced.yaml` :
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: advanced-ingress
-  annotations:
-    # Rate limiting
-    nginx.ingress.kubernetes.io/limit-rps: "10"
-    # Sticky sessions
-    nginx.ingress.kubernetes.io/affinity: "cookie"
-    nginx.ingress.kubernetes.io/session-cookie-name: "route"
-    # CORS
-    nginx.ingress.kubernetes.io/enable-cors: "true"
-    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE"
-    # Timeouts
-    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "30"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
-    # Custom headers (méthode sécurisée)
-    nginx.ingress.kubernetes.io/configuration-snippet: |
-      more_set_headers "X-Custom-Header: MyValue";
-spec:
-  ingressClassName: nginx
-  rules:
-  - host: myapp.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: web-app-service
-            port:
-              number: 80
-```
-
-**Si vous obtenez l'erreur "configuration-snippet annotation cannot be used"**, c'est normal ! Voici deux solutions :
-
-**Solution A : Approche sécurisée recommandée (sans configuration-snippet)**
-
-Supprimez l'annotation `configuration-snippet` et utilisez seulement les annotations sûres :
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: advanced-ingress
-  annotations:
-    # Rate limiting
-    nginx.ingress.kubernetes.io/limit-rps: "10"
-    # Sticky sessions
-    nginx.ingress.kubernetes.io/affinity: "cookie"
-    nginx.ingress.kubernetes.io/session-cookie-name: "route"
-    # CORS
-    nginx.ingress.kubernetes.io/enable-cors: "true"
-    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE"
-    # Timeouts
-    nginx.ingress.kubernetes.io/proxy-connect-timeout: "30"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "30"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
-spec:
-  ingressClassName: nginx
-  rules:
-  - host: myapp.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: web-app-service
-            port:
-              number: 80
-```
-
-**Solution B : Activer l'annotation (usage pédagogique uniquement)**
-
-Pour les besoins de formation, vous pouvez activer les snippets dans le controller :
-
-```bash
-# Éditer le ConfigMap du controller
-kubectl edit configmap -n ingress-nginx ingress-nginx-controller
-
-# Ajouter cette ligne dans la section 'data:'
-allow-snippet-annotations: "true"
-
-# Redémarrer le controller
-kubectl rollout restart deployment -n ingress-nginx ingress-nginx-controller
-
-# Attendre que le controller soit prêt
-kubectl wait --namespace ingress-nginx \
-  --for=condition=ready pod \
-  --selector=app.kubernetes.io/component=controller \
-  --timeout=120s
-```
-
-**⚠️ Avertissement** : L'option `allow-snippet-annotations: "true"` **NE DOIT PAS** être utilisée en production car elle représente un risque de sécurité.
-
-### 2.7 Gateway API — L'Ingress nouvelle génération (K8s 1.31+)
-
-Cette section vous fait découvrir la **Gateway API**, le standard qui remplace progressivement l'Ingress.
-
-#### Installation du contrôleur NGINX Gateway Fabric
-
-```bash
-# Installer les CRDs de la Gateway API
-kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.0/standard-install.yaml
-
-# Avec minikube — utiliser NGINX Gateway Fabric
-helm repo add nginx-gateway https://helm.nginx.com/stable
-helm repo update
-helm install ngf nginx-gateway/nginx-gateway-fabric \
-  --create-namespace \
-  --namespace nginx-gateway \
-  --set service.type=NodePort
-
-# Vérifier l'installation
-kubectl get pods -n nginx-gateway
-kubectl get gatewayclass
-```
-
-#### Exercice 7 : Reproduire l'Exercice 5 avec la Gateway API
-
-**Objectif :** Migrer la configuration Ingress de l'exercice 5 vers la Gateway API.
-
-**Étape 1 — GatewayClass et Gateway (rôle admin) :**
-
-```yaml
-# gateway-api-setup.yaml
-apiVersion: gateway.networking.k8s.io/v1
-kind: GatewayClass
-metadata:
-  name: nginx
-spec:
-  controllerName: gateway.nginx.org/nginx-gateway-controller
----
-apiVersion: gateway.networking.k8s.io/v1
-kind: Gateway
-metadata:
-  name: main-gateway
-  namespace: default
-spec:
-  gatewayClassName: nginx
-  listeners:
-  - name: http
-    protocol: HTTP
-    port: 80
-    allowedRoutes:
-      namespaces:
-        from: Same
-```
-
-**Étape 2 — HTTPRoute (rôle équipe applicative) :**
-
-```yaml
-# app-routes.yaml
-apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: web-app-route
-  namespace: default
-spec:
-  parentRefs:
-  - name: main-gateway
-    namespace: default
-  hostnames:
-  - "myapp.local"
-  rules:
-  # Route /api vers le backend
-  - matches:
-    - path:
-        type: PathPrefix
-        value: /api
-    backendRefs:
-    - name: api-service
-      port: 8080
-  # Route / vers le frontend
-  - matches:
-    - path:
-        type: PathPrefix
-        value: /
-    backendRefs:
-    - name: web-app-service
-      port: 80
-```
-
-**Fonctionnalités avancées natives dans l'HTTPRoute :**
-
-```yaml
-# Timeout et retry — natifs dans Gateway API, pas d'annotations propriétaires
-rules:
-- matches:
-  - path:
-      type: PathPrefix
-      value: /api
-  timeouts:
-    request: 30s
-    backendRequest: 25s
-  backendRefs:
-  - name: api-service
-    port: 8080
-    weight: 100  # Pour le canary : définir weight: 90 ici et weight: 10 sur la v2
-
-# Header matching — filtre par header sans annotation
-- matches:
-  - headers:
-    - name: X-User-Beta
-      value: "true"
-  backendRefs:
-  - name: api-service-beta
-    port: 8080
-```
-
-**Test et vérification :**
-```bash
-kubectl apply -f gateway-api-setup.yaml
-kubectl apply -f app-routes.yaml
-
-# Vérifier l'état
-kubectl get gateway main-gateway
-kubectl get httproute web-app-route
-kubectl describe httproute web-app-route
-
-# La condition "Accepted" et "ResolvedRefs" doivent être True
 ```
 
 **Questions de réflexion :**
 - Pourquoi la Gateway API sépare-t-elle `GatewayClass`, `Gateway` et `HTTPRoute` en 3 objets distincts ?
 - Dans un contexte multi-équipes, qui devrait avoir le droit de créer chaque type d'objet ?
-- Comment migreriez-vous un Ingress existant vers la Gateway API ? (Indice : cherchez l'outil `ingress2gateway`)
+- Pourquoi le rate limiting et les sessions collantes restent-ils des extensions propres au contrôleur plutôt que des champs du canal standard ?
 - La Gateway API supporte-t-elle TCP et gRPC ? Quels types de routes sont disponibles ?
 
 ## Partie 3 : CI/CD avec GitHub Actions
@@ -1542,7 +1450,10 @@ kubectl scale deployment app-stable --replicas=0
 kubectl scale deployment app-canary --replicas=0
 ```
 
-### 4.4 A/B Testing avec Ingress
+### 4.4 A/B Testing avec la Gateway API
+
+Cet exercice réutilise le `Gateway main-gateway` provisionné en Partie 2 (§2.3) — assurez-vous
+qu'il est toujours déployé (`kubectl get gateway main-gateway`).
 
 Créer `09-ab-testing.yaml` :
 
@@ -1617,44 +1528,35 @@ spec:
   - port: 80
     targetPort: 5678
 ---
-apiVersion: networking.k8s.io/v1
-kind: Ingress
+# Une seule HTTPRoute avec des backendRefs pondérés : plus besoin des deux Ingress +
+# annotation canary d'ingress-nginx, la répartition de trafic est native à la Gateway API.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
 metadata:
-  name: ab-testing-ingress
-  annotations:
-    nginx.ingress.kubernetes.io/canary: "true"
-    nginx.ingress.kubernetes.io/canary-weight: "30"  # 30% vers v2
+  name: ab-testing-route
 spec:
-  ingressClassName: nginx
+  parentRefs:
+  - name: main-gateway
+    sectionName: http
+  hostnames:
+  - myapp.local
   rules:
-  - host: myapp.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: app-v2-service
-            port:
-              number: 80
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: main-ingress
-spec:
-  ingressClassName: nginx
-  rules:
-  - host: myapp.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: app-v1-service
-            port:
-              number: 80
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: app-v1-service
+      port: 80
+      weight: 70
+    - name: app-v2-service
+      port: 80
+      weight: 30  # 30% vers v2
+```
+
+```bash
+kubectl apply -f 09-ab-testing.yaml
+kubectl describe httproute ab-testing-route
 ```
 
 ## Partie 5 : GitOps avec ArgoCD
@@ -2400,7 +2302,12 @@ spec:
 # Supprimer les déploiements de test
 kubectl delete deployment --all
 kubectl delete service --all
-kubectl delete ingress --all
+kubectl delete httproute --all
+kubectl delete gateway --all
+
+# Supprimer NGINX Gateway Fabric
+helm uninstall ngf -n nginx-gateway
+kubectl delete namespace nginx-gateway
 
 # Supprimer ArgoCD
 kubectl delete namespace argocd
@@ -2413,7 +2320,6 @@ kubectl delete namespace monitoring
 kubectl delete -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.24.0/controller.yaml
 
 # Désactiver les addons
-minikube addons disable ingress
 minikube addons disable metrics-server
 
 # Supprimer tout
@@ -2425,7 +2331,7 @@ minikube delete
 Dans ce TP, vous avez appris à :
 
 - **Helm** : Gérer des applications avec des Charts
-- **Ingress** : Exposer des services avec routing avancé
+- **Gateway API** : Exposer des services avec routing avancé (successeur d'Ingress/ingress-nginx, retiré depuis mars 2026)
 - **CI/CD** : Automatiser les déploiements avec GitHub Actions ou Tekton
 - **Stratégies de déploiement** : Rolling, Blue-Green, Canary
 - **GitOps** : Déployer avec ArgoCD
@@ -2439,7 +2345,8 @@ Dans ce TP, vous avez appris à :
 
 - **Helm** : Package manager pour Kubernetes
 - **Chart** : Package Helm contenant les ressources K8s
-- **Ingress** : Routage HTTP/HTTPS vers les services
+- **Gateway API** : Routage HTTP/HTTPS vers les services (Gateway + HTTPRoute)
+- **Ingress** : API historique de routage HTTP/HTTPS, toujours au programme CKAD mais dont le contrôleur ingress-nginx est retiré depuis mars 2026
 - **CI/CD** : Automatisation des tests et déploiements
 - **GitOps** : Git comme source de vérité
 - **ArgoCD** : Outil de déploiement continu GitOps
@@ -2453,7 +2360,9 @@ Dans ce TP, vous avez appris à :
 ### Documentation officielle
 
 - [Helm Documentation](https://helm.sh/docs/)
-- [Ingress NGINX](https://kubernetes.github.io/ingress-nginx/)
+- [Gateway API](https://gateway-api.sigs.k8s.io/)
+- [NGINX Gateway Fabric](https://docs.nginx.com/nginx-gateway-fabric/)
+- [Ingress NGINX](https://kubernetes.github.io/ingress-nginx/) (archivé, projet retiré depuis mars 2026)
 - [ArgoCD](https://argo-cd.readthedocs.io/)
 - [GitHub Actions](https://docs.github.com/en/actions)
 - [Tekton](https://tekton.dev/docs/) - Alternative CI/CD sans compte GitHub

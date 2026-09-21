@@ -140,21 +140,21 @@ test_helm() {
     log_info "Tests Helm réussis ✓"
 }
 
-# Fonction pour tester les manifests Ingress
-test_ingress() {
-    log_info "=== Test des exercices Ingress ==="
+# Fonction pour tester les manifests Gateway API
+test_gateway_api() {
+    log_info "=== Test des exercices Gateway API ==="
 
     # Vérifier l'existence du dossier
-    if [ ! -d "02-ingress" ]; then
-        log_error "Le dossier 02-ingress n'existe pas"
+    if [ ! -d "02-gateway-api" ]; then
+        log_error "Le dossier 02-gateway-api n'existe pas"
         return 1
     fi
 
-    log_info "Dossier Ingress trouvé ✓"
+    log_info "Dossier Gateway API trouvé ✓"
 
     # Valider les fichiers YAML
     log_info "Validation de la syntaxe YAML..."
-    for file in 02-ingress/*.yaml; do
+    for file in 02-gateway-api/*.yaml; do
         if [ -f "$file" ]; then
             if validate_yaml_syntax "$file"; then
                 log_info "  ✓ $(basename $file)"
@@ -166,16 +166,17 @@ test_ingress() {
     done
 
     if [ "$KUBECTL_AVAILABLE" = true ] && [ "$CLUSTER_AVAILABLE" = false ]; then
-        # Valider avec kubectl --dry-run=client (ne nécessite pas de cluster)
+        # Valider avec kubectl --dry-run=client (nécessite les CRDs Gateway API installées
+        # sur le cluster ciblé ; sinon "no matches for kind", non bloquant ci-dessous)
         log_info "Validation kubectl (dry-run client)..."
-        if kubectl apply --dry-run=client -f 02-ingress/ &> /dev/null; then
+        if kubectl apply --dry-run=client -f 02-gateway-api/ &> /dev/null; then
             log_info "Validation kubectl réussie ✓"
         else
-            log_warning "Validation kubectl a échoué (non bloquant sans cluster)"
+            log_warning "Validation kubectl a échoué (non bloquant sans cluster / CRDs Gateway API)"
         fi
     fi
 
-    log_info "Tests Ingress réussis ✓"
+    log_info "Tests Gateway API réussis ✓"
 }
 
 # Fonction pour tester les stratégies de déploiement
@@ -397,7 +398,7 @@ show_summary() {
     echo ""
     log_info "Structure des exercices créés:"
     echo "  - 01-helm/          : Charts Helm personnalisés"
-    echo "  - 02-ingress/       : Exemples d'Ingress"
+    echo "  - 02-gateway-api/   : Exemples de Gateway API"
     echo "  - 03-deployment-strategies/ : Rolling, Blue-Green, Canary"
     echo "  - 04-production-best-practices/ : HPA, PDB, Health checks"
     echo "  - 05-argocd/        : Applications ArgoCD"
@@ -433,7 +434,7 @@ main() {
     test_helm
     echo ""
 
-    test_ingress
+    test_gateway_api
     echo ""
 
     test_deployment_strategies

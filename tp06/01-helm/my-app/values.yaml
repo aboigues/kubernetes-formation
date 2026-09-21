@@ -9,16 +9,21 @@ service:
   type: ClusterIP
   port: 80
 
-ingress:
-  enabled: false
-  className: "nginx"
-  annotations: {}
-  hosts:
-    - host: myapp.local
-      paths:
-        - path: /
-          pathType: Prefix
-  tls: []
+# HTTPRoute Gateway API — nécessite qu'un Gateway ("main-gateway" par défaut) soit déjà
+# provisionné dans le cluster (voir tp06/02-gateway-api/02-gateway.yaml). L'ancien champ
+# `ingress:` (ingressClassName + annotations nginx.ingress.kubernetes.io/*) a été retiré :
+# ingress-nginx est retiré depuis mars 2026, plus de correctifs de sécurité.
+gateway:
+  route:
+    enabled: false
+    parentRefs:
+      - name: main-gateway
+        namespace: default
+    hostnames:
+      - myapp.local
+    paths:
+      - path: /
+        pathType: PathPrefix
 
 resources:
   limits:

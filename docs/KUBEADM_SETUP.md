@@ -640,6 +640,14 @@ kubectl top pods
 
 ### 11.3 Ingress Controller (nginx-ingress)
 
+> **⚠️ Projet retiré depuis mars 2026.** ingress-nginx n'est plus maintenu (plus de correctifs,
+> y compris de sécurité) — ne le déployez plus, y compris pour un usage de test. L'approche
+> moderne est la **Gateway API** avec NGINX Gateway Fabric, voir
+> [TP6 §2.2](../tp06/README.md#22-installation-de-la-gateway-api-et-de-nginx-gateway-fabric)
+> pour l'installation (elle ne dépend pas de minikube, elle fonctionne identiquement sur
+> kubeadm). Les instructions ci-dessous sont conservées à titre de référence pour l'API
+> `Ingress`, toujours au programme CKAD.
+
 **Installation :**
 
 ```bash
@@ -684,7 +692,7 @@ kubectl get storageclass
 |----------------|-------------------|-------------------|
 | **dashboard** | `minikube addons enable dashboard` | Manifests Kubernetes Dashboard |
 | **metrics-server** | `minikube addons enable metrics-server` | Manifests metrics-server |
-| **ingress** | `minikube addons enable ingress` | nginx-ingress-controller |
+| **ingress** | `minikube addons enable ingress` | nginx-ingress-controller ⚠️ retiré mars 2026, préférer Gateway API (voir §11.3) |
 | **storage-provisioner** | `minikube addons enable storage-provisioner` | local-path-provisioner |
 | **metallb** | `minikube addons enable metallb` | Installation MetalLB (voir Partie 6) |
 | **registry** | `minikube addons enable registry` | Installation Docker Registry |
