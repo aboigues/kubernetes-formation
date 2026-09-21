@@ -106,41 +106,27 @@ spec:
   - port: 80
     targetPort: 5678
 ---
-apiVersion: networking.k8s.io/v1
-kind: Ingress
+# Une seule HTTPRoute avec des backendRefs pondérés : plus besoin des deux Ingress + annotation
+# canary d'ingress-nginx, la répartition de trafic est native à la Gateway API.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
 metadata:
-  name: ab-testing-ingress
-  annotations:
-    nginx.ingress.kubernetes.io/canary: "true"
-    nginx.ingress.kubernetes.io/canary-weight: "30"  # 30% vers v2
+  name: ab-testing-route
 spec:
-  ingressClassName: nginx
+  parentRefs:
+  - name: main-gateway
+    sectionName: http
+  hostnames:
+  - myapp.local
   rules:
-  - host: myapp.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: app-v2-service
-            port:
-              number: 80
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: main-ingress
-spec:
-  ingressClassName: nginx
-  rules:
-  - host: myapp.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: app-v1-service
-            port:
-              number: 80
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: app-v1-service
+      port: 80
+      weight: 70
+    - name: app-v2-service
+      port: 80
+      weight: 30  # 30% vers v2

@@ -1,0 +1,25 @@
+{{- if .Values.gateway.route.enabled -}}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "my-app.fullname" . }}
+  labels:
+    {{- include "my-app.labels" . | nindent 4 }}
+spec:
+  parentRefs:
+    {{- toYaml .Values.gateway.route.parentRefs | nindent 4 }}
+  hostnames:
+    {{- range .Values.gateway.route.hostnames }}
+    - {{ . | quote }}
+    {{- end }}
+  rules:
+    {{- range .Values.gateway.route.paths }}
+    - matches:
+        - path:
+            type: {{ .pathType }}
+            value: {{ .path }}
+      backendRefs:
+        - name: {{ include "my-app.fullname" $ }}
+          port: {{ $.Values.service.port }}
+    {{- end }}
+{{- end }}

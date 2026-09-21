@@ -530,7 +530,7 @@ minikube addons disable ingress
 
 # Addons populaires
 minikube addons enable metrics-server    # Métriques CPU/RAM
-minikube addons enable ingress          # Ingress NGINX
+minikube addons enable ingress          # Ingress NGINX ⚠️ projet retiré depuis mars 2026, voir TP6 pour la Gateway API
 minikube addons enable dashboard        # Dashboard web
 minikube addons enable registry         # Registry Docker local
 minikube addons enable storage-provisioner  # Provisionneur de stockage

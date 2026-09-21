@@ -216,19 +216,19 @@ EOF
 
 ```bash
 # Démarrer l'application
-docker-compose up -d
+docker compose up -d
 
 # Vérifier les services
-docker-compose ps
+docker compose ps
 
 # Tester l'accès
 curl http://localhost:8080
 
 # Voir les logs
-docker-compose logs -f
+docker compose logs -f
 
 # Arrêter
-docker-compose down
+docker compose down
 ```
 
 ## Partie 3 : Conversion manuelle vers Kubernetes

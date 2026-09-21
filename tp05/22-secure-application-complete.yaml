@@ -151,6 +151,8 @@ spec:
   - Egress
   ingress:
   - from:
+    # Nom de namespace à adapter au contrôleur réellement déployé (ingress-nginx est retiré
+    # depuis mars 2026 ; avec NGINX Gateway Fabric ce serait "nginx-gateway", voir TP6).
     - namespaceSelector:
         matchLabels:
           name: ingress-nginx

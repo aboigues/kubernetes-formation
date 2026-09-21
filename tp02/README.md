@@ -2552,24 +2552,27 @@ kubectl apply -f manifest.yaml --validate=true
 kubectl diff -f manifest.yaml
 ```
 
-**Validation avec kubeval :**
+**Validation avec kubeconform :**
+
+> ⚠️ `kubeval` (instrumenta/kubeval) est déprécié et n'est plus maintenu. Ses propres mainteneurs recommandent **kubeconform**, son successeur (schémas OpenAPI à jour, support des CRD, validation en parallèle). C'est d'ailleurs l'outil déjà utilisé par le hook `session-start.sh` et la CI de ce projet.
+
 ```bash
 # Installation
-wget https://github.com/instrumenta/kubeval/releases/latest/download/kubeval-linux-amd64.tar.gz
-tar xf kubeval-linux-amd64.tar.gz
-sudo mv kubeval /usr/local/bin
+wget https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz
+tar xf kubeconform-linux-amd64.tar.gz
+sudo mv kubeconform /usr/local/bin
 
 # Utilisation
-kubeval manifest.yaml
-kubeval *.yaml
+kubeconform manifest.yaml
+kubeconform -summary *.yaml
 ```
 
 **Validation avec kube-score :**
 ```bash
 # Installation
-wget https://github.com/zegl/kube-score/releases/download/v1.17.0/kube-score_1.17.0_linux_amd64
-chmod +x kube-score_1.17.0_linux_amd64
-sudo mv kube-score_1.17.0_linux_amd64 /usr/local/bin/kube-score
+wget https://github.com/zegl/kube-score/releases/download/v1.18.0/kube-score_1.18.0_linux_amd64
+chmod +x kube-score_1.18.0_linux_amd64
+sudo mv kube-score_1.18.0_linux_amd64 /usr/local/bin/kube-score
 
 # Utilisation
 kube-score score manifest.yaml
@@ -3083,7 +3086,7 @@ spec:
 
 ### Outils utiles
 - **kubectl explain** : Documentation intégrée
-- **kubeval** : Validation de manifests
+- **kubeconform** : Validation de manifests (successeur de kubeval, déprécié)
 - **kube-score** : Analyse de qualité
 - **yamllint** : Linter YAML
 - **VS Code** : Extension Kubernetes pour l'auto-complétion
