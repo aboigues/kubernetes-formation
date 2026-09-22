@@ -1592,6 +1592,16 @@ kubectl port-forward svc/kibana 5601:5601 -n logging
 
 ### 8.4 Déployer Fluentd (connecté à Elasticsearch)
 
+> ℹ️ **Pourquoi la config Fluentd utilise `multi_format` et pas juste `json`**
+>
+> Docker écrit les logs de conteneurs en JSON, mais **containerd et CRI-O
+> écrivent un format texte différent** (`cri`). Depuis minikube v1.39.0
+> (septembre 2026), le runtime par défaut est containerd — un parseur `json`
+> seul échouerait silencieusement sur chaque ligne de log. Le fichier utilise
+> `multi_format` pour essayer `json` puis `cri` (le parseur officiel du
+> format containerd, déjà embarqué dans cette image) : ça fonctionne quel que
+> soit le runtime du nœud, sans avoir à le connaître à l'avance.
+
 **Exercice 16 : Déployer Fluentd**
 
 ```bash
