@@ -297,41 +297,55 @@ jobs:
       - name: Test basic pod creation (emptyDir)
         run: |
           echo "Testing 01-emptydir-pod.yaml"
-          if [ -f "tp03/01-emptydir-pod.yaml" ]; then
-            kubectl apply -f tp03/01-emptydir-pod.yaml
-            kubectl wait --for=condition=Ready pod/emptydir-pod --timeout=60s || true
-            kubectl get pods
-            kubectl describe pod emptydir-pod || true
-            kubectl delete -f tp03/01-emptydir-pod.yaml --ignore-not-found=true
-          fi
+          kubectl apply -f tp03/01-emptydir-pod.yaml
+          kubectl wait --for=condition=Ready pod/emptydir-demo --timeout=60s
+          kubectl get pods
+          kubectl delete -f tp03/01-emptydir-pod.yaml --ignore-not-found=true
+
+      # Les noms de fichiers ci-dessous (02/03/05, pas 02/04 comme avant) et
+      # l'étape StorageClass (absente avant) ont été corrigés : les anciens
+      # noms référencés ici ne correspondaient à aucun fichier réel du dépôt,
+      # et le `if [ -f ... ]` avalait ça en silence - ces 3 étapes ne
+      # testaient donc RIEN depuis un renommage antérieur, sans jamais faire
+      # échouer le job. Sans StorageClass, le PVC se lie immédiatement (le
+      # contrôleur ne peut pas appliquer volumeBindingMode: WaitForFirstConsumer
+      # sur une StorageClass qui n'existe pas) - testait donc, par accident,
+      # un scénario différent de celui enseigné au TP (voir sa doc et sa fiche
+      # pédagogique sur ce point précis).
+      - name: Test StorageClass (manual)
+        run: |
+          echo "Testing 02-storage-class-manual.yaml"
+          kubectl apply -f tp03/02-storage-class-manual.yaml
+          kubectl get storageclass manual
 
       - name: Test PersistentVolume
         run: |
-          echo "Testing 02-persistent-volume.yaml"
-          if [ -f "tp03/02-persistent-volume.yaml" ]; then
-            kubectl apply -f tp03/02-persistent-volume.yaml
-            kubectl get pv
-            kubectl describe pv my-pv || true
+          echo "Testing 03-persistent-volume.yaml"
+          kubectl apply -f tp03/03-persistent-volume.yaml
+          kubectl get pv pv-demo
+
+      - name: Test PersistentVolumeClaim (Pending attendu, WaitForFirstConsumer)
+        run: |
+          echo "Testing 04-persistent-volume-claim.yaml"
+          kubectl apply -f tp03/04-persistent-volume-claim.yaml
+          sleep 5
+          kubectl get pvc pvc-demo
+          PHASE=$(kubectl get pvc pvc-demo -o jsonpath='{.status.phase}')
+          if [ "$PHASE" != "Pending" ]; then
+            echo "::error::PVC attendu en Pending (WaitForFirstConsumer, avant tout pod), trouvé: $PHASE"
+            exit 1
           fi
 
-      - name: Test PersistentVolumeClaim
+      - name: Test Pod with PVC (Bound attendu après création du pod)
         run: |
-          echo "Testing 03-persistent-volume-claim.yaml"
-          if [ -f "tp03/03-persistent-volume-claim.yaml" ]; then
-            kubectl apply -f tp03/03-persistent-volume-claim.yaml
-            sleep 5
-            kubectl get pvc
-            kubectl describe pvc my-pvc || true
-          fi
-
-      - name: Test Pod with PVC
-        run: |
-          echo "Testing 04-pod-with-pvc.yaml"
-          if [ -f "tp03/04-pod-with-pvc.yaml" ]; then
-            kubectl apply -f tp03/04-pod-with-pvc.yaml
-            kubectl wait --for=condition=Ready pod/pod-with-pvc --timeout=90s || true
-            kubectl get pods
-            kubectl describe pod pod-with-pvc || true
+          echo "Testing 05-pod-with-pvc.yaml"
+          kubectl apply -f tp03/05-pod-with-pvc.yaml
+          kubectl wait --for=condition=Ready pod/pod-with-pvc --timeout=90s
+          kubectl get pods
+          PHASE=$(kubectl get pvc pvc-demo -o jsonpath='{.status.phase}')
+          if [ "$PHASE" != "Bound" ]; then
+            echo "::error::PVC attendu en Bound une fois le pod créé, trouvé: $PHASE"
+            exit 1
           fi
 
       - name: Cleanup TP3 resources
@@ -357,50 +371,39 @@ jobs:
       - name: Enable metrics-server
         run: |
           minikube addons enable metrics-server
-          kubectl wait --for=condition=ready pod -l k8s-app=metrics-server -n kube-system --timeout=120s || true
+          kubectl wait --for=condition=ready pod -l k8s-app=metrics-server -n kube-system --timeout=120s
 
       - name: Test HPA Demo
         run: |
           echo "Testing 01-hpa-demo.yaml"
-          if [ -f "tp04/01-hpa-demo.yaml" ]; then
-            kubectl apply -f tp04/01-hpa-demo.yaml
-            kubectl wait --for=condition=ready pod -l app=php-apache --timeout=120s || true
-            kubectl get pods
-            kubectl get hpa
-            kubectl delete -f tp04/01-hpa-demo.yaml --ignore-not-found=true
-          fi
+          kubectl apply -f tp04/01-hpa-demo.yaml
+          kubectl wait --for=condition=ready pod -l app=php-apache --timeout=120s
+          kubectl get pods
+          kubectl get hpa
+          kubectl delete -f tp04/01-hpa-demo.yaml --ignore-not-found=true
 
       - name: Test Prometheus Deployment
         run: |
           echo "Testing 04-prometheus-deployment.yaml"
-          if [ -f "tp04/04-prometheus-deployment.yaml" ]; then
-            kubectl apply -f tp04/04-prometheus-deployment.yaml
-            sleep 10
-            kubectl get all -n monitoring
-            kubectl wait --for=condition=ready pod -l app=prometheus -n monitoring --timeout=180s || echo "Prometheus pod not ready yet"
-            kubectl describe pod -l app=prometheus -n monitoring || true
-          fi
+          kubectl apply -f tp04/04-prometheus-deployment.yaml
+          sleep 10
+          kubectl get all -n monitoring
+          kubectl wait --for=condition=ready pod -l app=prometheus -n monitoring --timeout=180s
 
       - name: Test Grafana Deployment
         run: |
           echo "Testing 05-grafana-deployment.yaml"
-          if [ -f "tp04/05-grafana-deployment.yaml" ]; then
-            kubectl apply -f tp04/05-grafana-deployment.yaml
-            sleep 10
-            kubectl get all -n monitoring
-            kubectl wait --for=condition=ready pod -l app=grafana -n monitoring --timeout=180s || echo "Grafana pod not ready yet"
-            kubectl describe pod -l app=grafana -n monitoring || true
-          fi
+          kubectl apply -f tp04/05-grafana-deployment.yaml
+          sleep 10
+          kubectl get all -n monitoring
+          kubectl wait --for=condition=ready pod -l app=grafana -n monitoring --timeout=180s
 
       - name: Test Instrumented App
         run: |
           echo "Testing 06-instrumented-app.yaml"
-          if [ -f "tp04/06-instrumented-app.yaml" ]; then
-            kubectl apply -f tp04/06-instrumented-app.yaml
-            kubectl wait --for=condition=ready pod -l app=demo-app -n monitoring --timeout=120s || echo "Demo app not ready yet"
-            kubectl get pods -n monitoring
-            kubectl describe pod -l app=demo-app -n monitoring || true
-          fi
+          kubectl apply -f tp04/06-instrumented-app.yaml
+          kubectl wait --for=condition=ready pod -l app=demo-app -n monitoring --timeout=120s
+          kubectl get pods -n monitoring
 
       - name: Cleanup TP4 resources
         if: always()
@@ -561,7 +564,7 @@ jobs:
       - name: Run TP9 multi-node tests
         run: |
           cd tp09
-          ./test-tp9.sh || echo "Some tests failed but continuing..."
+          ./test-tp9.sh
 
   test-tp10-synthesis:
     name: Test TP10 - Synthesis Project (TaskFlow)
@@ -581,7 +584,7 @@ jobs:
       - name: Enable metrics-server
         run: |
           minikube addons enable metrics-server
-          kubectl wait --for=condition=ready pod -l k8s-app=metrics-server -n kube-system --timeout=120s || true
+          kubectl wait --for=condition=ready pod -l k8s-app=metrics-server -n kube-system --timeout=120s
 
       - name: Verify Minikube
         run: |
@@ -635,16 +638,16 @@ jobs:
       - name: Wait for pods to be ready
         run: |
           echo "Waiting for PostgreSQL..."
-          kubectl wait --for=condition=ready pod -l app=postgres -n taskflow --timeout=180s || true
+          kubectl wait --for=condition=ready pod -l app=postgres -n taskflow --timeout=180s
 
           echo "Waiting for Redis..."
-          kubectl wait --for=condition=ready pod -l app=redis -n taskflow --timeout=120s || true
+          kubectl wait --for=condition=ready pod -l app=redis -n taskflow --timeout=120s
 
           echo "Waiting for Backend API..."
-          kubectl wait --for=condition=ready pod -l app=backend-api -n taskflow --timeout=180s || true
+          kubectl wait --for=condition=ready pod -l app=backend-api -n taskflow --timeout=180s
 
           echo "Waiting for Frontend..."
-          kubectl wait --for=condition=ready pod -l app=frontend -n taskflow --timeout=120s || true
+          kubectl wait --for=condition=ready pod -l app=frontend -n taskflow --timeout=120s
 
       - name: Make test script executable
         run: chmod +x tp10/test-tp10.sh
@@ -652,7 +655,7 @@ jobs:
       - name: Run TP10 synthesis tests
         run: |
           cd tp10
-          ./test-tp10.sh || echo "Some tests failed but continuing..."
+          ./test-tp10.sh
 
       - name: Display pod status
         if: always()
