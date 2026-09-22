@@ -54,9 +54,21 @@ metadata:
   labels:
     app: demo
 spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    fsGroup: 65534
+    seccompProfile:
+      type: RuntimeDefault
   containers:
   - name: writer
-    image: busybox
+    image: busybox:1.36
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
     command: ["/bin/sh"]
     args:
       - -c
@@ -68,9 +80,17 @@ spec:
     volumeMounts:
     - name: shared-storage
       mountPath: /data
+    - name: tmp
+      mountPath: /tmp
 
   - name: reader
-    image: busybox
+    image: busybox:1.36
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
     command: ["/bin/sh"]
     args:
       - -c
@@ -83,9 +103,13 @@ spec:
     volumeMounts:
     - name: shared-storage
       mountPath: /data
+    - name: tmp
+      mountPath: /tmp
 
   volumes:
   - name: shared-storage
+    emptyDir: {}
+  - name: tmp
     emptyDir: {}
 ```
 
@@ -737,17 +761,37 @@ kind: Pod
 metadata:
   name: pod-with-pvc
 spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+    fsGroup: 101
+    seccompProfile:
+      type: RuntimeDefault
   containers:
   - name: app
-    image: nginx:alpine
+    image: telemachlearning/nginx:1.29-alpine
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
     volumeMounts:
     - name: persistent-storage
       mountPath: /usr/share/nginx/html
+    - name: cache
+      mountPath: /var/cache/nginx
+    - name: run
+      mountPath: /var/run
 
   volumes:
   - name: persistent-storage
     persistentVolumeClaim:
       claimName: pvc-demo
+  - name: cache
+    emptyDir: {}
+  - name: run
+    emptyDir: {}
 ```
 
 **Exercice 4 : Tester la persistance**
@@ -944,9 +988,21 @@ spec:
       labels:
         app: mysql
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: mysql
-        image: mysql:8.0
+        image: mysql:8.4
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
         ports:
         - containerPort: 3306
           name: mysql
@@ -964,6 +1020,10 @@ spec:
         volumeMounts:
         - name: mysql-storage
           mountPath: /var/lib/mysql
+        - name: tmp
+          mountPath: /tmp
+        - name: run
+          mountPath: /var/run/mysqld
         resources:
           requests:
             memory: "256Mi"
@@ -975,6 +1035,10 @@ spec:
       - name: mysql-storage
         persistentVolumeClaim:
           claimName: mysql-pvc
+      - name: tmp
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -1053,10 +1117,28 @@ kind: Pod
 metadata:
   name: mysql-client
 spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    fsGroup: 999
+    seccompProfile:
+      type: RuntimeDefault
   containers:
   - name: mysql-client
-    image: mysql:8.0
+    image: mysql:8.4
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop:
+        - ALL
     command: ['sh', '-c', 'sleep 3600']
+    volumeMounts:
+    - name: tmp
+      mountPath: /tmp
+  volumes:
+  - name: tmp
+    emptyDir: {}
 ```
 
 ```bash

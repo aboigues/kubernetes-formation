@@ -294,7 +294,7 @@ spec:
     spec:
       containers:
       - name: logger
-        image: busybox
+        image: busybox:1.36
         command: ["/bin/sh"]
         args:
           - -c
@@ -346,7 +346,7 @@ metadata:
 spec:
   containers:
   - name: frontend
-    image: busybox
+    image: busybox:1.36
     command: ["/bin/sh"]
     args:
       - -c
@@ -357,7 +357,7 @@ spec:
         done
 
   - name: backend
-    image: busybox
+    image: busybox:1.36
     command: ["/bin/sh"]
     args:
       - -c
@@ -368,7 +368,7 @@ spec:
         done
 
   - name: cache
-    image: busybox
+    image: busybox:1.36
     command: ["/bin/sh"]
     args:
       - -c
@@ -555,6 +555,10 @@ spec:
       serviceAccountName: prometheus
       containers:
       - name: prometheus
+        # v3 et non v3.13.1 : les CVE de Prometheus sont dans son binaire Go, et
+        # seule une nouvelle release les corrige. Un tag de patch se fige donc et
+        # pourrit (mesuré : 98 CVE HIGH/CRITICAL sur v2.45.0, 0 sur v3).
+        # La branche v2 ne reçoit plus de correctif : v2.55.1, la dernière, en porte 78.
         image: prom/prometheus:v3
         args:
           - '--config.file=/etc/prometheus/prometheus.yml'
@@ -611,7 +615,9 @@ rules:
 - apiGroups: [""]
   resources:
   - nodes
-  - nodes/proxy
+  # Pas de `nodes/proxy` : il autorise le proxy vers N'IMPORTE QUEL endpoint du
+  # kubelet, pas seulement /metrics — d'où KSV-0047 (escalade de privilèges).
+  # Les jobs ci-dessus scrapent le kubelet en direct, `nodes/metrics` suffit.
   - nodes/metrics
   - services
   - endpoints
@@ -960,7 +966,7 @@ spec:
     spec:
       containers:
       - name: grafana
-        image: grafana/grafana:10.0.0
+        image: grafana/grafana:13.2.1
         ports:
         - containerPort: 3000
           name: web
@@ -1109,6 +1115,10 @@ kind: Service
 metadata:
   name: demo-app
   namespace: monitoring
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/metrics"
 spec:
   selector:
     app: demo-app
@@ -1180,13 +1190,13 @@ data:
 
       # Alerte sur mémoire élevée
       - alert: HighMemoryUsage
-        expr: container_memory_usage_bytes{pod!=""} > 500000000
+        expr: sum(container_memory_usage_bytes{container!="",container!="POD"}) by (pod, namespace) > 500000000
         for: 2m
         labels:
           severity: warning
         annotations:
-          summary: "High memory usage on {{ $labels.pod }}"
-          description: "Pod {{ $labels.pod }} is using more than 500MB of memory"
+          summary: "High memory usage on {{ $labels.namespace }}/{{ $labels.pod }}"
+          description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is using more than 500MB of memory"
 ```
 
 **Exercice 13 : Configurer les règles d'alerte**
@@ -1204,6 +1214,93 @@ Maintenant, il faut mettre à jour le déploiement Prometheus pour charger ces r
 Créer `07-prometheus-with-rules.yaml` (mise à jour du déploiement) :
 
 ```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    rule_files:
+      - '/etc/prometheus-rules/alert.rules'
+
+    scrape_configs:
+      - job_name: 'kubernetes-nodes'
+        kubernetes_sd_configs:
+          - role: node
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+
+      - job_name: 'kubernetes-cadvisor'
+        kubernetes_sd_configs:
+          - role: node
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+          - target_label: __metrics_path__
+            replacement: /metrics/cadvisor
+
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+
+      - job_name: 'kubernetes-service-endpoints'
+        kubernetes_sd_configs:
+          - role: endpoints
+        relabel_configs:
+          # Ne garder que les services annotés avec prometheus.io/scrape=true
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          # Utiliser le chemin spécifié dans l'annotation prometheus.io/path (par défaut /metrics)
+          - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          # Utiliser le port spécifié dans l'annotation prometheus.io/port
+          - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          # Copier les labels du service
+          - action: labelmap
+            regex: __meta_kubernetes_service_label_(.+)
+          # Ajouter le namespace comme label
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: kubernetes_namespace
+          # Ajouter le nom du service comme label
+          - source_labels: [__meta_kubernetes_service_name]
+            target_label: kubernetes_name
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -1222,6 +1319,7 @@ spec:
       serviceAccountName: prometheus
       containers:
       - name: prometheus
+        # Tag roulant v3 : voir 04-prometheus-deployment.yaml pour le pourquoi.
         image: prom/prometheus:v3
         args:
           - '--config.file=/etc/prometheus/prometheus.yml'
