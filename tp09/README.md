@@ -1199,20 +1199,33 @@ kubectl exec -n kube-system etcd-master1 -- etcdctl \
 ```bash
 # ⚠️ ATTENTION : Cette opération arrête le cluster !
 
-# 1. Déplacer les anciennes données etcd
+# 1. Copier le snapshot dans un emplacement qui ne sera PAS déplacé à l'étape
+#    suivante (sur ce même nœud master1, il est encore sous /var/lib/etcd/
+#    depuis la sauvegarde ci-dessus — sur un autre nœud, transférez-y d'abord
+#    ./etcd-snapshot.db récupéré plus haut, par ex. via scp)
+sudo cp /var/lib/etcd/snapshot.db /tmp/snapshot.db
+
+# 2. Arrêter etcd en sortant son manifeste de pod statique du dossier surveillé
+#    par le kubelet (un simple `systemctl restart kubelet` ne suffit pas : le
+#    kubelet réconcilie le pod statique existant sans forcément le redémarrer)
+sudo mv /etc/kubernetes/manifests/etcd.yaml /tmp/etcd.yaml.bak
+sleep 10  # laisser le kubelet supprimer le pod etcd en cours
+
+# 3. Déplacer les anciennes données etcd
 sudo mv /var/lib/etcd /var/lib/etcd.old
 
-# 2. Restaurer le snapshot
+# 4. Restaurer le snapshot
 sudo etcdctl snapshot restore /tmp/snapshot.db \
   --data-dir=/var/lib/etcd \
   --name=master1 \
   --initial-cluster=master1=https://192.168.1.10:2380,master2=https://192.168.1.11:2380,master3=https://192.168.1.12:2380 \
   --initial-advertise-peer-urls=https://192.168.1.10:2380
 
-# 3. Redémarrer etcd
-sudo systemctl restart kubelet
+# 5. Remettre le manifeste en place : le kubelet recrée le pod etcd avec les
+#    données restaurées
+sudo mv /tmp/etcd.yaml.bak /etc/kubernetes/manifests/etcd.yaml
 
-# 4. Vérifier
+# 6. Vérifier
 kubectl get nodes
 ```
 
@@ -1392,6 +1405,13 @@ kubectl taint nodes worker1 dedicated-
 
 ### 6.3 Tolerations dans les Pods
 
+> ℹ️ Le taint `dedicated=database` a été retiré à la fin de la section précédente
+> (ligne "Supprimer un taint"). On le réapplique ici pour que l'exemple soit
+> observable :
+> ```bash
+> kubectl taint nodes worker1 dedicated=database:NoSchedule
+> ```
+
 **Exemple 1 : Pod qui tolère un taint spécifique**
 
 ```yaml
@@ -1414,9 +1434,27 @@ spec:
 ```bash
 kubectl apply -f pod-toleration.yaml
 
-# Vérifier qu'il est planifié sur worker1
+# Sur QUEL nœud a-t-il été planifié ?
 kubectl get pod database-pod -o wide
 ```
+
+> 🎯 **Avant d'appliquer, prédis :** ce pod va-t-il forcément être planifié sur
+> `worker1` — le seul nœud taint — puisqu'il tolère justement ce taint ? Pourquoi ?
+
+<details>
+<summary>💡 Vérifie ta prédiction</summary>
+
+Non — rien ne garantit qu'il atterrisse sur `worker1`. Une **toleration lève
+seulement la répulsion** qu'un taint impose : elle rend `worker1` éligible, elle ne
+l'impose pas. Ici, `worker2` et `worker3` n'ont aucun taint, donc le scheduler peut
+tout aussi bien y placer ce pod — il peut atterrir sur n'importe lequel des 3
+workers. C'est l'erreur la plus fréquente sur ce sujet : confondre *toleration*
+(« j'accepte d'aller là où c'est repoussant ») et *affinité* (« je veux aller
+précisément là »). Pour forcer un placement sur `worker1` spécifiquement, il faut
+combiner la toleration avec un `nodeSelector` ou une `nodeAffinity` — exactement ce
+que fait le "Cas 1" de la section 6.4 ci-dessous.
+
+</details>
 
 **Exemple 2 : Toleration avec opérateur "Exists"**
 
