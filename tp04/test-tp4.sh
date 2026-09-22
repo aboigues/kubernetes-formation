@@ -100,6 +100,10 @@ cleanup() {
     log_warning "Le namespace monitoring ne sera pas supprimé pour préserver Prometheus/Grafana"
     log_info "Pour nettoyer complètement : kubectl delete namespace monitoring"
 
+    # Supprimer la stack EFK (déployée par ce script, contrairement au reste)
+    kubectl delete -f "$SCRIPT_DIR/08-fluentd-daemonset.yaml" --ignore-not-found=true 2>/dev/null || true
+    kubectl delete namespace logging --ignore-not-found=true --timeout=60s 2>/dev/null || true
+
     echo ""
 }
 
@@ -531,6 +535,108 @@ test_monitoring_summary() {
     log_success "Résumé affiché"
 }
 
+# Test 9: Stack EFK (Elasticsearch, Fluentd, Kibana)
+#
+# Contrairement aux tests précédents, celui-ci déploie lui-même les manifests
+# au lieu de supposer qu'ils sont déjà appliqués : cette stack n'était testée
+# nulle part (ni ici avant cet ajout, ni dans le workflow CI) et un manifest
+# cassé n'a été détecté que par un déploiement manuel après merge en
+# production. Voir tp04/09-elasticsearch.yaml pour le contexte du bug corrigé
+# (readOnlyRootFilesystem sans volume inscriptible pour le keystore).
+test_efk_stack() {
+    log_info "═══════════════════════════════════════════════════════"
+    log_info "  Test 9: Stack EFK (Elasticsearch, Fluentd, Kibana)"
+    log_info "═══════════════════════════════════════════════════════"
+    echo ""
+
+    log_info "Vérification de vm.max_map_count (requis par Elasticsearch)..."
+    if command -v minikube &> /dev/null && minikube status &>/dev/null; then
+        MAX_MAP_COUNT=$(minikube ssh -- 'sysctl -n vm.max_map_count' 2>/dev/null | tr -d '\r')
+        if [ "$MAX_MAP_COUNT" -lt 262144 ] 2>/dev/null; then
+            log_error "vm.max_map_count=$MAX_MAP_COUNT, doit être >= 262144"
+            log_fix "minikube ssh -- 'sudo sysctl -w vm.max_map_count=262144'"
+            return 1
+        fi
+        log_success "vm.max_map_count OK ($MAX_MAP_COUNT)"
+    else
+        log_warning "Pas sur minikube, vérifiez vm.max_map_count manuellement sur vos nœuds"
+    fi
+
+    log_info "Déploiement d'Elasticsearch..."
+    kubectl apply -f "$SCRIPT_DIR/09-elasticsearch.yaml" &>/dev/null
+
+    log_info "Attente d'Elasticsearch (jusqu'à 3 min)..."
+    if kubectl wait --for=condition=ready pod -l app=elasticsearch -n logging --timeout=180s &>/dev/null; then
+        log_success "Pod Elasticsearch est Ready"
+    else
+        log_error "Pod Elasticsearch pas prêt après 3 minutes"
+        kubectl get pods -n logging
+        log_fix "Commandes de diagnostic :"
+        echo "  kubectl describe pod -n logging -l app=elasticsearch"
+        echo "  kubectl logs -n logging -l app=elasticsearch"
+        return 1
+    fi
+
+    log_info "Vérification de la santé du cluster Elasticsearch..."
+    kubectl port-forward -n logging svc/elasticsearch 9200:9200 &>/dev/null &
+    ES_PID=$!
+    sleep 3
+    ES_HEALTH=$(curl -s http://localhost:9200/_cluster/health 2>/dev/null)
+    kill $ES_PID 2>/dev/null || true
+    if echo "$ES_HEALTH" | jq -e '.status == "green" or .status == "yellow"' &>/dev/null; then
+        log_success "Elasticsearch cluster health: $(echo "$ES_HEALTH" | jq -r '.status')"
+    else
+        log_error "Elasticsearch cluster health KO ou injoignable"
+        echo "$ES_HEALTH"
+        return 1
+    fi
+
+    log_info "Déploiement de Kibana..."
+    kubectl apply -f "$SCRIPT_DIR/10-kibana.yaml" &>/dev/null
+    if kubectl wait --for=condition=ready pod -l app=kibana -n logging --timeout=180s &>/dev/null; then
+        log_success "Pod Kibana est Ready"
+    else
+        log_error "Pod Kibana pas prêt après 3 minutes"
+        kubectl get pods -n logging
+        return 1
+    fi
+
+    log_info "Déploiement de Fluentd..."
+    kubectl apply -f "$SCRIPT_DIR/08-fluentd-daemonset.yaml" &>/dev/null
+    if kubectl rollout status daemonset/fluentd -n kube-system --timeout=120s &>/dev/null; then
+        log_success "DaemonSet Fluentd est Ready"
+    else
+        log_error "DaemonSet Fluentd pas prêt après 2 minutes"
+        kubectl get pods -n kube-system -l app=fluentd
+        kubectl logs -n kube-system -l app=fluentd --tail=30
+        return 1
+    fi
+
+    log_info "Vérification qu'un index fluentd apparaît dans Elasticsearch (jusqu'à 2 min)..."
+    kubectl port-forward -n logging svc/elasticsearch 9200:9200 &>/dev/null &
+    ES_PID=$!
+    sleep 3
+    FLUENTD_INDEX_FOUND=false
+    for i in $(seq 1 12); do
+        if curl -s http://localhost:9200/_cat/indices?v 2>/dev/null | grep -q fluentd; then
+            FLUENTD_INDEX_FOUND=true
+            break
+        fi
+        sleep 10
+    done
+    kill $ES_PID 2>/dev/null || true
+    if [ "$FLUENTD_INDEX_FOUND" = true ]; then
+        log_success "Index fluentd-* trouvé dans Elasticsearch — le pipeline de logs fonctionne"
+    else
+        log_error "Aucun index fluentd-* après 2 minutes — le pipeline de logs ne fonctionne pas"
+        log_fix "Commandes de diagnostic :"
+        echo "  kubectl logs -n kube-system -l app=fluentd --tail=50"
+        return 1
+    fi
+
+    echo ""
+}
+
 # Fonction principale
 main() {
     echo ""
@@ -554,6 +660,7 @@ main() {
     test_grafana
     test_prometheus_config
     test_monitoring_summary
+    test_efk_stack
 
     # Afficher le résumé final
     echo ""

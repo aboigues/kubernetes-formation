@@ -408,6 +408,91 @@ jobs:
           kubectl delete namespace monitoring --ignore-not-found=true --timeout=60s || true
           kubectl delete pod --all --ignore-not-found=true
 
+  # Job séparé (pas ajouté à test-tp4-monitoring) : Elasticsearch a besoin de
+  # vm.max_map_count sur le nœud, et le budget mémoire du runner est plus
+  # confortable sur un job dédié plutôt qu'empilé sur les tests HPA/Prometheus/
+  # Grafana/demo-app déjà présents ci-dessus.
+  #
+  # IMPORTANT : contrairement aux autres jobs de ce workflow, les `kubectl wait`
+  # et vérifications ci-dessous n'ont PAS de `|| true` : un échec ici fait
+  # échouer le job. C'est volontaire — cette stack EFK n'était testée nulle
+  # part (ni ici, ni par tp04/test-tp4.sh) et un manifest cassé
+  # (readOnlyRootFilesystem sans volume inscriptible pour le keystore
+  # Elasticsearch) n'a été détecté que par un déploiement manuel de
+  # l'utilisateur, après merge. Un `kubectl wait ... || true` n'aurait rien
+  # changé à ça : la CI serait restée verte avec le pod en CrashLoopBackOff.
+  test-tp4-efk:
+    name: Test TP4 - EFK Logging Stack
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Minikube
+        uses: medyagh/setup-minikube@latest
+        with:
+          kubernetes-version: 'v1.32.0'
+
+      - name: Set vm.max_map_count (requis par Elasticsearch)
+        run: |
+          minikube ssh -- 'sudo sysctl -w vm.max_map_count=262144'
+
+      - name: Deploy Elasticsearch
+        run: kubectl apply -f tp04/09-elasticsearch.yaml
+
+      - name: Wait for Elasticsearch (échoue le job si non prêt)
+        run: |
+          kubectl wait --for=condition=ready pod -l app=elasticsearch -n logging --timeout=180s
+          kubectl get pods -n logging
+
+      - name: Verify Elasticsearch cluster health
+        run: |
+          kubectl run curl-es-health --image=curlimages/curl:8.11.1 --rm -i --restart=Never -n logging -- \
+            curl -sf http://elasticsearch.logging.svc.cluster.local:9200/_cluster/health | tee /tmp/es-health.json
+          grep -qE '"status":"(green|yellow)"' /tmp/es-health.json
+
+      - name: Deploy Kibana
+        run: kubectl apply -f tp04/10-kibana.yaml
+
+      - name: Wait for Kibana (échoue le job si non prêt)
+        run: |
+          kubectl wait --for=condition=ready pod -l app=kibana -n logging --timeout=180s
+          kubectl get pods -n logging
+
+      - name: Deploy Fluentd
+        run: |
+          kubectl apply -f tp04/08-fluentd-daemonset.yaml
+          kubectl rollout status daemonset/fluentd -n kube-system --timeout=120s
+
+      - name: Verify Fluentd creates an index in Elasticsearch
+        run: |
+          for i in $(seq 1 12); do
+            kubectl run curl-es-indices --image=curlimages/curl:8.11.1 --rm -i --restart=Never -n logging -- \
+              curl -s http://elasticsearch.logging.svc.cluster.local:9200/_cat/indices?v | tee /tmp/es-indices.txt
+            if grep -q "fluentd" /tmp/es-indices.txt; then
+              echo "Index fluentd trouvé"
+              exit 0
+            fi
+            echo "Pas encore d'index fluentd, nouvel essai dans 10s ($i/12)"
+            sleep 10
+          done
+          echo "::error::Aucun index fluentd-* après 2 minutes - le pipeline de logs ne fonctionne pas"
+          kubectl logs -n kube-system -l app=fluentd --tail=50
+          exit 1
+
+      - name: Display pod status
+        if: always()
+        run: |
+          kubectl get pods -n logging -o wide || true
+          kubectl get pods -n kube-system -l app=fluentd -o wide || true
+
+      - name: Cleanup EFK resources
+        if: always()
+        run: |
+          kubectl delete -f tp04/08-fluentd-daemonset.yaml --ignore-not-found=true
+          kubectl delete namespace logging --ignore-not-found=true --timeout=60s || true
+
   test-tp5-security:
     name: Test TP5 - Security and RBAC
     runs-on: ubuntu-latest

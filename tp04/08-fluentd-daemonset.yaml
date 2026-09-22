@@ -61,6 +61,11 @@ data:
       <buffer tag,time>
         @type file
         path /var/log/fluentd-buffers/kubernetes.buffer
+        # timekey est obligatoire dès que "time" est une clé de buffer (sinon
+        # erreur fatale au démarrage : "argument includes 'time', but timekey
+        # is not configured"). 1d aligne le découpage des chunks sur la
+        # rotation quotidienne de l'index (index_name ...-%Y%m%d ci-dessus).
+        timekey 1d
         flush_mode interval
         retry_type exponential_backoff
         flush_interval 5s
