@@ -63,6 +63,37 @@ spec:
         fsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
+      # Elasticsearch écrit un keystore (config/elasticsearch.keystore) au
+      # tout premier démarrage, MÊME sans xpack.security activé — ce n'est
+      # pas lié aux credentials, c'est un bootstrap interne systématique.
+      # Testé sans cet initContainer : crash immédiat en CrashLoopBackOff
+      # avec "FileSystemException: .../elasticsearch.keystore.tmp: Read-only
+      # file system", readOnlyRootFilesystem empêchant cette écriture.
+      # L'initContainer copie la config déjà présente dans l'image (elle
+      # contient elasticsearch.yml, jvm.options, etc.) vers un volume
+      # inscriptible AVANT que le conteneur principal ne le monte en lecture
+      # seule au même endroit — sinon un emptyDir vide écraserait ces
+      # fichiers de config existants.
+      initContainers:
+      - name: init-config
+        image: docker.elastic.co/elasticsearch/elasticsearch:8.17.7
+        command:
+        - sh
+        - -c
+        - cp -r /usr/share/elasticsearch/config/* /es-config/
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: es-config
+          mountPath: /es-config
+        - name: tmp
+          mountPath: /tmp
       containers:
       - name: elasticsearch
         image: docker.elastic.co/elasticsearch/elasticsearch:8.17.7
@@ -116,10 +147,14 @@ spec:
           mountPath: /usr/share/elasticsearch/logs
         - name: tmp
           mountPath: /tmp
+        - name: es-config
+          mountPath: /usr/share/elasticsearch/config
       volumes:
       - name: data
         emptyDir: {}
       - name: logs
         emptyDir: {}
       - name: tmp
+        emptyDir: {}
+      - name: es-config
         emptyDir: {}
