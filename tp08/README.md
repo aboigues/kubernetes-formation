@@ -1159,6 +1159,16 @@ spec:
     - protocol: TCP
       port: 8080
 ---
+# Database Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: database-credentials
+  namespace: secure-app
+type: Opaque
+stringData:
+  password: "secret"
+---
 # Database StatefulSet
 apiVersion: apps/v1
 kind: StatefulSet
@@ -1178,6 +1188,12 @@ spec:
         app: database
         tier: database
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: postgres
         image: postgres:15-alpine
@@ -1185,7 +1201,32 @@ spec:
         - containerPort: 5432
         env:
         - name: POSTGRES_PASSWORD
-          value: "secret"
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: password
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 70
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: run
+          mountPath: /var/run/postgresql
+        - name: data
+          mountPath: /var/lib/postgresql/data
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
+      - name: data
+        emptyDir: {}
 ---
 # Database Headless Service
 apiVersion: v1

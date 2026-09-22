@@ -27,6 +27,15 @@ metadata:
   name: ha-exercise
 
 ---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-credentials
+  namespace: ha-exercise
+type: Opaque
+stringData:
+  password: "exercice-password"
+---
 # Base de données (PostgreSQL) - contrainte disque, pas de réplication
 #
 # replicas: 1, et pas 3 comme les autres tiers : seul worker3 porte le label
@@ -85,6 +94,12 @@ spec:
                 values:
                 - database
             topologyKey: kubernetes.io/hostname
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: postgres
         image: postgres:15-alpine
@@ -93,9 +108,27 @@ spec:
           name: postgres
         env:
         - name: POSTGRES_PASSWORD
-          value: "exercice-password"
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: password
         - name: POSTGRES_DB
           value: "myappdb"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 70
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: run
+          mountPath: /var/run/postgresql
+        - name: data
+          mountPath: /var/lib/postgresql/data
         resources:
           requests:
             memory: "512Mi"
@@ -119,6 +152,13 @@ spec:
             - postgres
           initialDelaySeconds: 5
           periodSeconds: 5
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
+      - name: data
+        emptyDir: {}
 
 ---
 # Service pour la base de données
