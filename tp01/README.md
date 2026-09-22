@@ -768,7 +768,10 @@ Voici des exemples pratiques et déployables pour chaque type de service. Vous p
 **Scénario :** Déployer une base de données Redis qui sera utilisée uniquement par d'autres applications dans le cluster.
 
 ```yaml
-# redis-clusterip.yaml
+# Exemple de Service ClusterIP - Base de données Redis
+# Ce service est accessible uniquement depuis l'intérieur du cluster
+# Cas d'usage : Backend database, cache interne, message queue
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -785,11 +788,40 @@ spec:
         app: redis
         tier: backend
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: redis
-        image: redis:7-alpine
+        image: redis:7.4-alpine
         ports:
         - containerPort: 6379
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: data
+          mountPath: /data
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: data
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -831,7 +863,10 @@ kubectl run redis-client --rm -it --image=redis:7-alpine -- redis-cli -h redis-s
 **Scénario :** Déployer une application web simple accessible depuis l'extérieur pour les tests et le développement.
 
 ```yaml
-# webapp-nodeport.yaml
+# Exemple de Service NodePort - Application de développement
+# Ce service est accessible depuis l'extérieur via <NodeIP>:<NodePort>
+# Cas d'usage : Applications dev/test, débogage, démos
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -848,18 +883,46 @@ spec:
         app: webapp
         env: dev
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: nginx
-        image: nginx:latest
+        image: telemachlearning/nginx:1.29-alpine
         ports:
         - containerPort: 80
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "50m"
+          limits:
+            memory: "64Mi"
+            cpu: "100m"
         volumeMounts:
         - name: html
           mountPath: /usr/share/nginx/html
+          readOnly: true
+        - name: cache
+          mountPath: /var/cache/nginx
+        - name: run
+          mountPath: /var/run
       volumes:
       - name: html
         configMap:
           name: webapp-html
+      - name: cache
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -929,7 +992,10 @@ curl http://$NODE_IP:30100
 **Scénario :** Déployer une application web frontend qui doit être accessible publiquement avec une IP stable.
 
 ```yaml
-# frontend-loadbalancer.yaml
+# Exemple de Service LoadBalancer - Frontend web en production
+# Ce service obtient une IP publique via le cloud provider
+# Cas d'usage : Sites web publics, APIs REST publiques, applications SaaS
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -946,9 +1012,21 @@ spec:
         app: frontend
         tier: web
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: nginx
-        image: nginx:1.24-alpine
+        image: telemachlearning/nginx:1.29-alpine
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
         ports:
         - containerPort: 80
         resources:
@@ -970,6 +1048,16 @@ spec:
             port: 80
           initialDelaySeconds: 5
           periodSeconds: 3
+        volumeMounts:
+        - name: cache
+          mountPath: /var/cache/nginx
+        - name: run
+          mountPath: /var/run
+      volumes:
+      - name: cache
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -1032,7 +1120,23 @@ curl http://$LB_IP  # Fonctionne toujours grâce aux autres réplicas
 **Scénario :** Application complète avec frontend (LoadBalancer), backend (ClusterIP), et base de données (ClusterIP).
 
 ```yaml
-# architecture-complete.yaml
+# Exemple d'architecture complète à 3 tiers
+# Frontend (LoadBalancer) -> Backend API (ClusterIP) -> Database (ClusterIP)
+# Démontre l'utilisation appropriée de chaque type de service
+#
+# Le Secret ci-dessous est inclus dans ce fichier : un simple
+# `kubectl apply -f architecture-complete.yaml` suffit, aucune
+# commande préalable n'est nécessaire.
+
+# Secret pour les credentials de la base de données
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db-credentials
+type: Opaque
+stringData:
+  password: "changeme-use-a-strong-password"
+---
 # Base de données (ClusterIP - interne uniquement)
 apiVersion: apps/v1
 kind: Deployment
@@ -1048,16 +1152,54 @@ spec:
       labels:
         app: db
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: postgres
-        image: postgres:15-alpine
+        image: postgres:17-alpine
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
         env:
         - name: POSTGRES_PASSWORD
-          value: "secretpassword"
+          valueFrom:
+            secretKeyRef:
+              name: db-credentials
+              key: password
         - name: POSTGRES_DB
           value: "appdb"
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
         ports:
         - containerPort: 5432
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
+        - name: tmp
+          mountPath: /tmp
+        - name: run
+          mountPath: /var/run/postgresql
+      volumes:
+      - name: data
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -1086,9 +1228,21 @@ spec:
       labels:
         app: api
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: api
-        image: httpd:2.4-alpine  # Remplacer par votre API réelle
+        image: telemachlearning/httpd:2.4-alpine   # Remplacer par votre image applicative réelle
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
         ports:
         - containerPort: 80
         env:
@@ -1096,6 +1250,20 @@ spec:
           value: "database-service"  # Utilise le nom du service
         - name: DATABASE_PORT
           value: "5432"
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: run
+          mountPath: /var/run/apache2
+        - name: logs
+          mountPath: /usr/local/apache2/logs
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
+      - name: logs
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -1124,14 +1292,36 @@ spec:
       labels:
         app: frontend
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: nginx
-        image: nginx:alpine
+        image: telemachlearning/nginx:1.29-alpine
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
         ports:
         - containerPort: 80
         env:
         - name: API_URL
           value: "http://backend-api-service:8080"  # Utilise le nom du service
+        volumeMounts:
+        - name: cache
+          mountPath: /var/cache/nginx
+        - name: run
+          mountPath: /var/run
+      volumes:
+      - name: cache
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
