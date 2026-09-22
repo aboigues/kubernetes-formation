@@ -204,10 +204,101 @@ tp10/
 **Configuration du Deployment** :
 Le fichier `09b-backend-deployment.yaml` est configuré pour utiliser l'image locale :
 ```yaml
-containers:
-- name: api
-  image: taskflow-backend:latest  # Image construite localement
-  imagePullPolicy: Never           # Ne pas chercher sur Docker Hub
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-api
+  namespace: taskflow
+  labels:
+    app: backend-api
+    tier: application
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend-api
+  template:
+    metadata:
+      labels:
+        app: backend-api
+        tier: application
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5000"
+        prometheus.io/path: "/metrics"
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+      - name: api
+        image: taskflow-backend:latest
+        imagePullPolicy: Never
+        workingDir: /app
+        ports:
+        - containerPort: 5000
+          name: http
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+        env:
+        - name: DATABASE_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_USER
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_PASSWORD
+        envFrom:
+        - configMapRef:
+            name: backend-config
+        volumeMounts:
+        - name: app-code
+          mountPath: /app
+        - name: home
+          mountPath: /home/appuser
+        - name: tmp
+          mountPath: /tmp
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 5000
+          initialDelaySeconds: 15
+          periodSeconds: 5
+
+      volumes:
+      - name: app-code
+        configMap:
+          name: backend-app-code
+      - name: home
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
 ```
 
 ## 📦 Partie 2 : Déploiement de la base de données PostgreSQL avec initContainer
@@ -312,7 +403,7 @@ spec:
   resources:
     requests:
       storage: 2Gi
-  storageClassName: standard  # Ajuster selon votre environnement
+  storageClassName: standard
 ```
 
 Appliquer :
@@ -334,54 +425,83 @@ metadata:
     app: postgres
     tier: database
 spec:
-  replicas: 1  # IMPORTANT : Une seule instance pour éviter la corruption de données
+  replicas: 1
   selector:
     matchLabels:
       app: postgres
   strategy:
-    type: Recreate  # IMPORTANT : Arrêter l'ancien pod avant de démarrer le nouveau
+    type: Recreate
   template:
     metadata:
       labels:
         app: postgres
         tier: database
     spec:
-      # initContainer : s'exécute AVANT le conteneur principal
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
+
       initContainers:
       - name: init-db-schema
-        image: postgres:16-alpine
+        image: postgres:17-alpine
         command:
         - sh
         - -c
         - |
           echo "Waiting for PostgreSQL to be ready..."
-          # Attendre que PostgreSQL soit prêt dans le conteneur principal
-          # (ce script s'exécute en premier mais le volume est partagé)
           sleep 10
           echo "InitContainer completed successfully"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 70
+          capabilities:
+            drop:
+            - ALL
         volumeMounts:
         - name: init-script
           mountPath: /docker-entrypoint-initdb.d
+        - name: tmp
+          mountPath: /tmp
         envFrom:
         - secretRef:
             name: postgres-secret
 
-      # Conteneur principal PostgreSQL
       containers:
       - name: postgres
-        image: postgres:16-alpine
+        image: postgres:17-alpine
         ports:
         - containerPort: 5432
           name: postgres
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 70
+          capabilities:
+            drop:
+            - ALL
         envFrom:
         - secretRef:
             name: postgres-secret
+        env:
+        # PGDATA doit pointer vers un sous-répertoire pour permettre l'initialisation
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
         volumeMounts:
         - name: postgres-storage
           mountPath: /var/lib/postgresql/data
-          subPath: postgres  # Éviter les problèmes de permissions
+          # Note: subPath removed to allow fsGroup to work correctly
         - name: init-script
           mountPath: /docker-entrypoint-initdb.d
+        - name: tmp
+          mountPath: /tmp
+        - name: run
+          mountPath: /var/run/postgresql
         resources:
           requests:
             memory: "256Mi"
@@ -413,6 +533,10 @@ spec:
       - name: init-script
         configMap:
           name: postgres-init-script
+      - name: tmp
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
 ```
 
 **Points clés à comprendre** :
@@ -522,9 +646,16 @@ spec:
         app: redis
         tier: cache
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+
       containers:
       - name: redis
-        image: redis:7-alpine
+        image: redis:7.4-alpine
         ports:
         - containerPort: 6379
           name: redis
@@ -534,6 +665,17 @@ spec:
         - "128mb"
         - --maxmemory-policy
         - "allkeys-lru"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 999
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: data
+          mountPath: /data
         resources:
           requests:
             memory: "64Mi"
@@ -553,6 +695,10 @@ spec:
             - ping
           initialDelaySeconds: 5
           periodSeconds: 5
+
+      volumes:
+      - name: data
+        emptyDir: {}
 ```
 
 Appliquer :
@@ -629,7 +775,7 @@ metadata:
     app: backend-api
     tier: application
 spec:
-  replicas: 2  # Nombre initial (HPA va ajuster)
+  replicas: 2
   selector:
     matchLabels:
       app: backend-api
@@ -638,13 +784,34 @@ spec:
       labels:
         app: backend-api
         tier: application
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5000"
+        prometheus.io/path: "/metrics"
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
       containers:
       - name: api
-        image: python:3.11-slim  # Image de base (ou taskflow-backend-api:latest si construite localement)
+        image: taskflow-backend:latest
+        imagePullPolicy: Never
+        workingDir: /app
         ports:
         - containerPort: 5000
           name: http
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
         env:
         - name: DATABASE_USER
           valueFrom:
@@ -659,10 +826,17 @@ spec:
         envFrom:
         - configMapRef:
             name: backend-config
+        volumeMounts:
+        - name: app-code
+          mountPath: /app
+        - name: home
+          mountPath: /home/appuser
+        - name: tmp
+          mountPath: /tmp
         resources:
           requests:
             memory: "128Mi"
-            cpu: "100m"  # Important pour HPA
+            cpu: "100m"
           limits:
             memory: "256Mi"
             cpu: "500m"
@@ -670,14 +844,23 @@ spec:
           httpGet:
             path: /health
             port: 5000
-          initialDelaySeconds: 10
+          initialDelaySeconds: 30
           periodSeconds: 10
         readinessProbe:
           httpGet:
             path: /ready
             port: 5000
-          initialDelaySeconds: 5
+          initialDelaySeconds: 15
           periodSeconds: 5
+
+      volumes:
+      - name: app-code
+        configMap:
+          name: backend-app-code
+      - name: home
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
 ```
 
 **Note** : Les `requests.cpu` et `requests.memory` sont **essentiels** pour le HPA.
@@ -733,38 +916,38 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: backend-api
-  minReplicas: 2   # Minimum de pods
-  maxReplicas: 10  # Maximum de pods
+  minReplicas: 2
+  maxReplicas: 10
   metrics:
   - type: Resource
     resource:
       name: cpu
       target:
         type: Utilization
-        averageUtilization: 50  # Scale quand CPU > 50%
+        averageUtilization: 50
   - type: Resource
     resource:
       name: memory
       target:
         type: Utilization
-        averageUtilization: 70  # Scale quand mémoire > 70%
+        averageUtilization: 70
   behavior:
     scaleDown:
-      stabilizationWindowSeconds: 60  # Attendre 60s avant de descaler
+      stabilizationWindowSeconds: 60
       policies:
       - type: Percent
-        value: 50  # Descaler max 50% des pods à la fois
+        value: 50
         periodSeconds: 60
     scaleUp:
-      stabilizationWindowSeconds: 0  # Scaler immédiatement
+      stabilizationWindowSeconds: 0
       policies:
       - type: Percent
-        value: 100  # Doubler le nombre de pods si nécessaire
+        value: 100
         periodSeconds: 15
       - type: Pods
-        value: 4  # Ajouter max 4 pods à la fois
+        value: 4
         periodSeconds: 15
-      selectPolicy: Max  # Choisir la politique la plus agressive
+      selectPolicy: Max
 ```
 
 **Explication des paramètres** :
@@ -819,40 +1002,59 @@ metadata:
     app: frontend
 data:
   nginx.conf: |
+    # Configuration Nginx optimisée pour Alpine avec reverse proxy vers backend API
+
+    # Utilisateur nginx (UID 101 pour nginx:alpine)
     user nginx;
+
+    # Nombre de workers (auto = nombre de CPU)
     worker_processes auto;
+
+    # Fichier PID (dans /var/run qui est un emptyDir)
     pid /var/run/nginx.pid;
 
+    # Gestion des événements
     events {
         worker_connections 1024;
     }
 
+    # Configuration HTTP
     http {
+        # Types MIME
         include /etc/nginx/mime.types;
         default_type application/octet-stream;
 
+        # Logging (vers stdout/stderr pour Kubernetes)
         access_log /dev/stdout;
         error_log /dev/stderr warn;
 
+        # Performance
         sendfile on;
         tcp_nopush on;
+        tcp_nodelay on;
         keepalive_timeout 65;
+        types_hash_max_size 2048;
 
+        # Gzip compression
         gzip on;
         gzip_vary on;
         gzip_min_length 1000;
-        gzip_types text/plain text/css application/json application/javascript text/xml;
+        gzip_types text/plain text/css application/json application/javascript text/xml application/xml text/javascript;
 
+        # Serveur principal
         server {
             listen 80;
             server_name _;
 
+            # Root directory (ConfigMap monté)
             root /usr/share/nginx/html;
             index index.html;
 
             # Frontend - Servir l'application HTML/JS
             location / {
                 try_files $uri $uri/ /index.html;
+
+                # Headers de sécurité
                 add_header X-Content-Type-Options "nosniff" always;
                 add_header X-Frame-Options "SAMEORIGIN" always;
                 add_header X-XSS-Protection "1; mode=block" always;
@@ -876,6 +1078,12 @@ data:
                 proxy_connect_timeout 30s;
                 proxy_send_timeout 30s;
                 proxy_read_timeout 30s;
+
+                # Buffers
+                proxy_buffering on;
+                proxy_buffer_size 4k;
+                proxy_buffers 8 4k;
+                proxy_busy_buffers_size 8k;
             }
 
             # Health check endpoint
@@ -1055,10 +1263,6 @@ data:
                     <div class="stat-number" id="pendingTasks">-</div>
                     <div class="stat-label">En cours</div>
                 </div>
-                <div class="stat-box">
-                    <div class="stat-number" id="apiPods">-</div>
-                    <div class="stat-label">Pods API (HPA)</div>
-                </div>
             </div>
 
             <div class="controls">
@@ -1082,24 +1286,18 @@ data:
                 tasksList.innerHTML = '<div class="loading">Chargement...</div>';
 
                 try {
-                    const url = priority ? `${API_URL}/tasks?priority=${priority}` : `${API_URL}/tasks`;
+                    const url = priority ? API_URL + '/tasks?priority=' + priority : API_URL + '/tasks';
                     const response = await fetch(url);
 
                     if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}`);
+                        throw new Error('HTTP ' + response.status);
                     }
 
                     const data = await response.json();
                     displayTasks(data.tasks);
                     updateStats(data.stats);
                 } catch (error) {
-                    tasksList.innerHTML = `
-                        <div class="error">
-                            <strong>Erreur de connexion à l'API</strong><br>
-                            ${error.message}<br>
-                            <small>Vérifiez que le backend est déployé et accessible</small>
-                        </div>
-                    `;
+                    tasksList.innerHTML = '<div class="error"><strong>Erreur de connexion à l\'API</strong><br>' + error.message + '<br><small>Vérifiez que le backend est déployé et accessible</small></div>';
                 }
             }
 
@@ -1111,20 +1309,18 @@ data:
                     return;
                 }
 
-                tasksList.innerHTML = tasks.map(task => `
-                    <div class="task ${task.completed ? 'completed' : ''}">
-                        <div>
-                            <strong>${task.title}</strong>
-                            <span class="priority priority-${task.priority}">${task.priority}</span>
-                            <div style="color: #6c757d; margin-top: 5px; font-size: 0.9em;">
-                                ${task.description}
-                            </div>
-                        </div>
-                        <div>
-                            ${task.completed ? '✅' : '⏳'}
-                        </div>
-                    </div>
-                `).join('');
+                tasksList.innerHTML = tasks.map(task =>
+                    '<div class="task ' + (task.completed ? 'completed' : '') + '">' +
+                        '<div>' +
+                            '<strong>' + task.title + '</strong>' +
+                            '<span class="priority priority-' + task.priority + '">' + task.priority + '</span>' +
+                            '<div style="color: #6c757d; margin-top: 5px; font-size: 0.9em;">' +
+                                task.description +
+                            '</div>' +
+                        '</div>' +
+                        '<div>' + (task.completed ? '✅' : '⏳') + '</div>' +
+                    '</div>'
+                ).join('');
             }
 
             function updateStats(stats) {
@@ -1133,16 +1329,13 @@ data:
                     document.getElementById('completedTasks').textContent = stats.completed || 0;
                     document.getElementById('pendingTasks').textContent = stats.pending || 0;
                 }
-
-                // Simuler le nombre de pods (en production, récupérer via une API)
-                document.getElementById('apiPods').textContent = '~';
             }
 
             // Charger les tâches au démarrage
             loadTasks();
 
             // Auto-refresh toutes les 30 secondes
-            setInterval(() => loadTasks(), 30000);
+            setInterval(function() { loadTasks(); }, 30000);
         </script>
     </body>
     </html>
@@ -1186,7 +1379,7 @@ spec:
 
       containers:
       - name: nginx
-        image: nginx:1.25-alpine
+        image: telemachlearning/nginx:1.29-alpine
         ports:
         - containerPort: 80
           name: http
@@ -1308,13 +1501,62 @@ data:
             names:
             - taskflow
         relabel_configs:
-        - source_labels: [__meta_kubernetes_pod_label_app]
+        # Ne garder que les pods avec l'annotation prometheus.io/scrape=true
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
           action: keep
-          regex: backend-api|postgres|redis
+          regex: true
+        # Utiliser le port spécifié dans l'annotation prometheus.io/port
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port]
+          action: replace
+          target_label: __address__
+          regex: (.+)
+          replacement: ${1}
+        # Utiliser le chemin spécifié dans l'annotation prometheus.io/path (défaut: /metrics)
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        # Ajouter le nom du pod comme label
         - source_labels: [__meta_kubernetes_pod_name]
           target_label: pod
+        # Ajouter le label app du pod
         - source_labels: [__meta_kubernetes_pod_label_app]
           target_label: app
+        # Ajouter le namespace comme label
+        - source_labels: [__meta_kubernetes_namespace]
+          target_label: namespace
+        # Corriger l'adresse avec l'IP du pod et le port annoté
+        - source_labels: [__meta_kubernetes_pod_ip, __meta_kubernetes_pod_annotation_prometheus_io_port]
+          action: replace
+          regex: ([^:]+)(?::\d+)?;(\d+)
+          replacement: $1:$2
+          target_label: __address__
+
+      # Job pour collecter les métriques cAdvisor (métriques container_*)
+      - job_name: 'kubernetes-cadvisor'
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+        - role: node
+        relabel_configs:
+        # Scraper l'endpoint /metrics/cadvisor du kubelet
+        - source_labels: [__address__]
+          regex: '(.*):10250'
+          replacement: '${1}:10250'
+          target_label: __address__
+        # Le kubelet expose /metrics/cadvisor directement sur son port 10250.
+        # La version précédente demandait /api/v1/nodes/<node>/proxy/metrics/cadvisor
+        # — un chemin de l'APISERVER — à une adresse qui est celle du KUBELET :
+        # celui-ci répondait 404, le job ne remontait aucune métrique. Passer par
+        # l'apiserver aurait en plus exigé `nodes/proxy` dans le ClusterRole.
+        - target_label: __metrics_path__
+          replacement: /metrics/cadvisor
+        # Ajouter le nom du node comme label
+        - source_labels: [__meta_kubernetes_node_name]
+          target_label: node
 ```
 
 Appliquer :
@@ -1341,7 +1583,10 @@ rules:
 - apiGroups: [""]
   resources:
   - nodes
-  - nodes/proxy
+  # Pas de `nodes/proxy` : il autorise le proxy vers N'IMPORTE QUEL endpoint du
+  # kubelet, pas seulement /metrics — d'où KSV-0047 (escalade de privilèges).
+  # Le job cadvisor scrape le kubelet en direct, `nodes/metrics` suffit.
+  - nodes/metrics
   - services
   - endpoints
   - pods
@@ -1418,8 +1663,17 @@ spec:
         app: prometheus
     spec:
       serviceAccountName: prometheus
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+
       containers:
       - name: prometheus
+        # Tag roulant v3 : les CVE de Prometheus sont dans son binaire Go, qu'un
+        # tag de patch fige (mesuré : 87 CVE HIGH/CRITICAL sur v2.48.0, 0 sur v3).
         image: prom/prometheus:v3
         args:
         - '--config.file=/etc/prometheus/prometheus.yml'
@@ -1428,11 +1682,21 @@ spec:
         ports:
         - containerPort: 9090
           name: http
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 65534
+          capabilities:
+            drop:
+            - ALL
         volumeMounts:
         - name: config
           mountPath: /etc/prometheus
         - name: storage
           mountPath: /prometheus
+        - name: tmp
+          mountPath: /tmp
         resources:
           requests:
             memory: "512Mi"
@@ -1440,6 +1704,7 @@ spec:
           limits:
             memory: "1Gi"
             cpu: "500m"
+
       volumes:
       - name: config
         configMap:
@@ -1447,6 +1712,8 @@ spec:
       - name: storage
         persistentVolumeClaim:
           claimName: prometheus-pvc
+      - name: tmp
+        emptyDir: {}
 ```
 
 Appliquer :
@@ -1504,12 +1771,27 @@ spec:
       labels:
         app: grafana
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 472
+        fsGroup: 472
+        seccompProfile:
+          type: RuntimeDefault
+
       containers:
       - name: grafana
-        image: grafana/grafana:10.2.0
+        image: grafana/grafana:13.2.1
         ports:
         - containerPort: 3000
           name: http
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 472
+          capabilities:
+            drop:
+            - ALL
         env:
         - name: GF_SECURITY_ADMIN_USER
           value: admin
@@ -1517,6 +1799,14 @@ spec:
           value: admin2024
         - name: GF_SERVER_ROOT_URL
           value: "%(protocol)s://%(domain)s:%(http_port)s/"
+        - name: GF_PATHS_DATA
+          value: /var/lib/grafana
+        - name: GF_PATHS_LOGS
+          value: /var/log/grafana
+        - name: GF_PATHS_PLUGINS
+          value: /var/lib/grafana/plugins
+        - name: GF_PATHS_PROVISIONING
+          value: /etc/grafana/provisioning
         resources:
           requests:
             memory: "256Mi"
@@ -1527,9 +1817,36 @@ spec:
         volumeMounts:
         - name: grafana-storage
           mountPath: /var/lib/grafana
+        - name: grafana-logs
+          mountPath: /var/log/grafana
+        - name: tmp
+          mountPath: /tmp
+        - name: grafana-datasources
+          mountPath: /etc/grafana/provisioning/datasources
+          readOnly: true
+        - name: grafana-dashboard-provider
+          mountPath: /etc/grafana/provisioning/dashboards
+          readOnly: true
+        - name: grafana-dashboards
+          mountPath: /var/lib/grafana/dashboards
+          readOnly: true
+
       volumes:
       - name: grafana-storage
         emptyDir: {}
+      - name: grafana-logs
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
+      - name: grafana-datasources
+        configMap:
+          name: grafana-datasources
+      - name: grafana-dashboard-provider
+        configMap:
+          name: grafana-dashboard-provider
+      - name: grafana-dashboards
+        configMap:
+          name: grafana-dashboards
 ```
 
 Appliquer (les ConfigMaps de provisioning doivent exister **avant** le Deployment) :
@@ -1601,7 +1918,7 @@ metadata:
   name: load-generator
   namespace: taskflow
 spec:
-  parallelism: 5  # 5 pods en parallèle pour générer de la charge
+  parallelism: 5
   completions: 5
   template:
     metadata:
@@ -1609,6 +1926,13 @@ spec:
         app: load-generator
     spec:
       restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
       containers:
       - name: load-generator
         image: busybox:1.36
@@ -1633,9 +1957,23 @@ spec:
             # GET /stats
             wget -q -O- $API_URL/stats > /dev/null 2>&1
 
-            # Petite pause pour ne pas surcharger immédiatement
+            # GET /stress (charge CPU)
+            wget -q -O- $API_URL/stress?duration=2 > /dev/null 2>&1
+
+            # Petite pause
             sleep 0.1
           done
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
         resources:
           requests:
             memory: "32Mi"
@@ -1643,6 +1981,10 @@ spec:
           limits:
             memory: "64Mi"
             cpu: "200m"
+
+      volumes:
+      - name: tmp
+        emptyDir: {}
 ```
 
 **Ne PAS appliquer tout de suite** ! Nous allons d'abord tout vérifier.
