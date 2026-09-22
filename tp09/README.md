@@ -1501,7 +1501,11 @@ spec:
 kubectl taint nodes worker1 workload=database:NoSchedule
 kubectl label nodes worker1 workload=database
 
-# 2. Déployer une base de données
+# 2. Créer le Secret pour le mot de passe (jamais en clair dans le manifest)
+kubectl create secret generic postgres-credentials \
+  --from-literal=password=mysecretpassword
+
+# 3. Déployer une base de données
 cat > postgres-deployment.yaml <<EOF
 apiVersion: apps/v1
 kind: Deployment
@@ -1529,7 +1533,10 @@ spec:
         image: postgres:15-alpine
         env:
         - name: POSTGRES_PASSWORD
-          value: mysecretpassword
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: password
 EOF
 
 kubectl apply -f postgres-deployment.yaml

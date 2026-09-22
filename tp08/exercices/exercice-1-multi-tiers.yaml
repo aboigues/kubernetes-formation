@@ -103,6 +103,16 @@ spec:
     targetPort: 80
 
 ---
+# Database Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: database-credentials
+  namespace: my-app
+type: Opaque
+stringData:
+  password: "mysecretpassword"
+---
 # Database Deployment
 apiVersion: apps/v1
 kind: Deployment
@@ -123,6 +133,12 @@ spec:
         app: database
         tier: database
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: postgres
         image: postgres:15-alpine
@@ -130,11 +146,39 @@ spec:
         - containerPort: 5432
         env:
         - name: POSTGRES_PASSWORD
-          value: "mysecretpassword"
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: password
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 70
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: run
+          mountPath: /var/run/postgresql
+        - name: data
+          mountPath: /var/lib/postgresql/data
         resources:
           requests:
             cpu: 200m
             memory: 128Mi
+          limits:
+            cpu: 400m
+            memory: 256Mi
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
+      - name: data
+        emptyDir: {}
 ---
 # Database Headless Service
 apiVersion: v1
