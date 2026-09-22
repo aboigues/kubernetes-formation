@@ -112,6 +112,14 @@ kubectl delete -f 01-emptydir-pod.yaml
 
 ## Partie 2 : Comprendre l'infrastructure de stockage Kubernetes
 
+⚠️ **Si vous recommencez cette partie** (cluster déjà utilisé pour un essai précédent, même partiel) : un PVC déjà `Bound` **le reste** même après suppression du pod qui l'utilisait — supprimer un pod ne "dé-lie" pas son PVC. Si vous voulez observer le cycle `Pending` → `Bound` décrit ci-dessous depuis le début, nettoyez d'abord les objets de cette partie :
+
+```bash
+kubectl delete pod pod-with-pvc --ignore-not-found
+kubectl delete pvc pvc-demo --ignore-not-found
+kubectl delete pv pv-demo --ignore-not-found
+```
+
 ### 2.1 Architecture du stockage dans Kubernetes
 
 Avant de plonger dans les PersistentVolumes, il est crucial de comprendre l'architecture globale du stockage dans Kubernetes et les différentes options disponibles en production.
@@ -681,7 +689,9 @@ Le PVC va chercher un PV compatible avec les critères suivants :
 - Mode d'accès compatible (ici: ReadWriteOnce)
 - Capacité suffisante (ici: 500Mi, le PV a 1Gi donc c'est OK)
 
-⚠️ **Problème courant** : Si vous voyez le PVC rester en état "Pending" indéfiniment, vérifiez que :
+⚠️ **Le PVC va rester "Pending" à cette étape, et c'est normal** : la StorageClass "manual" utilise `volumeBindingMode: WaitForFirstConsumer` (section 2.3). Le binding n'a lieu que lorsqu'un **pod** référence le PVC — pas au moment où le PVC est créé seul. Ce n'est qu'à l'étape 2.6, une fois `05-pod-with-pvc.yaml` appliqué, que le PVC et le PV passeront à **Bound**.
+
+Si le PVC reste "Pending" **même après** avoir créé le pod (étape 2.6), alors vérifiez que :
 1. La StorageClass "manual" a bien été créée (section 2.3)
 2. Un PV avec `storageClassName: manual` existe et est en état "Available"
 3. Les modes d'accès et la capacité correspondent
@@ -694,15 +704,15 @@ Sans la StorageClass "manual", le binding échouera et vous verrez une erreur du
 # Créer le PVC
 kubectl apply -f 04-persistent-volume-claim.yaml
 
-# Vérifier le PVC
+# Vérifier le PVC (statut attendu : Pending, tant qu'aucun pod ne l'utilise)
 kubectl get pvc
 kubectl describe pvc pvc-demo
 
-# Revérifier le PV
+# Le PV reste "Available" à ce stade, pas encore "Bound"
 kubectl get pv
 ```
 
-Le PV devrait maintenant être **Bound** au PVC.
+Le PVC reste **Pending** et le PV reste **Available** : c'est attendu avec `WaitForFirstConsumer`. Le binding aura lieu à l'étape suivante, dès qu'un pod utilisera le PVC.
 
 ### 2.6 Utiliser le PVC dans un Pod
 
@@ -732,6 +742,10 @@ spec:
 ```bash
 # Créer le pod
 kubectl apply -f 05-pod-with-pvc.yaml
+
+# Le PVC et le PV passent maintenant à "Bound" (WaitForFirstConsumer déclenché)
+kubectl get pvc pvc-demo
+kubectl get pv pv-demo
 
 # Attendre que le pod soit prêt
 kubectl wait --for=condition=ready pod/pod-with-pvc --timeout=60s
