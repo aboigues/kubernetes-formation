@@ -121,24 +121,30 @@ version: '3.8'
 services:
   # Frontend web
   frontend:
-    image: nginx:1.25-alpine
+    image: telemachlearning/nginx:1.29-alpine
+    container_name: myapp-frontend
     ports:
       - "8080:80"
     volumes:
-      - ./frontend:/usr/share/nginx/html:ro
+      - ../frontend:/usr/share/nginx/html:ro
     environment:
       - BACKEND_URL=http://backend:5000
     depends_on:
       - backend
     restart: always
+    networks:
+      - app-network
 
   # Backend API
   backend:
-    image: python:3.11-slim
-    command: python -m http.server 5000
+    # Aligné sur le manifest Kubernetes du même TP (06-backend-deployment.yaml) :
+    # la migration compose -> k8s n'a de sens que si les deux côtés sont identiques.
+    image: python:3.13-alpine
+    container_name: myapp-backend
+    command: python /app/server.py
     working_dir: /app
     volumes:
-      - ./backend:/app
+      - ../backend:/app
     environment:
       - DATABASE_HOST=database
       - DATABASE_PORT=5432
@@ -150,10 +156,13 @@ services:
     restart: always
     deploy:
       replicas: 2
+    networks:
+      - app-network
 
-  # Base de données
+  # Base de données PostgreSQL
   database:
     image: postgres:15-alpine
+    container_name: myapp-database
     volumes:
       - db-data:/var/lib/postgresql/data
     environment:
@@ -163,9 +172,16 @@ services:
     restart: always
     ports:
       - "5432:5432"
+    networks:
+      - app-network
 
 volumes:
   db-data:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge
 ```
 
 ### 2.2 Créer les fichiers de l'application
@@ -260,6 +276,7 @@ metadata:
   labels:
     name: myapp
     environment: development
+    purpose: docker-compose-migration
 ```
 
 ```bash
@@ -276,6 +293,9 @@ kind: Secret
 metadata:
   name: database-credentials
   namespace: myapp
+  labels:
+    app: database
+    component: credentials
 type: Opaque
 stringData:
   POSTGRES_DB: myapp
@@ -300,11 +320,15 @@ kind: ConfigMap
 metadata:
   name: backend-config
   namespace: myapp
+  labels:
+    app: backend
+    component: config
 data:
   DATABASE_HOST: "database"
   DATABASE_PORT: "5432"
   LOG_LEVEL: "info"
   APP_ENV: "development"
+  PLATFORM: "kubernetes"
 ```
 
 ```bash
@@ -321,14 +345,18 @@ kind: PersistentVolumeClaim
 metadata:
   name: database-pvc
   namespace: myapp
+  labels:
+    app: database
+    component: storage
 spec:
   accessModes:
     - ReadWriteOnce
   resources:
     requests:
       storage: 1Gi
-  # Pour minikube, pas besoin de storageClassName
+  # Pour minikube, la storageClass par défaut est utilisée
   # En production, spécifier le storageClassName approprié
+  # storageClassName: standard
 ```
 
 Fichier `04-database-deployment.yaml` :
@@ -342,31 +370,54 @@ metadata:
   labels:
     app: database
     tier: data
+    version: "15"
 spec:
-  replicas: 1  # Important : les bases de données ne scalent pas horizontalement facilement
+  replicas: 1
+  strategy:
+    type: Recreate  # Important pour les bases de données
   selector:
     matchLabels:
       app: database
-  strategy:
-    type: Recreate  # Important pour éviter plusieurs instances accédant au même volume
   template:
     metadata:
       labels:
         app: database
+        tier: data
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: postgres
         image: postgres:15-alpine
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
         ports:
         - containerPort: 5432
           name: postgres
+          protocol: TCP
         envFrom:
         - secretRef:
             name: database-credentials
+        env:
+        # PGDATA doit pointer vers un sous-répertoire : subPath cassait
+        # l'application de fsGroup au volume (cf. tp10/04-postgres-deployment.yaml).
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
         volumeMounts:
         - name: database-storage
           mountPath: /var/lib/postgresql/data
-          subPath: postgres  # Important pour éviter les problèmes de permissions
+        - name: tmp
+          mountPath: /tmp
+        - name: run
+          mountPath: /var/run/postgresql
         resources:
           requests:
             memory: "256Mi"
@@ -382,6 +433,8 @@ spec:
             - admin
           initialDelaySeconds: 30
           periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
         readinessProbe:
           exec:
             command:
@@ -390,10 +443,16 @@ spec:
             - admin
           initialDelaySeconds: 5
           periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 2
       volumes:
       - name: database-storage
         persistentVolumeClaim:
           claimName: database-pvc
+      - name: tmp
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
 ```
 
 Fichier `05-database-service.yaml` :
@@ -406,8 +465,9 @@ metadata:
   namespace: myapp
   labels:
     app: database
+    tier: data
 spec:
-  type: ClusterIP  # Accès interne uniquement
+  type: ClusterIP
   ports:
   - port: 5432
     targetPort: 5432
@@ -443,8 +503,14 @@ metadata:
   labels:
     app: backend
     tier: api
+    version: "1.0"
 spec:
-  replicas: 2  # Correspond au deploy.replicas dans docker-compose
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: backend
@@ -452,23 +518,60 @@ spec:
     metadata:
       labels:
         app: backend
+        tier: api
+        version: "1.0"
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+      - name: wait-for-database
+        image: busybox:1.36
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        command:
+          - sh
+          - -c
+          - |
+            echo "Waiting for database to be ready..."
+            until nc -z database 5432; do
+              echo "Database not ready, waiting..."
+              sleep 2
+            done
+            echo "Database is ready!"
       containers:
       - name: backend
-        image: python:3.11-slim
+        # Alpine plutôt que slim : 0 CVE OS contre 22 pour python:3.11-slim.
+        # server.py n'utilise que la stdlib, aucune dépendance compilée en jeu.
+        image: python:3.13-alpine
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
         command:
           - python
-          - -m
-          - http.server
-          - "5000"
+          - /app/server.py
         ports:
         - containerPort: 5000
           name: http
+          protocol: TCP
         envFrom:
         - configMapRef:
             name: backend-config
         - secretRef:
             name: database-credentials
+        env:
+        - name: PORT
+          value: "5000"
         resources:
           requests:
             memory: "128Mi"
@@ -478,29 +581,29 @@ spec:
             cpu: "200m"
         livenessProbe:
           httpGet:
-            path: /
+            path: /api/health
             port: 5000
-          initialDelaySeconds: 10
+          initialDelaySeconds: 15
           periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
         readinessProbe:
           httpGet:
-            path: /
+            path: /api/health
             port: 5000
           initialDelaySeconds: 5
           periodSeconds: 5
-      # Attendre que la base de données soit prête
-      initContainers:
-      - name: wait-for-db
-        image: busybox:1.36
-        command:
-          - sh
-          - -c
-          - |
-            until nc -z database 5432; do
-              echo "Waiting for database..."
-              sleep 2
-            done
-            echo "Database is ready!"
+          timeoutSeconds: 2
+          failureThreshold: 2
+        volumeMounts:
+        - name: app-code
+          mountPath: /app
+          readOnly: true
+      volumes:
+      - name: app-code
+        configMap:
+          name: backend-code
+          defaultMode: 0755
 ```
 
 Fichier `07-backend-service.yaml` :
@@ -513,8 +616,9 @@ metadata:
   namespace: myapp
   labels:
     app: backend
+    tier: api
 spec:
-  type: ClusterIP  # Accès interne uniquement (depuis le frontend)
+  type: ClusterIP
   ports:
   - port: 5000
     targetPort: 5000
@@ -522,6 +626,7 @@ spec:
     name: http
   selector:
     app: backend
+  sessionAffinity: None
 ```
 
 Appliquer :
@@ -547,34 +652,172 @@ kind: ConfigMap
 metadata:
   name: frontend-html
   namespace: myapp
+  labels:
+    app: frontend
+    component: html
 data:
   index.html: |
     <!DOCTYPE html>
-    <html>
+    <html lang="fr">
     <head>
-        <title>My App on Kubernetes</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>My App - Docker Compose to Kubernetes</title>
         <style>
-            body { font-family: Arial, sans-serif; margin: 50px; }
-            .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
-            .healthy { background-color: #d4edda; color: #155724; }
-            .error { background-color: #f8d7da; color: #721c24; }
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 20px;
+            }
+            .container {
+                background: white;
+                border-radius: 20px;
+                padding: 40px;
+                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+                max-width: 600px;
+                width: 100%;
+            }
+            h1 {
+                color: #333;
+                margin-bottom: 10px;
+                font-size: 2.5em;
+            }
+            .subtitle {
+                color: #666;
+                margin-bottom: 30px;
+                font-size: 1.1em;
+            }
+            .status {
+                padding: 15px;
+                margin: 15px 0;
+                border-radius: 10px;
+                font-size: 1.1em;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }
+            .healthy {
+                background-color: #d4edda;
+                color: #155724;
+                border-left: 5px solid #28a745;
+            }
+            .error {
+                background-color: #f8d7da;
+                color: #721c24;
+                border-left: 5px solid #dc3545;
+            }
+            .loading {
+                background-color: #fff3cd;
+                color: #856404;
+                border-left: 5px solid #ffc107;
+            }
+            .info-box {
+                background: #f8f9fa;
+                padding: 20px;
+                border-radius: 10px;
+                margin-top: 20px;
+            }
+            .info-box h3 {
+                color: #495057;
+                margin-bottom: 10px;
+            }
+            .info-box p {
+                color: #6c757d;
+                line-height: 1.6;
+            }
+            .spinner {
+                border: 3px solid #f3f3f3;
+                border-top: 3px solid #667eea;
+                border-radius: 50%;
+                width: 20px;
+                height: 20px;
+                animation: spin 1s linear infinite;
+                display: inline-block;
+            }
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+            .badge {
+                display: inline-block;
+                padding: 5px 15px;
+                background: #667eea;
+                color: white;
+                border-radius: 20px;
+                font-size: 0.85em;
+                margin-top: 10px;
+            }
         </style>
     </head>
     <body>
-        <h1>Welcome to My App on Kubernetes</h1>
-        <p>Frontend running on Nginx in a Kubernetes cluster</p>
-        <div id="status" class="status">Checking backend status...</div>
+        <div class="container">
+            <h1>🚀 My App on Kubernetes</h1>
+            <p class="subtitle">Migration Docker Compose → Kubernetes</p>
+
+            <div id="status" class="status loading">
+                <div class="spinner"></div>
+                <span>Vérification du statut du backend...</span>
+            </div>
+
+            <div class="info-box">
+                <h3>📦 Architecture</h3>
+                <p>
+                    <strong>Frontend:</strong> Nginx servant ce HTML statique<br>
+                    <strong>Backend:</strong> API Python simple<br>
+                    <strong>Database:</strong> PostgreSQL pour la persistance
+                </p>
+                <div class="badge">TP7 - Docker Compose to Kubernetes</div>
+            </div>
+
+            <div class="info-box">
+                <h3>🔧 Environnement</h3>
+                <p>✅ Déployé sur <strong>Kubernetes</strong></p>
+            </div>
+
+            <div class="info-box" id="backend-info" style="display:none;">
+                <h3>📊 Backend Information</h3>
+                <pre id="backend-data" style="background: #2d2d2d; color: #f8f8f2; padding: 15px; border-radius: 5px; overflow-x: auto;"></pre>
+            </div>
+        </div>
+
         <script>
-            fetch('http://backend:5000/api/health')
-                .then(r => r.json())
-                .then(d => {
-                    document.getElementById('status').className = 'status healthy';
-                    document.getElementById('status').textContent = 'Backend is ' + d.status;
-                })
-                .catch(e => {
+            async function checkBackend() {
+                try {
+                    // Utilise le proxy Nginx pour atteindre le backend
+                    const response = await fetch('/api/health');
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        document.getElementById('status').className = 'status healthy';
+                        document.getElementById('status').innerHTML =
+                            `✅ <span>Backend est <strong>${data.status}</strong> (pod: ${data.hostname})</span>`;
+
+                        // Afficher les infos du backend
+                        document.getElementById('backend-info').style.display = 'block';
+                        document.getElementById('backend-data').textContent = JSON.stringify(data, null, 2);
+                    } else {
+                        throw new Error('Backend not responding (HTTP ' + response.status + ')');
+                    }
+                } catch (error) {
                     document.getElementById('status').className = 'status error';
-                    document.getElementById('status').textContent = 'Backend error: ' + e;
-                });
+                    document.getElementById('status').innerHTML =
+                        `❌ <span>Erreur de connexion au backend: ${error.message}</span>`;
+                    console.error('Backend error:', error);
+                }
+            }
+
+            // Vérifier au chargement et toutes les 10 secondes
+            checkBackend();
+            setInterval(checkBackend, 10000);
         </script>
     </body>
     </html>
@@ -591,8 +834,14 @@ metadata:
   labels:
     app: frontend
     tier: web
+    version: "1.0"
 spec:
   replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: frontend
@@ -600,20 +849,43 @@ spec:
     metadata:
       labels:
         app: frontend
+        tier: web
+        version: "1.0"
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: nginx
-        image: nginx:1.25-alpine
+        image: telemachlearning/nginx:1.29-alpine
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
         ports:
         - containerPort: 80
           name: http
+          protocol: TCP
+        env:
+        - name: BACKEND_URL
+          value: "http://backend:5000"
         volumeMounts:
         - name: html
           mountPath: /usr/share/nginx/html
           readOnly: true
-        env:
-        - name: BACKEND_URL
-          value: "http://backend:5000"
+        - name: nginx-config
+          mountPath: /etc/nginx/conf.d/default.conf
+          subPath: default.conf
+          readOnly: true
+        - name: cache
+          mountPath: /var/cache/nginx
+        - name: run
+          mountPath: /var/run
         resources:
           requests:
             memory: "64Mi"
@@ -627,16 +899,27 @@ spec:
             port: 80
           initialDelaySeconds: 10
           periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
         readinessProbe:
           httpGet:
             path: /
             port: 80
           initialDelaySeconds: 5
           periodSeconds: 5
+          timeoutSeconds: 2
+          failureThreshold: 2
       volumes:
       - name: html
         configMap:
           name: frontend-html
+      - name: nginx-config
+        configMap:
+          name: frontend-nginx-config
+      - name: cache
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
 ```
 
 Fichier `10-frontend-service.yaml` :
@@ -649,16 +932,18 @@ metadata:
   namespace: myapp
   labels:
     app: frontend
+    tier: web
 spec:
-  type: NodePort  # Accès externe via minikube
+  type: NodePort
   ports:
   - port: 80
     targetPort: 80
-    nodePort: 30080  # Port fixe pour faciliter l'accès
+    nodePort: 30080
     protocol: TCP
     name: http
   selector:
     app: frontend
+  sessionAffinity: None
 ```
 
 Appliquer :
@@ -907,6 +1192,9 @@ kind: HorizontalPodAutoscaler
 metadata:
   name: backend-hpa
   namespace: myapp
+  labels:
+    app: backend
+    component: autoscaling
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
@@ -920,30 +1208,30 @@ spec:
       name: cpu
       target:
         type: Utilization
-        averageUtilization: 70  # Scale si CPU > 70%
+        averageUtilization: 70
   - type: Resource
     resource:
       name: memory
       target:
         type: Utilization
-        averageUtilization: 80  # Scale si Memory > 80%
+        averageUtilization: 80
   behavior:
     scaleDown:
-      stabilizationWindowSeconds: 300  # Attendre 5min avant de descaler
+      stabilizationWindowSeconds: 300
       policies:
       - type: Percent
-        value: 50               # Réduire de 50% max à la fois
+        value: 50
         periodSeconds: 60
     scaleUp:
       stabilizationWindowSeconds: 0
       policies:
       - type: Percent
-        value: 100              # Doubler si nécessaire
+        value: 100
         periodSeconds: 30
       - type: Pods
-        value: 4                # Ou ajouter 4 pods max
+        value: 4
         periodSeconds: 30
-      selectPolicy: Max         # Prendre la politique la plus agressive
+      selectPolicy: Max
 ```
 
 Prérequis pour HPA :
@@ -967,12 +1255,15 @@ Pour sécuriser les communications entre services :
 Fichier `12-network-policies.yaml` :
 
 ```yaml
-# Politique pour le frontend : peut communiquer avec le backend uniquement
+---
+# Network Policy pour le Frontend
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: frontend-netpol
   namespace: myapp
+  labels:
+    app: frontend
 spec:
   podSelector:
     matchLabels:
@@ -996,12 +1287,14 @@ spec:
       port: 5000
 
 ---
-# Politique pour le backend : peut communiquer avec la database uniquement
+# Network Policy pour le Backend
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: backend-netpol
   namespace: myapp
+  labels:
+    app: backend
 spec:
   podSelector:
     matchLabels:
@@ -1035,12 +1328,14 @@ spec:
       port: 5432
 
 ---
-# Politique pour la database : accepte uniquement depuis backend
+# Network Policy pour la Database
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: database-netpol
   namespace: myapp
+  labels:
+    app: database
 spec:
   podSelector:
     matchLabels:
