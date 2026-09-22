@@ -17,5 +17,6 @@ Un aide-mémoire condensé par TP : concepts clés, commandes essentielles, et s
 | [tp09.md](tp09.md) | TP9 | Gestion multi-nœuds |
 | [tp10.md](tp10.md) | TP10 | Projet de synthèse (TaskFlow) |
 | [tp11.md](tp11.md) | TP11 | Gateway API |
+| [quiz-revision-kubernetes.md](quiz-revision-kubernetes.md) | — | Révision quiz formation DEVOPS-010 (dépôt telemach-learning) |
 
 Voir aussi le [cheatsheet CKAD](../../ckad-preparation/cheatsheet.md) pour une révision orientée certification, et le [schéma des ressources Kubernetes](../KUBERNETES_RESOURCES_SCHEMA.md) pour une vue d'ensemble visuelle.
