@@ -362,12 +362,23 @@ spec:
 **Test :**
 
 ```bash
-# Créer des pods avec le label app=database
-kubectl create deployment db --image=mysql:8 --replicas=3
-kubectl set env deployment/db MYSQL_ROOT_PASSWORD=secret
+# Créer des pods avec le label app=database — le nom du deployment doit être
+# "database" (pas "db") : kubectl create deployment étiquette les pods
+# app=<nom-du-deployment>, et le Service ci-dessus sélectionne app: database.
+kubectl create deployment database --image=mysql:8 --replicas=3
+
+# L'image mysql officielle refuse de démarrer sans mot de passe root : les 3
+# pods partent en CrashLoopBackOff jusqu'à cette commande, qui déclenche un
+# nouveau rollout avec la variable définie.
+kubectl set env deployment/database MYSQL_ROOT_PASSWORD=secret
 
 # Créer le headless service
 kubectl apply -f headless-service.yaml
+
+# Attendre que les 3 pods soient prêts avant le test DNS, sinon nslookup peut
+# ne renvoyer qu'une partie des IPs (pods pas encore Ready) ou aucune (rollout
+# du set env pas encore terminé)
+kubectl rollout status deployment/database --timeout=120s
 
 # Faire un DNS lookup
 kubectl run tmp --image=busybox --rm -it -- nslookup db-headless
