@@ -595,6 +595,16 @@ jobs:
       - name: Create namespace
         run: kubectl create namespace taskflow
 
+      # 09b-backend-deployment.yaml référence taskflow-backend:latest avec
+      # imagePullPolicy: Never - l'image doit donc exister dans le cache
+      # d'images de CE minikube avant le déploiement, pas juste être buildable
+      # (le job "Build TP Dockerfiles" la construit bien, mais sous un autre
+      # tag - tp10-backend:ci - et sur un runner totalement différent, donc
+      # invisible ici). `minikube image build` construit directement dans le
+      # cache du cluster, sans dépendre du driver (docker/none/...).
+      - name: Build TaskFlow backend image inside Minikube
+        run: minikube image build -t taskflow-backend:latest tp10/
+
       - name: Deploy TP10 resources
         run: |
           echo "Deploying PostgreSQL..."

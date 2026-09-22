@@ -97,6 +97,15 @@ spec:
             - pg_isready
             - -U
             - taskflow
+            # -d explicite : sans lui, pg_isready cible par défaut une base
+            # nommée comme l'utilisateur ("taskflow"), qui n'existe pas - la
+            # vraie base est "taskflow_db" (POSTGRES_DB dans le Secret).
+            # pg_isready traite quand même un rejet "database does not
+            # exist" comme "serveur accepte les connexions" (il ne teste que
+            # l'atteignabilité du serveur, pas l'auth complète), donc le pod
+            # passait Ready malgré tout - mais ça spamme les logs en continu.
+            - -d
+            - taskflow_db
           initialDelaySeconds: 30
           periodSeconds: 10
         readinessProbe:
@@ -105,6 +114,8 @@ spec:
             - pg_isready
             - -U
             - taskflow
+            - -d
+            - taskflow_db
           initialDelaySeconds: 5
           periodSeconds: 5
 
