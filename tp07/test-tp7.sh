@@ -90,8 +90,8 @@ test_namespace() {
     kubectl apply -f "$MANIFEST_DIR/00-namespace.yaml"
     sleep 2
 
-    if kubectl get namespace web-app &> /dev/null; then
-        log_success "Test 1 OK: Namespace 'web-app' créé"
+    if kubectl get namespace myapp &> /dev/null; then
+        log_success "Test 1 OK: Namespace 'myapp' créé"
     else
         log_error "Test 1 FAILED: Namespace non créé"
         return 1
@@ -117,8 +117,8 @@ test_config() {
     sleep 2
 
     # Vérifier les ressources
-    if kubectl get secret -n web-app db-credentials &> /dev/null && \
-       kubectl get configmap -n web-app backend-config &> /dev/null; then
+    if kubectl get secret -n myapp database-credentials &> /dev/null && \
+       kubectl get configmap -n myapp backend-config &> /dev/null; then
         log_success "Test 2 OK: Secrets et ConfigMaps créés"
     else
         log_error "Test 2 FAILED: Problème avec les Secrets/ConfigMaps"
@@ -136,7 +136,7 @@ test_database() {
     sleep 2
 
     # Vérifier le PVC
-    PVC_STATUS=$(kubectl get pvc -n web-app postgres-pvc -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
+    PVC_STATUS=$(kubectl get pvc -n myapp database-pvc -o jsonpath='{.status.phase}' 2>/dev/null || echo "NotFound")
     if [ "$PVC_STATUS" != "Bound" ] && [ "$PVC_STATUS" != "Pending" ]; then
         log_warning "PVC en état: $PVC_STATUS"
     else
@@ -149,11 +149,11 @@ test_database() {
 
     # Attendre que la base de données soit prête
     log_info "Attente du démarrage de la base de données (peut prendre 1-2 minutes)..."
-    if kubectl wait --for=condition=available --timeout=180s deployment/postgres -n web-app; then
+    if kubectl wait --for=condition=available --timeout=180s deployment/database -n myapp; then
         log_success "Test 3 OK: Base de données déployée et prête"
     else
         log_error "Test 3 FAILED: Base de données non prête"
-        kubectl get pods -n web-app -l app=postgres
+        kubectl get pods -n myapp -l app=database
         return 1
     fi
     echo ""
@@ -174,11 +174,11 @@ test_backend() {
 
     # Attendre que le backend soit prêt
     log_info "Attente du démarrage du backend..."
-    if kubectl wait --for=condition=available --timeout=120s deployment/backend -n web-app; then
+    if kubectl wait --for=condition=available --timeout=120s deployment/backend -n myapp; then
         log_success "Test 4 OK: Backend déployé et prêt"
     else
         log_error "Test 4 FAILED: Backend non prêt"
-        kubectl get pods -n web-app -l app=backend
+        kubectl get pods -n myapp -l app=backend
         return 1
     fi
     echo ""
@@ -188,17 +188,25 @@ test_backend() {
 test_frontend() {
     log_info "Test 5: Déploiement du frontend..."
 
+    # ConfigMaps requises par le Deployment (contenu HTML + config nginx)
+    if [ -f "$MANIFEST_DIR/08-frontend-config.yaml" ]; then
+        kubectl apply -f "$MANIFEST_DIR/08-frontend-config.yaml"
+    fi
+    if [ -f "$MANIFEST_DIR/08-frontend-nginx-config.yaml" ]; then
+        kubectl apply -f "$MANIFEST_DIR/08-frontend-nginx-config.yaml"
+    fi
+
     # Deployment du frontend
     kubectl apply -f "$MANIFEST_DIR/09-frontend-deployment.yaml"
     kubectl apply -f "$MANIFEST_DIR/10-frontend-service.yaml"
 
     # Attendre que le frontend soit prêt
     log_info "Attente du démarrage du frontend..."
-    if kubectl wait --for=condition=available --timeout=120s deployment/frontend -n web-app; then
+    if kubectl wait --for=condition=available --timeout=120s deployment/frontend -n myapp; then
         log_success "Test 5 OK: Frontend déployé et prêt"
     else
         log_error "Test 5 FAILED: Frontend non prêt"
-        kubectl get pods -n web-app -l app=frontend
+        kubectl get pods -n myapp -l app=frontend
         return 1
     fi
     echo ""
@@ -209,23 +217,23 @@ test_backend_db_connectivity() {
     log_info "Test 6: Test de connectivité Backend -> Database..."
 
     # Récupérer le nom d'un pod backend
-    BACKEND_POD=$(kubectl get pods -n web-app -l app=backend -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+    BACKEND_POD=$(kubectl get pods -n myapp -l app=backend -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
 
     if [ -z "$BACKEND_POD" ]; then
         log_error "Test 6 FAILED: Aucun pod backend trouvé"
         return 1
     fi
 
-    # Tester la résolution DNS de postgres
-    if kubectl exec -n web-app "$BACKEND_POD" -- sh -c "getent hosts postgres" &> /dev/null; then
-        log_success "Test 6a OK: Backend peut résoudre le service 'postgres'"
+    # Tester la résolution DNS de database
+    if kubectl exec -n myapp "$BACKEND_POD" -- sh -c "getent hosts database" &> /dev/null; then
+        log_success "Test 6a OK: Backend peut résoudre le service 'database'"
     else
-        log_warning "Test 6a WARNING: Résolution DNS de 'postgres' échouée"
+        log_warning "Test 6a WARNING: Résolution DNS de 'database' échouée"
     fi
 
     # Vérifier que les variables d'environnement sont injectées
-    if kubectl exec -n web-app "$BACKEND_POD" -- env | grep -q "DATABASE_HOST"; then
-        DB_HOST=$(kubectl exec -n web-app "$BACKEND_POD" -- env | grep "DATABASE_HOST" | cut -d'=' -f2)
+    if kubectl exec -n myapp "$BACKEND_POD" -- env | grep -q "DATABASE_HOST"; then
+        DB_HOST=$(kubectl exec -n myapp "$BACKEND_POD" -- env | grep "DATABASE_HOST" | cut -d'=' -f2)
         log_success "Test 6b OK: Variables d'environnement DB injectées (DATABASE_HOST=$DB_HOST)"
     else
         log_error "Test 6b FAILED: Variables d'environnement DB non injectées"
@@ -240,7 +248,7 @@ test_frontend_backend_connectivity() {
     log_info "Test 7: Test de connectivité Frontend -> Backend..."
 
     # Récupérer le nom d'un pod frontend
-    FRONTEND_POD=$(kubectl get pods -n web-app -l app=frontend -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+    FRONTEND_POD=$(kubectl get pods -n myapp -l app=frontend -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
 
     if [ -z "$FRONTEND_POD" ]; then
         log_error "Test 7 FAILED: Aucun pod frontend trouvé"
@@ -248,14 +256,14 @@ test_frontend_backend_connectivity() {
     fi
 
     # Tester la résolution DNS de backend
-    if kubectl exec -n web-app "$FRONTEND_POD" -- sh -c "getent hosts backend" &> /dev/null; then
+    if kubectl exec -n myapp "$FRONTEND_POD" -- sh -c "getent hosts backend" &> /dev/null; then
         log_success "Test 7a OK: Frontend peut résoudre le service 'backend'"
     else
         log_warning "Test 7a WARNING: Résolution DNS de 'backend' échouée (peut être normal selon l'image)"
     fi
 
     # Vérifier que le service backend est accessible
-    BACKEND_SERVICE=$(kubectl get service -n web-app backend -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
+    BACKEND_SERVICE=$(kubectl get service -n myapp backend -o jsonpath='{.spec.clusterIP}' 2>/dev/null)
     if [ -n "$BACKEND_SERVICE" ]; then
         log_success "Test 7b OK: Service backend accessible (ClusterIP: $BACKEND_SERVICE)"
     else
@@ -271,12 +279,12 @@ test_services() {
     log_info "Test 8: Vérification des services..."
 
     # Liste des services attendus
-    SERVICES=("postgres" "backend" "frontend")
+    SERVICES=("database" "backend" "frontend")
     ALL_OK=true
 
     for SERVICE in "${SERVICES[@]}"; do
-        if kubectl get service -n web-app "$SERVICE" &> /dev/null; then
-            ENDPOINTS=$(kubectl get endpoints -n web-app "$SERVICE" -o jsonpath='{.subsets[0].addresses[*].ip}' 2>/dev/null | wc -w)
+        if kubectl get service -n myapp "$SERVICE" &> /dev/null; then
+            ENDPOINTS=$(kubectl get endpoints -n myapp "$SERVICE" -o jsonpath='{.subsets[0].addresses[*].ip}' 2>/dev/null | wc -w)
             if [ "$ENDPOINTS" -gt "0" ]; then
                 log_success "Service '$SERVICE' OK ($ENDPOINTS endpoints)"
             else
@@ -303,20 +311,20 @@ test_database_persistence() {
     log_info "Test 9: Test de persistence de la base de données..."
 
     # Vérifier que le PVC est bien monté
-    POSTGRES_POD=$(kubectl get pods -n web-app -l app=postgres -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+    POSTGRES_POD=$(kubectl get pods -n myapp -l app=database -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
 
     if [ -z "$POSTGRES_POD" ]; then
-        log_error "Test 9 FAILED: Aucun pod postgres trouvé"
+        log_error "Test 9 FAILED: Aucun pod database trouvé"
         return 1
     fi
 
     # Vérifier les volumes montés
-    VOLUMES=$(kubectl get pod -n web-app "$POSTGRES_POD" -o jsonpath='{.spec.volumes[*].name}' 2>/dev/null)
+    VOLUMES=$(kubectl get pod -n myapp "$POSTGRES_POD" -o jsonpath='{.spec.volumes[*].name}' 2>/dev/null)
 
-    if echo "$VOLUMES" | grep -q "postgres-storage"; then
-        log_success "Test 9 OK: Volume persistent monté sur le pod postgres"
+    if echo "$VOLUMES" | grep -q "database-storage"; then
+        log_success "Test 9 OK: Volume persistent monté sur le pod database"
     else
-        log_warning "Test 9 WARNING: Volume 'postgres-storage' non trouvé (peut avoir un nom différent)"
+        log_warning "Test 9 WARNING: Volume 'database-storage' non trouvé (peut avoir un nom différent)"
     fi
 
     echo ""
@@ -330,7 +338,7 @@ test_advanced_config() {
     if [ -f "$MANIFEST_DIR/11-backend-hpa.yaml" ]; then
         if kubectl apply -f "$MANIFEST_DIR/11-backend-hpa.yaml" 2>/dev/null; then
             # Vérifier que metrics-server est disponible
-            if kubectl get hpa -n web-app backend-hpa &> /dev/null; then
+            if kubectl get hpa -n myapp backend-hpa &> /dev/null; then
                 log_success "Test 10a OK: HPA créé (nécessite metrics-server)"
             else
                 log_warning "Test 10a WARNING: HPA créé mais peut nécessiter metrics-server"
@@ -357,14 +365,14 @@ test_overall_health() {
     log_info "Test 11: Vérification de l'état global de l'application..."
 
     # Compter les pods en état Running
-    TOTAL_PODS=$(kubectl get pods -n web-app --no-headers 2>/dev/null | wc -l)
-    RUNNING_PODS=$(kubectl get pods -n web-app --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l)
+    TOTAL_PODS=$(kubectl get pods -n myapp --no-headers 2>/dev/null | wc -l)
+    RUNNING_PODS=$(kubectl get pods -n myapp --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l)
 
     log_info "Pods: $RUNNING_PODS/$TOTAL_PODS en état Running"
 
     # Afficher un résumé
     echo ""
-    kubectl get all -n web-app
+    kubectl get all -n myapp
     echo ""
 
     if [ "$RUNNING_PODS" -ge "3" ]; then
@@ -395,17 +403,17 @@ main() {
     TESTS_FAILED=0
 
     # Exécuter les tests dans l'ordre
-    if test_namespace; then ((TESTS_PASSED++)); else ((TESTS_FAILED++)); fi
-    if test_config; then ((TESTS_PASSED++)); else ((TESTS_FAILED++)); fi
-    if test_database; then ((TESTS_PASSED++)); else ((TESTS_FAILED++)); fi
-    if test_backend; then ((TESTS_PASSED++)); else ((TESTS_FAILED++)); fi
-    if test_frontend; then ((TESTS_PASSED++)); else ((TESTS_FAILED++)); fi
-    if test_backend_db_connectivity; then ((TESTS_PASSED++)); else ((TESTS_FAILED++)); fi
-    if test_frontend_backend_connectivity; then ((TESTS_PASSED++)); else ((TESTS_FAILED++)); fi
-    if test_services; then ((TESTS_PASSED++)); else ((TESTS_FAILED++)); fi
-    if test_database_persistence; then ((TESTS_PASSED++)); else ((TESTS_FAILED++)); fi
-    if test_advanced_config; then ((TESTS_PASSED++)); else ((TESTS_FAILED++)); fi
-    if test_overall_health; then ((TESTS_PASSED++)); else ((TESTS_FAILED++)); fi
+    if test_namespace; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
+    if test_config; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
+    if test_database; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
+    if test_backend; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
+    if test_frontend; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
+    if test_backend_db_connectivity; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
+    if test_frontend_backend_connectivity; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
+    if test_services; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
+    if test_database_persistence; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
+    if test_advanced_config; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
+    if test_overall_health; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
 
     # Résumé des tests
     echo ""

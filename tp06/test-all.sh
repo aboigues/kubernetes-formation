@@ -25,6 +25,10 @@ log_warning() {
     echo -e "${YELLOW}[WARNING]${NC} $1"
 }
 
+# Compteur de tests
+TESTS_PASSED=0
+TESTS_FAILED=0
+
 # Fonction pour vérifier les prérequis
 check_prerequisites() {
     log_info "Vérification des prérequis..."
@@ -393,8 +397,15 @@ test_tekton() {
 
 # Fonction pour afficher un résumé
 show_summary() {
-    log_info "=== Résumé des tests ==="
-    log_info "Tous les tests ont été exécutés avec succès ✓"
+    log_info "═══════════════════════════════════════════════════════════"
+    log_info "                    RÉSUMÉ DES TESTS                       "
+    log_info "═══════════════════════════════════════════════════════════"
+    log_info "Tests réussis: $TESTS_PASSED"
+    if [ $TESTS_FAILED -gt 0 ]; then
+        log_error "Tests échoués: $TESTS_FAILED"
+    else
+        log_info "Tests échoués: $TESTS_FAILED"
+    fi
     echo ""
     log_info "Structure des exercices créés:"
     echo "  - 01-helm/          : Charts Helm personnalisés"
@@ -431,31 +442,37 @@ main() {
     check_prerequisites
     echo ""
 
-    test_helm
+    if test_helm; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
     echo ""
 
-    test_gateway_api
+    if test_gateway_api; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
     echo ""
 
-    test_deployment_strategies
+    if test_deployment_strategies; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
     echo ""
 
-    test_best_practices
+    if test_best_practices; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
     echo ""
 
-    test_argocd
+    if test_argocd; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
     echo ""
 
-    test_gitops
+    if test_gitops; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
     echo ""
 
-    test_monitoring
+    if test_monitoring; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
     echo ""
 
-    test_tekton
+    if test_tekton; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
     echo ""
 
     show_summary
+
+    if [ $TESTS_FAILED -eq 0 ]; then
+        return 0
+    else
+        return 1
+    fi
 }
 
 # Exécution du script
