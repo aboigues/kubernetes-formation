@@ -2914,9 +2914,16 @@ spec:
       labels:
         app: mysql
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: mysql
-        image: mysql:8.0
+        image: mysql:8.4
         env:
         - name: MYSQL_ROOT_PASSWORD
           valueFrom:
@@ -2927,13 +2934,29 @@ spec:
           value: wordpress
         ports:
         - containerPort: 3306
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 999
+          capabilities:
+            drop:
+            - ALL
         volumeMounts:
         - name: mysql-storage
           mountPath: /var/lib/mysql
+        - name: tmp
+          mountPath: /tmp
+        - name: run-mysqld
+          mountPath: /var/run/mysqld
       volumes:
       - name: mysql-storage
         persistentVolumeClaim:
           claimName: mysql-pvc
+      - name: tmp
+        emptyDir: {}
+      - name: run-mysqld
+        emptyDir: {}
 
 ---
 apiVersion: v1
@@ -2979,9 +3002,16 @@ spec:
       labels:
         app: wordpress
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 33
+        runAsGroup: 33
+        fsGroup: 33
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: wordpress
-        image: wordpress:6.4-apache
+        image: telemachlearning/wordpress:7.0-php8.5-apache
         env:
         - name: WORDPRESS_DB_HOST
           value: mysql-service
@@ -2994,15 +3024,37 @@ spec:
               key: password
         - name: WORDPRESS_DB_NAME
           value: wordpress
+        # Port 80 est utilisé pour la compatibilité standard WordPress/Apache
+        # L'image officielle est configurée pour écouter sur ce port avec l'utilisateur www-data
         ports:
         - containerPort: 80
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 33
+          capabilities:
+            drop:
+            - ALL
         volumeMounts:
         - name: wordpress-storage
           mountPath: /var/www/html
+        - name: tmp
+          mountPath: /tmp
+        - name: run-apache
+          mountPath: /var/run/apache2
+        - name: lock-apache
+          mountPath: /var/lock/apache2
       volumes:
       - name: wordpress-storage
         persistentVolumeClaim:
           claimName: wordpress-pvc
+      - name: tmp
+        emptyDir: {}
+      - name: run-apache
+        emptyDir: {}
+      - name: lock-apache
+        emptyDir: {}
 
 ---
 apiVersion: v1
