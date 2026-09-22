@@ -689,14 +689,9 @@ Le PVC va chercher un PV compatible avec les critères suivants :
 - Mode d'accès compatible (ici: ReadWriteOnce)
 - Capacité suffisante (ici: 500Mi, le PV a 1Gi donc c'est OK)
 
-⚠️ **Le PVC va rester "Pending" à cette étape, et c'est normal** : la StorageClass "manual" utilise `volumeBindingMode: WaitForFirstConsumer` (section 2.3). Le binding n'a lieu que lorsqu'un **pod** référence le PVC — pas au moment où le PVC est créé seul. Ce n'est qu'à l'étape 2.6, une fois `05-pod-with-pvc.yaml` appliqué, que le PVC et le PV passeront à **Bound**.
-
-Si le PVC reste "Pending" **même après** avoir créé le pod (étape 2.6), alors vérifiez que :
-1. La StorageClass "manual" a bien été créée (section 2.3)
-2. Un PV avec `storageClassName: manual` existe et est en état "Available"
-3. Les modes d'accès et la capacité correspondent
-
-Sans la StorageClass "manual", le binding échouera et vous verrez une erreur du type : "storageclass.storage.k8s.io 'manual' not found".
+> 🎯 **Avant d'appliquer, prédis :** une fois le PVC créé ci-dessous — **sans
+> aucun pod pour l'instant** — quel sera son statut : `Bound`, `Pending`, ou
+> une erreur ? Pourquoi ?
 
 **Exercice 3 : Créer un PVC**
 
@@ -704,15 +699,33 @@ Sans la StorageClass "manual", le binding échouera et vous verrez une erreur du
 # Créer le PVC
 kubectl apply -f 04-persistent-volume-claim.yaml
 
-# Vérifier le PVC (statut attendu : Pending, tant qu'aucun pod ne l'utilise)
+# Vérifier le PVC
 kubectl get pvc
 kubectl describe pvc pvc-demo
 
-# Le PV reste "Available" à ce stade, pas encore "Bound"
+# Revérifier le PV
 kubectl get pv
 ```
 
-Le PVC reste **Pending** et le PV reste **Available** : c'est attendu avec `WaitForFirstConsumer`. Le binding aura lieu à l'étape suivante, dès qu'un pod utilisera le PVC.
+<details>
+<summary>💡 Vérifie ta prédiction</summary>
+
+Le PVC reste **Pending** et le PV reste **Available** : c'est attendu. La
+StorageClass "manual" utilise `volumeBindingMode: WaitForFirstConsumer`
+(section 2.3) — le binding n'a lieu que lorsqu'un **pod** référence le PVC,
+pas au moment où le PVC est créé seul. Ce n'est qu'à l'étape 2.6, une fois
+`05-pod-with-pvc.yaml` appliqué, que le PVC et le PV passeront à **Bound**.
+
+Si le PVC reste "Pending" **même après** avoir créé le pod (étape 2.6),
+alors vérifiez que :
+1. La StorageClass "manual" a bien été créée (section 2.3)
+2. Un PV avec `storageClassName: manual` existe et est en état "Available"
+3. Les modes d'accès et la capacité correspondent
+
+Sans la StorageClass "manual", le binding échouera et vous verrez une erreur
+du type : "storageclass.storage.k8s.io 'manual' not found".
+
+</details>
 
 ### 2.6 Utiliser le PVC dans un Pod
 
