@@ -1350,6 +1350,18 @@ data:
 
 Appliquer les modifications :
 
+> ℹ️ **Pourquoi attendre le rollout ici, et pas juste vérifier les logs directement ?**
+> `07-prometheus-with-rules.yaml` ne modifie pas que la ConfigMap `prometheus-config`
+> (ajout de `rule_files`) : il modifie aussi le **Deployment** lui-même par rapport à
+> sa version initiale (`04-prometheus-deployment.yaml`) — ajout de l'argument
+> `--web.enable-lifecycle` et d'un nouveau volume pour monter la ConfigMap
+> `prometheus-rules` sur `/etc/prometheus-rules`. Comme le pod template change
+> réellement, `kubectl apply` déclenche un vrai rolling update (nouveau pod créé,
+> ancien terminé) — pas juste une mise à jour de ConfigMap sans effet sur le pod en
+> cours. Sans attendre la fin de ce rollout, la commande `grep` suivante risquerait
+> de lire les logs de l'ancien pod en cours de terminaison plutôt que ceux du
+> nouveau pod qui vient de charger la configuration à jour.
+
 ```bash
 # Appliquer d'abord les règles d'alerte
 kubectl apply -f 07-prometheus-rules.yaml
@@ -1357,7 +1369,7 @@ kubectl apply -f 07-prometheus-rules.yaml
 # Mettre à jour la ConfigMap et le déploiement Prometheus avec les règles
 kubectl apply -f 07-prometheus-with-rules.yaml
 
-# Attendre que le pod redémarre
+# Attendre que le pod redémarre (un nouveau pod est bien créé, voir l'encadré ci-dessus)
 kubectl rollout status deployment/prometheus -n monitoring
 
 # Vérifier que Prometheus a bien chargé les règles
