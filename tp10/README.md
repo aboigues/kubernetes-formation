@@ -1754,6 +1754,15 @@ kubectl apply -f 19-prometheus-service.yaml
 Créer `20b-grafana-deployment.yaml` :
 
 ```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grafana-secret
+  namespace: taskflow
+type: Opaque
+stringData:
+  GF_SECURITY_ADMIN_PASSWORD: admin2024
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -1796,7 +1805,10 @@ spec:
         - name: GF_SECURITY_ADMIN_USER
           value: admin
         - name: GF_SECURITY_ADMIN_PASSWORD
-          value: admin2024
+          valueFrom:
+            secretKeyRef:
+              name: grafana-secret
+              key: GF_SECURITY_ADMIN_PASSWORD
         - name: GF_SERVER_ROOT_URL
           value: "%(protocol)s://%(domain)s:%(http_port)s/"
         - name: GF_PATHS_DATA

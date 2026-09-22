@@ -949,6 +949,15 @@ sum(rate(container_cpu_usage_seconds_total{container!="",container!="POD"}[5m]))
 Créer `05-grafana-deployment.yaml` :
 
 ```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grafana-credentials
+  namespace: monitoring
+type: Opaque
+stringData:
+  admin-password: "admin123"
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -964,22 +973,45 @@ spec:
       labels:
         app: grafana
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 472
+        fsGroup: 472
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: grafana
         image: grafana/grafana:13.2.1
         ports:
         - containerPort: 3000
           name: web
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 472
+          capabilities:
+            drop:
+            - ALL
         env:
         - name: GF_SECURITY_ADMIN_USER
           value: "admin"
         - name: GF_SECURITY_ADMIN_PASSWORD
-          value: "admin123"
+          valueFrom:
+            secretKeyRef:
+              name: grafana-credentials
+              key: admin-password
         - name: GF_USERS_ALLOW_SIGN_UP
           value: "false"
+        - name: GF_PATHS_LOGS
+          value: /var/log/grafana
         volumeMounts:
         - name: grafana-storage
           mountPath: /var/lib/grafana
+        - name: grafana-logs
+          mountPath: /var/log/grafana
+        - name: tmp
+          mountPath: /tmp
         resources:
           requests:
             memory: "256Mi"
@@ -989,6 +1021,10 @@ spec:
             cpu: "500m"
       volumes:
       - name: grafana-storage
+        emptyDir: {}
+      - name: grafana-logs
+        emptyDir: {}
+      - name: tmp
         emptyDir: {}
 ---
 apiVersion: v1
