@@ -126,7 +126,7 @@ IMAGES=(
   "registry.k8s.io/sig-storage/csi-resizer:v1.8.0"
 
   # Monitoring
-  "quay.io/prometheus/prometheus:v2.45.0"
+  "quay.io/prometheus/prometheus:v3"
   "quay.io/prometheus/node-exporter:v1.6.0"
   "grafana/grafana:10.0.0"
 
@@ -508,8 +508,13 @@ apiServer:
     - "k8s-api.internal.company.com"
     - "192.168.1.10"
   extraArgs:
-    # Désactiver admission plugins qui nécessitent Internet
-    enable-admission-plugins: "NodeRestriction,PodSecurityPolicy"
+    # NodeRestriction limite ce qu'un kubelet peut modifier sur son propre
+    # Node/Pod. PodSecurityPolicy a été supprimé en K8s 1.25 (ne plus le
+    # passer ici ferait échouer le démarrage du kube-apiserver) : son
+    # remplacement, l'admission controller PodSecurity, est activé par
+    # défaut depuis 1.25, sans configuration supplémentaire ici — voir
+    # les labels de namespace Pod Security Standards plus bas.
+    enable-admission-plugins: "NodeRestriction"
 
 # etcd
 etcd:
@@ -827,7 +832,7 @@ spec:
     - name: registry.k8s.io/kube-apiserver:v1.29.0
     - name: registry.k8s.io/kube-controller-manager:v1.29.0
     - name: registry.k8s.io/kube-scheduler:v1.29.0
-    - name: quay.io/prometheus/prometheus:v2.45.0
+    - name: quay.io/prometheus/prometheus:v3
 EOF
 
 # Fetch content
@@ -1005,36 +1010,23 @@ sudo update-ca-certificates
 
 ### Politique de Sécurité Stricte
 
+> ⚠️ **PodSecurityPolicy a été supprimé de Kubernetes en v1.25** (pas
+> seulement déprécié) — inutilisable sur toute version ciblée par ce dépôt
+> (kubectl ≥ v1.29). Le remplacement moderne est **Pod Security Standards**
+> via un simple label sur le namespace, sans CRD ni webhook. Voir
+> [TP5 - Sécurité et RBAC](../tp05/README.md) pour le détail.
+
 ```yaml
 # security-policies.yaml
 
-# 1. PodSecurityPolicy stricte
-apiVersion: policy/v1beta1
-kind: PodSecurityPolicy
+# 1. Pod Security Standards en mode "restricted" pour tout le namespace
+apiVersion: v1
+kind: Namespace
 metadata:
-  name: restricted-airgap
-spec:
-  privileged: false
-  allowPrivilegeEscalation: false
-  requiredDropCapabilities:
-    - ALL
-  volumes:
-    - 'configMap'
-    - 'emptyDir'
-    - 'projected'
-    - 'secret'
-    - 'downwardAPI'
-    - 'persistentVolumeClaim'
-  hostNetwork: false
-  hostIPC: false
-  hostPID: false
-  runAsUser:
-    rule: 'MustRunAsNonRoot'
-  seLinux:
-    rule: 'RunAsAny'
-  fsGroup:
-    rule: 'RunAsAny'
-  readOnlyRootFilesystem: true
+  name: airgap-workloads
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
 
 ---
 # 2. NetworkPolicy par défaut deny all

@@ -639,7 +639,7 @@ curl -X POST "https://harbor.dmz.internal/api/v2.0/projects" \
 | **Docker Hub** | `redis:7-alpine` | `harbor.dmz.internal/dockerhub-proxy/library/redis:7-alpine` |
 | **Docker Hub** | `grafana/grafana:latest` | `harbor.dmz.internal/dockerhub-proxy/grafana/grafana:latest` |
 | **GCR** | `gcr.io/google-containers/pause:3.9` | `harbor.dmz.internal/gcr-proxy/google-containers/pause:3.9` |
-| **Quay** | `quay.io/prometheus/prometheus:v2.45.0` | `harbor.dmz.internal/quay-proxy/prometheus/prometheus:v2.45.0` |
+| **Quay** | `quay.io/prometheus/prometheus:v3` | `harbor.dmz.internal/quay-proxy/prometheus/prometheus:v3` |
 | **Customer A** | `registry.customer-a.com/app/backend:v1.0` | `harbor.dmz.internal/customer-a-proxy/app/backend:v1.0` |
 
 **Règle de transformation** :
@@ -736,7 +736,7 @@ spec:
       containers:
       # Prometheus depuis Quay.io
       - name: prometheus
-        image: harbor.dmz.internal/quay-proxy/prometheus/prometheus:v2.45.0
+        image: harbor.dmz.internal/quay-proxy/prometheus/prometheus:v3
         ports:
         - containerPort: 9090
 
@@ -828,7 +828,7 @@ IMAGES=(
   "dockerhub-proxy/library/nginx:1.25-alpine"
   "dockerhub-proxy/library/redis:7-alpine"
   "dockerhub-proxy/grafana/grafana:10.0.0"
-  "quay-proxy/prometheus/prometheus:v2.45.0"
+  "quay-proxy/prometheus/prometheus:v3"
   "gcr-proxy/google-samples/hello-app:1.0"
 )
 

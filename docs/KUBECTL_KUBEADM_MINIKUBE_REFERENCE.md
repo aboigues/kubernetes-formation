@@ -472,7 +472,10 @@ minikube start
 minikube start --driver=docker
 minikube start --driver=virtualbox
 minikube start --cpus=4 --memory=8192
-minikube start --kubernetes-version=v1.28.0
+# v1.31+ requis : plusieurs TP du dépôt en dépendent (Gateway API TP06/TP08/
+# TP11, ValidatingAdmissionPolicy TP05) ; le plancher global du projet est
+# v1.29 (voir .claude/hooks/session-start.sh)
+minikube start --kubernetes-version=v1.31.0
 
 # Démarrer avec plusieurs nœuds
 minikube start --nodes=3
