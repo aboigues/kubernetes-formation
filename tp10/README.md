@@ -515,6 +515,8 @@ spec:
             - pg_isready
             - -U
             - taskflow
+            - -d
+            - taskflow_db
           initialDelaySeconds: 30
           periodSeconds: 10
         readinessProbe:
@@ -523,6 +525,8 @@ spec:
             - pg_isready
             - -U
             - taskflow
+            - -d
+            - taskflow_db
           initialDelaySeconds: 5
           periodSeconds: 5
 
