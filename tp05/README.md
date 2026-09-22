@@ -1178,11 +1178,13 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: app-sa
+  namespace: default
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: secret-reader
+  namespace: default
 rules:
 - apiGroups: [""]
   resources: ["secrets"]
@@ -1193,6 +1195,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: app-secret-binding
+  namespace: default
 subjects:
 - kind: ServiceAccount
   name: app-sa
@@ -1451,6 +1454,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: registry-credentials
+  namespace: default
 type: kubernetes.io/dockerconfigjson
 data:
   .dockerconfigjson: <base64-encoded-docker-config>
@@ -1459,6 +1463,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: app-with-registry
+  namespace: default
 imagePullSecrets:
 - name: registry-credentials
 ---
@@ -1466,6 +1471,7 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: private-image-pod
+  namespace: default
 spec:
   serviceAccountName: app-with-registry
   containers:
