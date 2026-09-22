@@ -131,7 +131,7 @@
   - Observabilité (métriques, traces)
   - Sécurité (mTLS)
   - Circuit breakers, retry policies
-- [ ] **TP11 - Operators et CRDs**
+- [ ] **TP12 - Operators et CRDs** (renuméroté : le TP11 réel du dépôt couvre la Gateway API, pas les Operators/CRDs)
   - Créer CRD custom
   - Développer operator simple (Go/Python)
   - Déployer avec OLM
@@ -253,25 +253,35 @@
 2. ✅ Ajouter diagrammes architecture principaux
 3. ✅ Créer guide troubleshooting de base
 
+> ⚠️ **Les cases à cocher des Phases 2, 4 et 5 ci-dessous étaient erronées**
+> (corrigé le 2026-09-22, audit complet du dépôt) : marquées ✅ alors que le
+> contenu correspondant n'existe pas dans le dépôt (aucune traduction anglaise,
+> aucune vidéo/animation, pas de TP12). Item 8 était aussi faux : le TP10 réel
+> ("Application TaskFlow", HPA/monitoring) n'a jamais été un TP Service Mesh.
+> Item 13 se contredisait avec le TP11 réellement livré (Gateway API, pas
+> Operators/CRDs) — renommé en TP12 pour ne pas entrer en collision avec le
+> TP11 existant. Items 1-3, 7 et 9 vérifiés et laissés tels quels (contenu
+> confirmé présent). Items 9 et 15 non re-vérifiés individuellement.
+
 ### Phase 2 - Internationalisation (Sprint 3-4, ~3-4 semaines)
-4. ✅ Traduire README principal + TP1-3 en anglais
-5. ✅ Mettre en place structure bilingue
-6. ✅ Traduire documentation CKAD
+4. ☐ Traduire README principal + TP1-3 en anglais
+5. ☐ Mettre en place structure bilingue
+6. ☐ Traduire documentation CKAD
 
 ### Phase 3 - Enrichissement (Sprint 5-7, ~4-6 semaines)
 7. ✅ Créer application microservices exemple
-8. ✅ Développer TP10 (Service Mesh)
+8. ☐ Développer un TP Service Mesh (Istio/Linkerd) — le TP10 réel est un projet de synthèse (TaskFlow), pas du Service Mesh
 9. ✅ Ajouter guides troubleshooting avancés
 
 ### Phase 4 - Multimédia (Sprint 8-10, ~4-6 semaines)
-10. ✅ Enregistrer vidéos TP1-3
-11. ✅ Créer animations concepts clés
-12. ✅ Développer scénarios interactifs
+10. ☐ Enregistrer vidéos TP1-3
+11. ☐ Créer animations concepts clés
+12. ☐ Développer scénarios interactifs
 
 ### Phase 5 - Expert (Sprint 11-15, ~6-8 semaines)
-13. ✅ TP11 Operators et CRDs
-14. ✅ TP12 Sécurité avancée
-15. ✅ Expansion multi-cluster TP9
+13. ☐ TP12 - Operators et CRDs (renuméroté : le TP11 réel couvre la Gateway API)
+14. ☐ TP13 Sécurité avancée
+15. ☐ Expansion multi-cluster TP9
 
 ---
 
