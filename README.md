@@ -74,6 +74,10 @@ Ce projet propose une formation Kubernetes structurée en travaux pratiques (TP)
 
   Projet de synthèse intégrant tous les concepts : HPA, initContainers, Monitoring (Prometheus/Grafana), Load Testing
 
+- **[TP11 - Kubernetes Gateway API : le successeur d'Ingress](tp11/README.md)**
+
+  GatewayClass, Gateway, HTTPRoute, routage avancé (header, chemin, poids), déploiement canary, terminaison TLS
+
 ### Préparation Certification CKAD
 
 - **[🎓 CKAD Preparation - Exercices et Examens Blancs](ckad-preparation/README.md)**
@@ -287,6 +291,21 @@ Projet de synthèse qui intègre tous les concepts avancés des TPs précédents
 **Durée estimée :** 3-4 heures
 **Niveau :** Synthèse (tous les TPs précédents)
 
+### TP11 - Kubernetes Gateway API : le successeur d'Ingress
+
+📁 **[Accéder au TP11](tp11/README.md)**
+
+Successeur officiel de l'Ingress, avec un modèle de rôles séparant l'infrastructure (GatewayClass, Gateway) du routage applicatif (HTTPRoute). Ce TP couvre :
+- Limites de l'Ingress et raisons du remplacement par la Gateway API
+- **GatewayClass, Gateway, HTTPRoute** : modèle de rôles et séparation des responsabilités
+- Routage avancé : par en-tête HTTP, par chemin, par poids (canary)
+- Déploiement canary sans changer le code applicatif
+- Terminaison TLS au niveau du Gateway
+- Migration de manifests Ingress existants vers la Gateway API
+
+**Durée estimée :** 5-7 heures
+**Niveau :** Intermédiaire à Avancé
+
 ---
 
 ## Installation rapide
@@ -349,6 +368,10 @@ kubernetes-formation/
 │   ├── 15-prometheus-*.yaml  # Manifests Prometheus (config, RBAC, PVC, deployment, service)
 │   ├── 20-grafana-*.yaml     # Manifests Grafana (deployment, service)
 │   └── 22-load-generator.yaml # Job de génération de charge
+├── tp11/                      # TP11 - Gateway API (successeur d'Ingress)
+│   ├── README.md             # Guide complet du TP11
+│   ├── examples/             # Exemples (GatewayClass, Gateway, HTTPRoute, canary, TLS)
+│   └── exercices/            # Exercices pratiques
 ├── ckad-preparation/          # 🎓 Préparation Certification CKAD
 │   ├── README.md             # Guide principal CKAD
 │   ├── cheatsheet.md         # Commandes essentielles
@@ -431,7 +454,7 @@ Pour plus de détails sur les tests, consultez [.github/workflows/README.md](.gi
 - **RBAC** : Roles, ClusterRoles, ServiceAccounts, Pod Security Standards
 
 **Avancé :**
-- **Gateway API (K8s 1.31+)** : GatewayClass, Gateway, HTTPRoute — successeur de l'Ingress
+- **Gateway API (K8s 1.31+)** : GatewayClass, Gateway, HTTPRoute — successeur de l'Ingress (voir aussi le [TP11](tp11/README.md), dédié)
 - **ValidatingAdmissionPolicy (K8s 1.30+)** : Contrôles déclaratifs via CEL sans webhook
 - **Network Policies** : Isolation réseau, ingress/egress rules
 - **Monitoring** : Prometheus, Grafana, Metrics Server
@@ -516,6 +539,7 @@ kubectl get events
 8. **TP8** : Réseau Kubernetes : Services, DNS et Connectivité ✅
 9. **TP9** : Gestion Multi-Noeud de Kubernetes ✅
 10. **TP10** : Projet de Synthèse - Application TaskFlow avec Auto-scaling et Monitoring ✅
+11. **TP11** : Kubernetes Gateway API - le successeur d'Ingress ✅
 
 ## Workflow avec Claude
 
