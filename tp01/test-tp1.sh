@@ -311,14 +311,14 @@ main() {
     TESTS_FAILED=0
 
     # Exécuter les tests
-    if test_basic_deployment; then ((TESTS_PASSED++)); else ((TESTS_FAILED++)); fi
-    if test_service_exposure; then ((TESTS_PASSED++)); else ((TESTS_FAILED++)); fi
-    if test_service_connectivity; then ((TESTS_PASSED++)); else ((TESTS_FAILED++)); fi
-    if test_scaling; then ((TESTS_PASSED++)); else ((TESTS_FAILED++)); fi
-    if test_rolling_update; then ((TESTS_PASSED++)); else ((TESTS_FAILED++)); fi
-    if test_rollback; then ((TESTS_PASSED++)); else ((TESTS_FAILED++)); fi
-    if test_self_healing; then ((TESTS_PASSED++)); else ((TESTS_FAILED++)); fi
-    if test_labels_selectors; then ((TESTS_PASSED++)); else ((TESTS_FAILED++)); fi
+    if test_basic_deployment; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
+    if test_service_exposure; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
+    if test_service_connectivity; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
+    if test_scaling; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
+    if test_rolling_update; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
+    if test_rollback; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
+    if test_self_healing; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
+    if test_labels_selectors; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
 
     # Nettoyage final
     cleanup

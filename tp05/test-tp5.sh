@@ -383,38 +383,42 @@ main() {
     cleanup
     echo ""
 
+    # Compteur de tests
+    TESTS_PASSED=0
+    TESTS_FAILED=0
+
     # Tableau pour suivre les résultats
     declare -A results
 
     # Exécuter les tests
-    test_exercise_1 && results[1]="✅" || results[1]="❌"
+    if test_exercise_1; then results[1]="✅"; TESTS_PASSED=$((TESTS_PASSED+1)); else results[1]="❌"; TESTS_FAILED=$((TESTS_FAILED+1)); fi
     echo ""
 
-    test_exercise_2 && results[2]="✅" || results[2]="❌"
+    if test_exercise_2; then results[2]="✅"; TESTS_PASSED=$((TESTS_PASSED+1)); else results[2]="❌"; TESTS_FAILED=$((TESTS_FAILED+1)); fi
     echo ""
 
-    test_exercise_3 && results[3]="✅" || results[3]="❌"
+    if test_exercise_3; then results[3]="✅"; TESTS_PASSED=$((TESTS_PASSED+1)); else results[3]="❌"; TESTS_FAILED=$((TESTS_FAILED+1)); fi
     echo ""
 
-    test_exercise_4 && results[4]="✅" || results[4]="❌"
+    if test_exercise_4; then results[4]="✅"; TESTS_PASSED=$((TESTS_PASSED+1)); else results[4]="❌"; TESTS_FAILED=$((TESTS_FAILED+1)); fi
     echo ""
 
-    test_exercise_5 && results[5]="✅" || results[5]="❌"
+    if test_exercise_5; then results[5]="✅"; TESTS_PASSED=$((TESTS_PASSED+1)); else results[5]="❌"; TESTS_FAILED=$((TESTS_FAILED+1)); fi
     echo ""
 
-    test_exercise_6 && results[6]="✅" || results[6]="❌"
+    if test_exercise_6; then results[6]="✅"; TESTS_PASSED=$((TESTS_PASSED+1)); else results[6]="❌"; TESTS_FAILED=$((TESTS_FAILED+1)); fi
     echo ""
 
-    test_exercise_7 && results[7]="✅" || results[7]="❌"
+    if test_exercise_7; then results[7]="✅"; TESTS_PASSED=$((TESTS_PASSED+1)); else results[7]="❌"; TESTS_FAILED=$((TESTS_FAILED+1)); fi
     echo ""
 
-    test_exercise_8 && results[8]="✅" || results[8]="❌"
+    if test_exercise_8; then results[8]="✅"; TESTS_PASSED=$((TESTS_PASSED+1)); else results[8]="❌"; TESTS_FAILED=$((TESTS_FAILED+1)); fi
     echo ""
 
-    test_exercise_9 && results[9]="✅" || results[9]="❌"
+    if test_exercise_9; then results[9]="✅"; TESTS_PASSED=$((TESTS_PASSED+1)); else results[9]="❌"; TESTS_FAILED=$((TESTS_FAILED+1)); fi
     echo ""
 
-    test_exercise_10 && results[10]="✅" || results[10]="❌"
+    if test_exercise_10; then results[10]="✅"; TESTS_PASSED=$((TESTS_PASSED+1)); else results[10]="❌"; TESTS_FAILED=$((TESTS_FAILED+1)); fi
     echo ""
 
     # Afficher le résumé
@@ -434,11 +438,37 @@ main() {
     echo "=========================================="
     echo ""
 
-    # Nettoyer après les tests
-    read -p "Voulez-vous nettoyer les ressources de test? (y/n) " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        cleanup
+    # Résumé des tests
+    log_info "═══════════════════════════════════════════════════════════"
+    log_info "                    RÉSUMÉ DES TESTS                       "
+    log_info "═══════════════════════════════════════════════════════════"
+    log_success "Tests réussis: $TESTS_PASSED"
+    if [ $TESTS_FAILED -gt 0 ]; then
+        log_error "Tests échoués: $TESTS_FAILED"
+    else
+        log_info "Tests échoués: $TESTS_FAILED"
+    fi
+    echo ""
+
+    # Nettoyer après les tests (uniquement en session interactive hors CI)
+    if [ -t 0 ] && [ -z "$CI" ]; then
+        read -p "Voulez-vous nettoyer les ressources de test? (y/n) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            cleanup
+        fi
+    else
+        log_info "Session non interactive détectée (CI) : le nettoyage interactif est ignoré, les ressources ne seront pas supprimées automatiquement ici"
+    fi
+
+    if [ $TESTS_FAILED -eq 0 ]; then
+        log_success "✓ TOUS LES TESTS SONT PASSÉS !"
+        echo ""
+        return 0
+    else
+        log_error "✗ CERTAINS TESTS ONT ÉCHOUÉ"
+        echo ""
+        return 1
     fi
 }
 

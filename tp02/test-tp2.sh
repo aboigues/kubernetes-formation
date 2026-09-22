@@ -543,16 +543,16 @@ main() {
     TESTS_FAILED=0
 
     # Exécuter les tests
-    if test_simple_pod; then ((TESTS_PASSED++)); else ((TESTS_FAILED++)); fi
-    if test_pod_with_resources; then ((TESTS_PASSED++)); else ((TESTS_FAILED++)); fi
-    if test_multi_container_pod; then ((TESTS_PASSED++)); else ((TESTS_FAILED++)); fi
-    if test_deployment; then ((TESTS_PASSED++)); else ((TESTS_FAILED++)); fi
-    if test_service_clusterip; then ((TESTS_PASSED++)); else ((TESTS_FAILED++)); fi
-    if test_configmap; then ((TESTS_PASSED++)); else ((TESTS_FAILED++)); fi
-    if test_secret; then ((TESTS_PASSED++)); else ((TESTS_FAILED++)); fi
-    if test_labels_selectors; then ((TESTS_PASSED++)); else ((TESTS_FAILED++)); fi
-    if test_namespaces; then ((TESTS_PASSED++)); else ((TESTS_FAILED++)); fi
-    if test_yaml_validation; then ((TESTS_PASSED++)); else ((TESTS_FAILED++)); fi
+    if test_simple_pod; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
+    if test_pod_with_resources; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
+    if test_multi_container_pod; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
+    if test_deployment; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
+    if test_service_clusterip; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
+    if test_configmap; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
+    if test_secret; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
+    if test_labels_selectors; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
+    if test_namespaces; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
+    if test_yaml_validation; then TESTS_PASSED=$((TESTS_PASSED+1)); else TESTS_FAILED=$((TESTS_FAILED+1)); fi
 
     # Nettoyage final
     cleanup

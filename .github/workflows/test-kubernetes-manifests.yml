@@ -246,7 +246,7 @@ jobs:
       - name: Run TP1 basic tests
         run: |
           cd tp01
-          ./test-tp1.sh || echo "Some tests failed but continuing..."
+          ./test-tp1.sh
 
   test-tp2-manifests:
     name: Test TP2 - Kubernetes Manifests
@@ -273,7 +273,7 @@ jobs:
       - name: Run TP2 manifest tests
         run: |
           cd tp02
-          ./test-tp2.sh || echo "Some tests failed but continuing..."
+          ./test-tp2.sh
 
   test-tp3-storage:
     name: Test TP3 - Storage Configuration
@@ -515,7 +515,7 @@ jobs:
       - name: Run TP5 security tests
         run: |
           cd tp05
-          ./test-tp5.sh || echo "Some tests failed but continuing..."
+          ./test-tp5.sh
 
   test-tp6-production:
     name: Test TP6 - Production and CI/CD
@@ -549,7 +549,7 @@ jobs:
       - name: Run TP6 production tests
         run: |
           cd tp06
-          ./test-all.sh || echo "Some tests failed but continuing..."
+          ./test-all.sh
 
       - name: Test Helm chart structure
         run: |
@@ -601,7 +601,7 @@ jobs:
       - name: Run TP7 E2E tests
         run: |
           cd tp07
-          ./test-tp7.sh || echo "Some tests failed but continuing..."
+          ./test-tp7.sh
 
       - name: Cleanup TP7 resources
         if: always()
