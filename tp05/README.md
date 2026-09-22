@@ -125,7 +125,7 @@ spec:
   serviceAccountName: my-app-sa
   containers:
   - name: app
-    image: nginx:alpine
+    image: telemachlearning/nginx:1.29-alpine
     command: ['sh', '-c', 'sleep 3600']
 ```
 
@@ -271,6 +271,8 @@ metadata:
 rules:
 - apiGroups: [""]
   resources: ["secrets"]
+  # Lecture seule : aucun verbe d'écriture. C'est le moindre privilège atteignable
+  # sans renoncer à la démonstration.
   verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -295,6 +297,19 @@ kubectl apply -f 05-clusterrole-secret-reader.yaml
 kubectl auth can-i list secrets --as=system:serviceaccount:default:my-app-sa
 kubectl auth can-i list secrets -n kube-system --as=system:serviceaccount:default:my-app-sa
 ```
+
+> 🔐 **Pourquoi Trivy signale ce fichier en CRITICAL (KSV-0041) — et pourquoi c'est voulu ici**
+>
+> Un ClusterRole donnant accès aux secrets les rend lisibles dans **tous les
+> namespaces du cluster, y compris `kube-system`** : c'est exactement ce que la
+> deuxième commande `kubectl auth can-i` ci-dessus vérifie, et ce que cet exercice
+> veut vous faire constater. L'alerte porte sur la notion enseignée, pas sur une
+> négligence — même en limitant à un seul secret via `resourceNames` et au seul
+> verbe `get`, l'alerte reste déclenchée.
+>
+> En production, préférez un **Role namespacé** (voir 3.6 ci-dessous) : un
+> ClusterRole ne se justifie que pour un composant qui doit réellement opérer sur
+> tout le cluster.
 
 ### 3.6 Exemple pratique : Role pour développeur
 
@@ -410,7 +425,7 @@ spec:
     fsGroup: 2000
   containers:
   - name: demo
-    image: busybox
+    image: busybox:1.36
     command: ['sh', '-c', 'sleep 3600']
     volumeMounts:
     - name: demo-volume
@@ -448,7 +463,7 @@ metadata:
 spec:
   containers:
   - name: secure-container
-    image: nginx:alpine
+    image: telemachlearning/nginx:1.29-alpine
     securityContext:
       runAsNonRoot: true
       runAsUser: 1000
@@ -515,7 +530,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: app
-        image: nginx:alpine
+        image: telemachlearning/nginx:1.29-alpine
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
@@ -905,7 +920,7 @@ spec:
     spec:
       containers:
       - name: backend
-        image: nginx:alpine
+        image: telemachlearning/nginx:1.29-alpine
         ports:
         - containerPort: 80
 ---
@@ -937,7 +952,7 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: busybox
+        image: busybox:1.36
         command: ['sh', '-c', 'sleep 3600']
 ---
 apiVersion: networking.k8s.io/v1
@@ -1102,7 +1117,7 @@ metadata:
 spec:
   containers:
   - name: app
-    image: busybox
+    image: busybox:1.36
     command: ['sh', '-c', 'sleep 3600']
     env:
     # Secret comme variable d'environnement
@@ -1850,7 +1865,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: app
-        image: nginx:1.25-alpine
+        image: telemachlearning/nginx:1.29-alpine
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
