@@ -1109,7 +1109,7 @@ jobs:
 
     - name: Deploy with Helm
       run: |
-        helm upgrade --install my-app ./helm/my-app \
+        helm upgrade --install my-app ./01-helm/my-app \
           --namespace production \
           --create-namespace \
           --set image.repository=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} \
@@ -1119,12 +1119,15 @@ jobs:
 
     - name: Verify deployment
       run: |
-        kubectl rollout status deployment/my-app -n production
+        # Le nom du deployment dépend du release name Helm et du chart
+        # Format: <release-name>-<chart-name>
+        DEPLOYMENT_NAME=$(kubectl get deployments -n production -l app.kubernetes.io/instance=my-app -o jsonpath='{.items[0].metadata.name}')
+        kubectl rollout status deployment/$DEPLOYMENT_NAME -n production
         kubectl get pods -n production
 
     - name: Run smoke tests
       run: |
-        kubectl run smoke-test --image=curlimages/curl:latest --rm -i --restart=Never \
+        kubectl run smoke-test --image=curlimages/curl:8.11.1 --rm -i --restart=Never \
           -- curl -f http://my-app-service.production.svc.cluster.local/health
 
   notify:
