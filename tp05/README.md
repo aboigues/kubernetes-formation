@@ -293,23 +293,36 @@ roleRef:
 # Appliquer
 kubectl apply -f 05-clusterrole-secret-reader.yaml
 
-# Tester
+# Tester : le SA peut-il lire les secrets dans son propre namespace (default) ?
 kubectl auth can-i list secrets --as=system:serviceaccount:default:my-app-sa
+```
+
+> 🎯 **Avant de lancer la commande suivante, prédis :** ce même ServiceAccount
+> va-t-il aussi pouvoir lire les secrets dans `kube-system` — un namespace système
+> qu'il n'a jamais mentionné et qu'il ne devrait a priori pas connaître ? Pourquoi ?
+
+```bash
 kubectl auth can-i list secrets -n kube-system --as=system:serviceaccount:default:my-app-sa
 ```
 
-> 🔐 **Pourquoi Trivy signale ce fichier en CRITICAL (KSV-0041) — et pourquoi c'est voulu ici**
->
-> Un ClusterRole donnant accès aux secrets les rend lisibles dans **tous les
-> namespaces du cluster, y compris `kube-system`** : c'est exactement ce que la
-> deuxième commande `kubectl auth can-i` ci-dessus vérifie, et ce que cet exercice
-> veut vous faire constater. L'alerte porte sur la notion enseignée, pas sur une
-> négligence — même en limitant à un seul secret via `resourceNames` et au seul
-> verbe `get`, l'alerte reste déclenchée.
->
-> En production, préférez un **Role namespacé** (voir 3.6 ci-dessous) : un
-> ClusterRole ne se justifie que pour un composant qui doit réellement opérer sur
-> tout le cluster.
+<details>
+<summary>💡 Vérifie ta prédiction</summary>
+
+Oui — la réponse est `yes`, dans **tous** les namespaces. C'est le sens même
+d'un **ClusterRole** : il n'est pas cantonné à un namespace, donc la
+`ClusterRoleBinding` qui lui est associée donne accès aux secrets de tout le
+cluster, `kube-system` inclus.
+
+🔐 **Pourquoi Trivy signale ce fichier en CRITICAL (KSV-0041) — et pourquoi c'est
+voulu ici** : l'alerte porte exactement sur ce que vous venez de constater, pas
+sur une négligence — même en limitant à un seul secret via `resourceNames` et au
+seul verbe `get`, l'alerte reste déclenchée.
+
+En production, préférez un **Role namespacé** (voir 3.6 ci-dessous) : un
+ClusterRole ne se justifie que pour un composant qui doit réellement opérer sur
+tout le cluster.
+
+</details>
 
 ### 3.6 Exemple pratique : Role pour développeur
 
