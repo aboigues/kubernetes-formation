@@ -14,6 +14,16 @@ metadata:
 data:
   fluent.conf: |
     # Source : collecte les logs de tous les containers via les fichiers du nœud
+    #
+    # Le format d'une ligne de /var/log/containers/*.log dépend du runtime de
+    # conteneurs du nœud : Docker écrit du JSON (un objet par ligne), tandis
+    # que containerd/CRI-O écrivent le format "CRI" en texte brut
+    # (`<timestamp> <stream> <flag> <ligne>`). Depuis minikube v1.39.0
+    # (2026-09), le runtime par défaut est containerd — un parseur `json` seul
+    # échouerait sur chaque ligne. `multi_format` essaie chaque motif dans
+    # l'ordre et prend le premier qui matche ; `cri` est le parseur officiel
+    # du format containerd, fourni par fluent-plugin-parser-cri, déjà
+    # embarqué dans cette image (voir son Gemfile).
     <source>
       @type tail
       path /var/log/containers/*.log
@@ -21,8 +31,15 @@ data:
       tag kubernetes.*
       read_from_head true
       <parse>
-        @type json
-        time_format %Y-%m-%dT%H:%M:%S.%NZ
+        @type multi_format
+        <pattern>
+          format json
+          time_key time
+          time_format %Y-%m-%dT%H:%M:%S.%NZ
+        </pattern>
+        <pattern>
+          format cri
+        </pattern>
       </parse>
     </source>
 
