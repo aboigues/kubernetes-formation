@@ -27,7 +27,19 @@ metadata:
   name: ha-exercise
 
 ---
-# Base de données (PostgreSQL) - Haute disponibilité stricte
+# Base de données (PostgreSQL) - contrainte disque, pas de réplication
+#
+# replicas: 1, et pas 3 comme les autres tiers : seul worker3 porte le label
+# disktype=ssd (voir les instructions de labellisation en tête de fichier).
+# Avec nodeAffinity "disktype=ssd" (dur) + podAntiAffinity "un nœud différent
+# par réplica" (dur) combinés, au plus 1 réplica peut être planifié — les 2
+# autres resteraient en Pending indéfiniment si replicas > 1. Une vraie HA
+# PostgreSQL demanderait soit du SSD sur plusieurs nœuds, soit un mécanisme
+# de réplication applicatif (streaming replication) : hors du périmètre de
+# cet exercice, centré sur taints/tolerations/affinités.
+#
+# Ce n'est pas un problème pour le test de résilience de l'exercice (étape 4) :
+# celui-ci drain worker1 (frontend), jamais worker3 (database).
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -38,7 +50,7 @@ metadata:
     tier: database
 spec:
   serviceName: postgres
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: myapp
@@ -125,18 +137,10 @@ spec:
   clusterIP: None  # Headless service pour StatefulSet
 
 ---
-# PodDisruptionBudget pour la base de données
-apiVersion: policy/v1
-kind: PodDisruptionBudget
-metadata:
-  name: postgres-pdb
-  namespace: ha-exercise
-spec:
-  minAvailable: 2
-  selector:
-    matchLabels:
-      app: myapp
-      tier: database
+# Pas de PodDisruptionBudget pour la base de données : avec un seul replica
+# (voir commentaire du StatefulSet ci-dessus), il n'y a rien à garder
+# "disponible" pendant une disruption volontaire — un PDB ne rendrait pas ce
+# pod plus résilient, il ne ferait qu'empêcher tout drain du nœud qui l'héberge.
 
 ---
 # Backend API - Proche de la DB
