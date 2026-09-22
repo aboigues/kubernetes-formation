@@ -189,9 +189,10 @@ service:
   type: ClusterIP
   port: 80
 
-# HTTPRoute Gateway API — nécessite qu'un Gateway ("main-gateway") soit déjà provisionné
-# (voir Partie 2). L'ancien champ ingress: (ingressClassName + annotations nginx.ingress.*)
-# n'existe plus : ingress-nginx est retiré depuis mars 2026.
+# HTTPRoute Gateway API — nécessite qu'un Gateway ("main-gateway" par défaut) soit déjà
+# provisionné dans le cluster (voir tp06/02-gateway-api/02-gateway.yaml). L'ancien champ
+# `ingress:` (ingressClassName + annotations nginx.ingress.kubernetes.io/*) a été retiré :
+# ingress-nginx est retiré depuis mars 2026, plus de correctifs de sécurité.
 gateway:
   route:
     enabled: false
@@ -362,30 +363,44 @@ Créer `values-dev.yaml` :
 
 ```yaml
 replicaCount: 1
+
 image:
-  tag: "latest"
+  repository: nginx
+  tag: "1.25-alpine"
+  pullPolicy: Always
+
 resources:
   limits:
     memory: 128Mi
+    cpu: 200m
   requests:
     memory: 64Mi
+    cpu: 100m
 ```
 
 Créer `values-prod.yaml` :
 
 ```yaml
 replicaCount: 3
+
 image:
+  repository: nginx
   tag: "1.25-alpine"
+  pullPolicy: IfNotPresent
+
 resources:
   limits:
     memory: 512Mi
+    cpu: 500m
   requests:
     memory: 256Mi
+    cpu: 200m
+
 autoscaling:
   enabled: true
   minReplicas: 3
   maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
 ```
 
 ```bash
@@ -504,11 +519,42 @@ spec:
       labels:
         app: web-app
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101       # nginx
+        fsGroup: 101         # rend les emptyDir ci-dessous inscriptibles par nginx
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: nginx
         image: nginx:alpine
         ports:
         - containerPort: 80
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        # nginx écrit son cache et son PID au démarrage : sans ces volumes il
+        # refuse de démarrer en racine lecture seule.
+        - name: cache
+          mountPath: /var/cache/nginx
+        - name: run
+          mountPath: /var/run
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+      volumes:
+      - name: cache
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -636,13 +682,32 @@ spec:
       labels:
         app: api
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534     # nobody
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: api
-        image: hashicorp/http-echo:latest
+        image: hashicorp/http-echo:0.2.3
         args:
         - "-text=API Response"
         ports:
         - containerPort: 5678
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "16Mi"
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+            cpu: "100m"
 ---
 apiVersion: v1
 kind: Service
@@ -669,11 +734,42 @@ spec:
       labels:
         app: frontend
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101       # nginx
+        fsGroup: 101         # rend les emptyDir ci-dessous inscriptibles par nginx
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: frontend
         image: nginx:alpine
         ports:
         - containerPort: 80
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        # nginx écrit son cache et son PID au démarrage : sans ces volumes il
+        # refuse de démarrer en racine lecture seule.
+        - name: cache
+          mountPath: /var/cache/nginx
+        - name: run
+          mountPath: /var/run
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+      volumes:
+      - name: cache
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
@@ -792,6 +888,16 @@ fonctionnalités sont des **filtres typés et validés**, faisant partie du cana
 Créer `06-httproute-advanced.yaml` :
 
 ```yaml
+# Équivalent portable (canal standard Gateway API) des annotations nginx.ingress.kubernetes.io/*
+# de l'ancien 05-ingress-advanced.yaml : en-têtes personnalisés, CORS et timeouts sont ici des
+# champs typés et validés par l'API, pas des chaînes libres injectées dans la config nginx.
+#
+# Ce qui N'A PAS d'équivalent dans le canal standard : le rate limiting et les sessions
+# collantes (nginx.ingress.kubernetes.io/limit-rps, affinity: cookie). Ce sont des extensions
+# propres à chaque implémentation (ex. ClientSettingsPolicy de NGINX Gateway Fabric), attachées
+# explicitement via policy attachment plutôt que dissimulées dans des annotations libres non
+# validées — c'est exactement ce type de choix (configuration-snippet = injection de config
+# arbitraire) qui a coûté sa retraite à ingress-nginx.
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -1225,12 +1331,31 @@ spec:
         app: rolling-app
         version: v1
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534     # nobody
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: app
-        image: hashicorp/http-echo:latest
+        image: hashicorp/http-echo:0.2.3
         args: ["-text=Version 1"]
         ports:
         - containerPort: 5678
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "16Mi"
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+            cpu: "100m"
         readinessProbe:
           httpGet:
             path: /
@@ -1298,12 +1423,31 @@ spec:
         app: myapp
         version: blue
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534     # nobody
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: app
-        image: hashicorp/http-echo:latest
+        image: hashicorp/http-echo:0.2.3
         args: ["-text=Blue Version"]
         ports:
         - containerPort: 5678
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "16Mi"
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+            cpu: "100m"
 ---
 # Green deployment
 apiVersion: apps/v1
@@ -1322,12 +1466,31 @@ spec:
         app: myapp
         version: green
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534     # nobody
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: app
-        image: hashicorp/http-echo:latest
+        image: hashicorp/http-echo:0.2.3
         args: ["-text=Green Version"]
         ports:
         - containerPort: 5678
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "16Mi"
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+            cpu: "100m"
 ---
 # Service pointant vers blue
 apiVersion: v1
@@ -1387,12 +1550,31 @@ spec:
         app: myapp
         track: stable
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534     # nobody
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: app
-        image: hashicorp/http-echo:latest
+        image: hashicorp/http-echo:0.2.3
         args: ["-text=Stable Version"]
         ports:
         - containerPort: 5678
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "16Mi"
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+            cpu: "100m"
 ---
 # Canary version (10%)
 apiVersion: apps/v1
@@ -1411,12 +1593,31 @@ spec:
         app: myapp
         track: canary
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534     # nobody
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: app
-        image: hashicorp/http-echo:latest
+        image: hashicorp/http-echo:0.2.3
         args: ["-text=Canary Version"]
         ports:
         - containerPort: 5678
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "16Mi"
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+            cpu: "100m"
 ---
 # Service commun
 apiVersion: v1
@@ -1477,12 +1678,31 @@ spec:
         app: myapp
         version: v1
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534     # nobody
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: app
-        image: hashicorp/http-echo:latest
+        image: hashicorp/http-echo:0.2.3
         args: ["-text=Version 1"]
         ports:
         - containerPort: 5678
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "16Mi"
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+            cpu: "100m"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -1500,12 +1720,31 @@ spec:
         app: myapp
         version: v2
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534     # nobody
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: app
-        image: hashicorp/http-echo:latest
+        image: hashicorp/http-echo:0.2.3
         args: ["-text=Version 2 - New Feature"]
         ports:
         - containerPort: 5678
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "16Mi"
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+            cpu: "100m"
 ---
 apiVersion: v1
 kind: Service
@@ -1531,8 +1770,8 @@ spec:
   - port: 80
     targetPort: 5678
 ---
-# Une seule HTTPRoute avec des backendRefs pondérés : plus besoin des deux Ingress +
-# annotation canary d'ingress-nginx, la répartition de trafic est native à la Gateway API.
+# Une seule HTTPRoute avec des backendRefs pondérés : plus besoin des deux Ingress + annotation
+# canary d'ingress-nginx, la répartition de trafic est native à la Gateway API.
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -1629,7 +1868,8 @@ spec:
   project: default
 
   source:
-    repoURL: https://github.com/username/my-gitops-repo.git
+    # IMPORTANT: Remplacer par l'URL de votre repository GitOps réel
+    repoURL: https://github.com/username/my-gitops-repo.git  # À PERSONNALISER
     targetRevision: HEAD
     path: apps/my-app
 
@@ -1691,7 +1931,8 @@ spec:
   project: default
 
   source:
-    repoURL: https://github.com/username/my-gitops-repo.git
+    # IMPORTANT: Remplacer par l'URL de votre repository GitOps réel
+    repoURL: https://github.com/username/my-gitops-repo.git  # À PERSONNALISER
     targetRevision: HEAD
     path: helm/my-app
     helm:
@@ -1759,7 +2000,7 @@ kind: Kustomization
 
 namespace: dev
 
-bases:
+resources:
 - ../../base
 
 patchesStrategicMerge:
@@ -1782,7 +2023,7 @@ spec:
     spec:
       containers:
       - name: app
-        image: myapp:dev-latest
+        image: telemachlearning/nginx:1.29-alpine
         resources:
           requests:
             memory: "64Mi"
@@ -1840,16 +2081,30 @@ spec:
       labels:
         app: production-app
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101       # nginx
+        fsGroup: 101         # rend les emptyDir ci-dessous inscriptibles par nginx
+        seccompProfile:
+          type: RuntimeDefault
       containers:
       - name: app
         image: nginx:alpine
         ports:
         - containerPort: 80
+        volumeMounts:
+        # readOnlyRootFilesystem etait deja declare plus bas, mais SANS ces volumes :
+        # nginx echouait sur mkdir() /var/cache/nginx/client_temp et le pod ne
+        # demarrait pas. Un durcissement incomplet est une panne, pas une securite.
+        - name: cache
+          mountPath: /var/cache/nginx
+        - name: run
+          mountPath: /var/run
 
         # Startup probe - vérifie le démarrage initial
         startupProbe:
           httpGet:
-            path: /health
+            path: /
             port: 80
           failureThreshold: 30
           periodSeconds: 10
@@ -1857,7 +2112,7 @@ spec:
         # Liveness probe - redémarre si unhealthy
         livenessProbe:
           httpGet:
-            path: /health
+            path: /
             port: 80
           initialDelaySeconds: 30
           periodSeconds: 10
@@ -1867,7 +2122,7 @@ spec:
         # Readiness probe - retire du load balancing si not ready
         readinessProbe:
           httpGet:
-            path: /ready
+            path: /
             port: 80
           initialDelaySeconds: 5
           periodSeconds: 5
@@ -1893,6 +2148,27 @@ spec:
           capabilities:
             drop:
             - ALL
+
+      volumes:
+      - name: cache
+        emptyDir: {}
+      - name: run
+        emptyDir: {}
+---
+# Service pour exposer production-app
+apiVersion: v1
+kind: Service
+metadata:
+  name: production-app
+spec:
+  selector:
+    app: production-app
+  ports:
+  - name: http
+    port: 80
+    targetPort: 80
+    protocol: TCP
+  type: ClusterIP
 ```
 
 ### 6.2 Pod Disruption Budgets
@@ -1911,15 +2187,18 @@ spec:
       app: my-app
 ---
 # Alternative: maxUnavailable
-apiVersion: policy/v1
-kind: PodDisruptionBudget
-metadata:
-  name: my-app-pdb-max
-spec:
-  maxUnavailable: 1  # Maximum 1 pod peut être indisponible
-  selector:
-    matchLabels:
-      app: my-app
+# ATTENTION: Ne pas appliquer les deux PDBs en même temps car ils ciblent le même sélecteur
+# Décommenter cette alternative si vous préférez limiter le nombre de pods indisponibles
+# au lieu de garantir un minimum de pods disponibles
+#apiVersion: policy/v1
+#kind: PodDisruptionBudget
+#metadata:
+#  name: my-app-pdb-max
+#spec:
+#  maxUnavailable: 1  # Maximum 1 pod peut être indisponible
+#  selector:
+#    matchLabels:
+#      app: my-app
 ```
 
 ### 6.3 HorizontalPodAutoscaler
@@ -1927,6 +2206,9 @@ spec:
 Créer `14-hpa.yaml` :
 
 ```yaml
+# IMPORTANT: Ce HPA nécessite qu'un Deployment nommé 'my-app' existe.
+# Créez d'abord le Deployment ou adaptez le nom (ligne 9) pour correspondre
+# à votre Deployment existant.
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -2020,17 +2302,9 @@ kind: Kustomization
 resources:
 - deployment.yaml
 - service.yaml
-- configmap.yaml
 
 commonLabels:
   app: my-app
-  managed-by: kustomize
-
-configMapGenerator:
-- name: app-config
-  literals:
-  - LOG_LEVEL=info
-  - MAX_CONNECTIONS=100
 ```
 
 `overlays/production/kustomization.yaml` :
@@ -2041,40 +2315,23 @@ kind: Kustomization
 
 namespace: production
 
-bases:
+resources:
 - ../../base
 
+# Surcharge le nombre de replicas du base deployment (1 -> 5)
 replicas:
 - name: my-app
   count: 5
 
 images:
-- name: my-app
-  newTag: v1.2.3
-
-configMapGenerator:
-- name: app-config
-  behavior: merge
-  literals:
-  - LOG_LEVEL=warn
-  - MAX_CONNECTIONS=500
+- name: nginx
+  newTag: 1.25-alpine
 
 patchesStrategicMerge:
-- |-
-  apiVersion: apps/v1
-  kind: Deployment
-  metadata:
-    name: my-app
-  spec:
-    template:
-      spec:
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "200m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
+- patch-deployment.yaml
+
+commonLabels:
+  environment: production
 ```
 
 ```bash
@@ -2127,8 +2384,9 @@ metadata:
   namespace: default
 spec:
   encryptedData:
-    password: AgBqF7V8h+RjT...  # Chiffré
-    api-key: AgCUF3G9i+SkU...   # Chiffré
+    # Ces valeurs sont des exemples - elles doivent être générées avec kubeseal
+    password: AgBqF7V8h+RjT...  # Chiffré avec kubeseal
+    api-key: AgCUF3G9i+SkU...   # Chiffré avec kubeseal
   template:
     metadata:
       name: my-secret
@@ -2194,6 +2452,25 @@ kubectl port-forward -n monitoring svc/prometheus-grafana 3000:80 &
 Créer `16-servicemonitor.yaml` :
 
 ```yaml
+# PRÉREQUIS: Ce ServiceMonitor nécessite un Service avec un port nommé 'metrics'
+# Exemple de Service requis:
+#
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: my-app
+#   labels:
+#     app: my-app
+# spec:
+#   selector:
+#     app: my-app
+#   ports:
+#   - name: metrics
+#     port: 9090
+#     targetPort: 9090
+#   - name: http
+#     port: 80
+#     targetPort: 80
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
