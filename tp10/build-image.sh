@@ -1,8 +1,18 @@
 #!/bin/bash
 
 # Script de construction de l'image Docker TaskFlow Backend API
-# Ce script détecte automatiquement Minikube et construit l'image appropriée
 # Usage: ./build-image.sh [tag]
+#
+# Avec Minikube démarré : construit l'image DIRECTEMENT dans le cache d'images
+# du nœud avec `minikube image build`. Cette commande fonctionne quel que soit
+# le runtime du cluster (docker ou containerd).
+#
+# Pourquoi pas `eval $(minikube docker-env)` + `docker build` ? Depuis minikube
+# v1.39.0, le runtime par défaut est containerd, même avec le driver docker.
+# docker-env pointe alors le CLI docker vers un pont SSH expérimental
+# (nerdctld), et BuildKit/buildx échoue à travers ce pont (erreurs du type
+# "404 page not found"). `minikube image build` utilise le BuildKit du nœud :
+# c'est la méthode utilisée par la CI (job test-tp10-synthesis).
 
 set -e
 
@@ -22,13 +32,6 @@ echo -e "${GREEN}═════════════════════
 echo -e "${GREEN}  TaskFlow Backend API - Build Script                  ${NC}"
 echo -e "${GREEN}═══════════════════════════════════════════════════════${NC}"
 echo ""
-
-# Vérifier que Docker est installé
-if ! command -v docker &> /dev/null; then
-    echo -e "${RED}❌ Docker n'est pas installé${NC}"
-    echo "Installation: https://docs.docker.com/get-docker/"
-    exit 1
-fi
 
 echo -e "${BLUE}📦 Image: ${FULL_IMAGE}${NC}"
 echo ""
@@ -53,107 +56,84 @@ if [ $MISSING_FILES -eq 1 ]; then
 fi
 echo ""
 
-# Détecter si Minikube est disponible et démarré
-USE_MINIKUBE=false
-if command -v minikube &> /dev/null; then
-    if minikube status &> /dev/null; then
-        echo -e "${GREEN}✅ Minikube détecté et démarré${NC}"
-        USE_MINIKUBE=true
-
-        # Configurer le shell pour utiliser le Docker daemon de Minikube
-        echo "🔧 Configuration de l'environnement Docker de Minikube..."
-        eval $(minikube docker-env)
-        echo -e "${GREEN}✅ Environnement Docker configuré pour Minikube${NC}"
-        echo ""
-    else
-        echo -e "${YELLOW}⚠️  Minikube est installé mais pas démarré${NC}"
-        echo -e "${YELLOW}   Construction avec Docker local${NC}"
-        echo ""
-    fi
-else
-    echo -e "${BLUE}ℹ️  Minikube non détecté - construction avec Docker local${NC}"
-    echo ""
-fi
-
-# Construire l'image
-echo "🏗️  Construction de l'image Docker..."
-echo ""
-
-docker build \
-    --tag "${FULL_IMAGE}" \
-    --build-arg BUILDKIT_INLINE_CACHE=1 \
-    --progress=plain \
-    .
-
-BUILD_STATUS=$?
-
-if [ $BUILD_STATUS -eq 0 ]; then
-    echo ""
-    echo -e "${GREEN}✅ Image construite avec succès: ${FULL_IMAGE}${NC}"
-    echo ""
-
-    # Afficher les informations de l'image
-    echo "📊 Informations de l'image:"
-    docker images "${IMAGE_NAME}" --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}" | head -2
-    echo ""
-
-    # Instructions selon le contexte
-    if [ "$USE_MINIKUBE" = true ]; then
-        echo -e "${GREEN}═══════════════════════════════════════════════════════${NC}"
-        echo -e "${GREEN}  Prochaines étapes (Minikube)                         ${NC}"
-        echo -e "${GREEN}═══════════════════════════════════════════════════════${NC}"
-        echo ""
-        echo "L'image est maintenant disponible dans Minikube."
-        echo ""
-        echo -e "${YELLOW}📝 Pour déployer l'application:${NC}"
-        echo "   ./deploy.sh"
-        echo ""
-        echo -e "${YELLOW}💡 Configuration du deployment:${NC}"
-        echo "   L'image est référencée dans 09-backend-deployment.yaml"
-        echo "   imagePullPolicy: Never (utilise l'image locale)"
-        echo ""
-    else
-        echo -e "${GREEN}═══════════════════════════════════════════════════════${NC}"
-        echo -e "${GREEN}  Prochaines étapes (Docker local)                     ${NC}"
-        echo -e "${GREEN}═══════════════════════════════════════════════════════${NC}"
-        echo ""
-        echo -e "${YELLOW}💡 Pour tester l'image localement:${NC}"
-        echo "   docker run --rm -p 5000:5000 \\"
-        echo "     -e DATABASE_HOST=localhost \\"
-        echo "     -e DATABASE_USER=taskflow \\"
-        echo "     -e DATABASE_PASSWORD=taskflow2024 \\"
-        echo "     ${FULL_IMAGE}"
-        echo ""
-        echo -e "${YELLOW}📝 Pour utiliser avec Minikube:${NC}"
-        echo ""
-        echo "  1. Démarrer Minikube:"
-        echo "     minikube start"
-        echo ""
-        echo "  2. Charger l'image dans Minikube:"
-        echo "     minikube image load ${FULL_IMAGE}"
-        echo ""
-        echo "  3. Déployer l'application:"
-        echo "     ./deploy.sh"
-        echo ""
-    fi
-
-    echo -e "${YELLOW}🧪 Pour exécuter les tests:${NC}"
-    echo "   ./test-tp10.sh"
-    echo ""
-
-else
+build_failed() {
     echo ""
     echo -e "${RED}❌ Erreur lors de la construction de l'image${NC}"
     echo ""
     echo -e "${YELLOW}💡 Conseils de dépannage:${NC}"
-    echo "  - Vérifier que tous les fichiers (Dockerfile, app.py, requirements.txt) sont présents"
+    echo "  - Vérifier la connexion internet (téléchargement de l'image python et des dépendances pip)"
     echo "  - Vérifier la syntaxe du Dockerfile"
-    echo "  - Vérifier la connexion internet (pour télécharger les dépendances)"
-    if [ "$USE_MINIKUBE" = true ]; then
-        echo "  - Essayer de redémarrer Minikube: minikube stop && minikube start"
+    if [ "$1" = "minikube" ]; then
+        echo "  - Relancer avec les logs détaillés : minikube image build -t ${FULL_IMAGE} . --alsologtostderr"
+        echo "  - En dernier recours : docker build -t ${FULL_IMAGE} . && minikube image load ${FULL_IMAGE}"
     fi
     echo ""
     exit 1
+}
+
+# ─── Cas 1 : Minikube démarré → construire dans le nœud ─────────────────────
+if command -v minikube &> /dev/null && minikube status &> /dev/null; then
+    RUNTIME=$(minikube profile list -o json 2>/dev/null \
+        | grep -o '"ContainerRuntime":"[^"]*"' | head -1 | cut -d'"' -f4)
+    echo -e "${GREEN}✅ Minikube détecté et démarré${NC} (runtime : ${RUNTIME:-inconnu})"
+    echo "🏗️  Construction dans Minikube avec 'minikube image build'..."
+    echo ""
+
+    minikube image build -t "${FULL_IMAGE}" . || build_failed minikube
+
+    echo ""
+    echo "🔍 Vérification de la présence de l'image dans le cache de Minikube..."
+    if ! minikube image ls | grep -q "${IMAGE_NAME}:${TAG}"; then
+        echo -e "${RED}❌ L'image ${FULL_IMAGE} n'apparaît pas dans 'minikube image ls'${NC}"
+        build_failed minikube
+    fi
+    minikube image ls | grep "${IMAGE_NAME}:${TAG}"
+    echo ""
+    echo -e "${GREEN}✅ Image construite et disponible dans Minikube: ${FULL_IMAGE}${NC}"
+    echo ""
+    echo -e "${YELLOW}📝 Pour déployer l'application:${NC}"
+    echo "   ./deploy.sh"
+    echo ""
+    echo -e "${YELLOW}💡 Pourquoi ça suffit:${NC}"
+    echo "   09b-backend-deployment.yaml utilise ${IMAGE_NAME}:latest avec"
+    echo "   imagePullPolicy: Never : le kubelet prend l'image du cache du nœud."
+    echo ""
+    echo -e "${YELLOW}🧪 Pour exécuter les tests:${NC}"
+    echo "   ./test-tp10.sh"
+    echo ""
+    exit 0
 fi
 
-echo -e "${GREEN}═══════════════════════════════════════════════════════${NC}"
+# ─── Cas 2 : pas de Minikube démarré → Docker local ─────────────────────────
+if command -v minikube &> /dev/null; then
+    echo -e "${YELLOW}⚠️  Minikube est installé mais pas démarré${NC}"
+else
+    echo -e "${BLUE}ℹ️  Minikube non détecté${NC}"
+fi
+echo -e "${YELLOW}   Construction avec le Docker local${NC}"
+echo ""
+
+if ! command -v docker &> /dev/null; then
+    echo -e "${RED}❌ Docker n'est pas installé${NC}"
+    echo "Installation: https://docs.docker.com/get-docker/"
+    echo "Ou démarrez Minikube (minikube start) et relancez ce script."
+    exit 1
+fi
+
+docker build --tag "${FULL_IMAGE}" . || build_failed docker
+
+echo ""
+echo -e "${GREEN}✅ Image construite avec succès (Docker local): ${FULL_IMAGE}${NC}"
+echo ""
+echo -e "${YELLOW}⚠️  Cette image n'est PAS dans un cluster.${NC} Pour l'utiliser avec Minikube :"
+echo "   minikube start"
+echo "   minikube image load ${FULL_IMAGE}"
+echo "   ./deploy.sh"
+echo ""
+echo -e "${YELLOW}💡 Pour tester l'image localement:${NC}"
+echo "   docker run --rm -p 5000:5000 \\"
+echo "     -e DATABASE_HOST=localhost \\"
+echo "     -e DATABASE_USER=taskflow \\"
+echo "     -e DATABASE_PASSWORD=taskflow2024 \\"
+echo "     ${FULL_IMAGE}"
+echo ""

@@ -20,8 +20,10 @@ NAMESPACE="taskflow"
 
 # Vérifier que l'image backend est construite
 echo -e "${YELLOW}[0/8] Vérification de l'image Docker backend${NC}"
-eval $(minikube docker-env)
-if ! docker images | grep -q "taskflow-backend"; then
+# `minikube image ls` interroge le cache d'images du nœud, quel que soit son runtime
+# (docker ou containerd, le défaut depuis minikube v1.39) ; l'ancien
+# `eval $(minikube docker-env)` + `docker images` ne fonctionne qu'avec docker.
+if ! minikube image ls 2>/dev/null | grep -q "taskflow-backend:latest"; then
     echo -e "${YELLOW}⚠️  L'image taskflow-backend n'est pas trouvée${NC}"
     echo -e "${YELLOW}   Construction de l'image en cours...${NC}"
     ./build-image.sh
