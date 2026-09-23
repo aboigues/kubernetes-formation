@@ -559,15 +559,20 @@ minikube ip
 ### Registry Docker
 
 ```bash
-# Utiliser le Docker daemon de minikube
-eval $(minikube docker-env)
-
-# Revenir au Docker local
-eval $(minikube docker-env -u)
-
 # Construire une image directement dans minikube
+# (docker ou containerd : containerd est le runtime par défaut depuis minikube v1.39)
+minikube image build -t myapp:v1 .
+minikube image ls | grep myapp
+
+# Ou construire avec le Docker local puis copier l'image dans minikube
+docker build -t myapp:v1 .
+minikube image load myapp:v1
+
+# Utiliser le Docker daemon de minikube (runtime docker UNIQUEMENT :
+# minikube start --container-runtime=docker). Sous containerd, docker-env
+# passe par un pont expérimental où "docker build" (BuildKit) échoue.
 eval $(minikube docker-env)
-docker build -t myapp:latest .
+eval $(minikube docker-env -u)   # revenir au Docker local
 
 # Cache d'images
 minikube cache add nginx:latest
@@ -668,11 +673,9 @@ minikube start --cpus=4 --memory=8192
 minikube addons enable metrics-server
 minikube addons enable ingress
 
-# Utiliser le Docker de minikube
-eval $(minikube docker-env)
-
-# Builder l'image
-docker build -t myapp:latest .
+# Builder l'image directement dans minikube (runtimes docker et containerd)
+# Tag versionné plutôt que :latest : :latest force imagePullPolicy: Always
+minikube image build -t myapp:v1 .
 
 # Déployer
 kubectl apply -f deployment.yaml

@@ -502,11 +502,17 @@ minikube addons enable ingress
 # Lister les addons
 minikube addons list
 
-# Utiliser le daemon Docker de Minikube
-eval $(minikube docker-env)
+# Construire une image directement dans Minikube
+# (fonctionne avec containerd, le runtime par défaut depuis minikube v1.39)
+minikube image build -t myapp:v1 .
 
-# Retour au Docker local
-eval $(minikube docker-env -u)
+# Voir les images disponibles dans Minikube
+minikube image ls
+
+# Utiliser le daemon Docker de Minikube : seulement si le cluster a été créé
+# avec --container-runtime=docker (sous containerd, docker build y échoue)
+eval $(minikube docker-env)
+eval $(minikube docker-env -u)   # retour au Docker local
 ```
 
 ---

@@ -306,12 +306,17 @@ kubectl apply -f 05-argocd/10-argocd-application.yaml
 #### Build et déploiement local
 
 ```bash
-# Construire l'image Docker avec minikube
-eval $(minikube docker-env)
-docker build -t my-kubernetes-app:latest sample-app/
+# Construire l'image directement dans le nœud minikube
+# (fonctionne avec les runtimes docker et containerd, le défaut depuis minikube v1.39 ;
+#  l'ancien "eval $(minikube docker-env) + docker build" échoue sous containerd)
+minikube image build -t my-kubernetes-app:v1 sample-app/
+minikube image ls | grep my-kubernetes-app
 
 # Créer un déploiement de test
-kubectl create deployment my-app --image=my-kubernetes-app:latest
+# Tag v1 et non latest : avec :latest, Kubernetes force imagePullPolicy: Always
+# et tente de télécharger l'image sur Docker Hub (ErrImagePull) au lieu
+# d'utiliser celle du cache de minikube.
+kubectl create deployment my-app --image=my-kubernetes-app:v1
 kubectl expose deployment my-app --port=3000
 kubectl port-forward svc/my-app 3000:3000
 
