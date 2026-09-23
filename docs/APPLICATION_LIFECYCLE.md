@@ -598,7 +598,7 @@ kubectl delete namespace ${NAMESPACE}
 kubectl create namespace argocd
 
 # Installer ArgoCD
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl apply -n argocd --server-side --force-conflicts -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 
 # Exposer l'interface (pour DMZ, utiliser Ingress avec TLS)
 kubectl patch svc argocd-server -n argocd -p '{"spec": {"type": "LoadBalancer"}}'

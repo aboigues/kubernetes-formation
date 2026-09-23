@@ -20,8 +20,8 @@
   - `11-argocd-helm-app.yaml` - Syntaxe YAML valide ✅
 
 ### 4. Commandes d'installation
-- **Status**: ✅ Validées
-- Toutes les commandes sont correctes et fonctionnelles
+- **Status**: ✅ Validées (re-testées le 2026-09-23 avec ArgoCD v3.5.3 sur microk8s / containerd)
+- ⚠️ L'installation exige `kubectl apply --server-side --force-conflicts` : sans `--server-side`, le CRD `applicationsets.argoproj.io` (plus de 370 Ko) dépasse la limite de 256 Ko de l'annotation `last-applied-configuration`
 
 ## ⚠️ Recommandations et points d'attention
 
