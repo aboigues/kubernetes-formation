@@ -6,7 +6,7 @@ Ce TP de synthèse vous permet de mettre en pratique **toutes les notions import
 
 - ✅ **Deployments** : Déploiement d'une stack applicative complète multi-tiers
 - ✅ **HPA (HorizontalPodAutoscaler)** : Auto-scaling basé sur les métriques CPU/mémoire
-- ✅ **initContainers** : Initialisation de base de données avec données de test
+- ✅ **initContainers** : Attendre qu'une dépendance (la base) soit réellement prête avant de démarrer
 - ✅ **Services** : ClusterIP, LoadBalancer pour l'exposition
 - ✅ **Volumes (PVC)** : Persistance des données (PostgreSQL, Prometheus)
 - ✅ **ConfigMaps/Secrets** : Configuration externalisée
@@ -31,82 +31,175 @@ Ce TP de synthèse vous permet de mettre en pratique **toutes les notions import
 
 ### Vue d'ensemble
 
-TaskFlow est une application web de gestion de tâches (Todo List) avec les composants suivants :
+TaskFlow est une application web de gestion de tâches (Todo List). Elle fait tourner **7 composants** dans un seul namespace `taskflow`, avec deux portes d'entrée depuis l'extérieur : l'application elle-même (frontend) et le tableau de bord de supervision (Grafana).
 
+```mermaid
+flowchart TB
+    U(["Utilisateur (navigateur)"])
+    OPS(["Vous (supervision)"])
+
+    subgraph ACCES["① Accès : Services exposés"]
+        direction LR
+        FSVC{{"frontend<br/>LoadBalancer :80"}}
+        GSVC{{"grafana<br/>LoadBalancer :3000"}}
+    end
+
+    subgraph APP["② Application"]
+        direction LR
+        FE["Frontend nginx<br/>1 pod"]
+        BSVC{{"backend-api<br/>ClusterIP :5000"}}
+        BE["Backend API Flask<br/>2 à 10 pods"]
+        HPA["HPA"]
+        LG["Load generator<br/>Job, 5 pods"]
+    end
+
+    subgraph DATA["③ Données"]
+        direction LR
+        RD[("Redis<br/>cache 5 min")]
+        PG[("PostgreSQL<br/>1000 tâches")]
+        PVC1[("PVC")]
+    end
+
+    subgraph MON["④ Supervision"]
+        direction LR
+        GR["Grafana"]
+        PR["Prometheus"]
+        PVC2[("PVC")]
+    end
+
+    U --> FSVC --> FE
+    FE -- "/api/*" --> BSVC --> BE
+    LG -- "charge" --> BSVC
+    BE -- "1. cache ?" --> RD
+    BE -- "2. sinon SQL" --> PG
+    PG --- PVC1
+    HPA -. "2 → 10 replicas" .-> BE
+
+    OPS --> GSVC --> GR -- "PromQL" --> PR
+    PR -. "scrape /metrics" .-> BE
+    PR --- PVC2
+
+    classDef acces fill:#e0e7ff,stroke:#4f46e5,color:#1e1b4b
+    classDef app fill:#dcfce7,stroke:#16a34a,color:#052e16
+    classDef data fill:#ffedd5,stroke:#ea580c,color:#431407
+    classDef mon fill:#f3e8ff,stroke:#9333ea,color:#3b0764
+    classDef ext fill:#f1f5f9,stroke:#475569,color:#0f172a
+    class FSVC,GSVC,BSVC acces
+    class FE,BE,HPA,LG app
+    class RD,PG,PVC1 data
+    class GR,PR,PVC2 mon
+    class U,OPS ext
+    style ACCES fill:transparent,stroke:#94a3b8,stroke-dasharray:4
+    style APP fill:transparent,stroke:#94a3b8,stroke-dasharray:4
+    style DATA fill:transparent,stroke:#94a3b8,stroke-dasharray:4
+    style MON fill:transparent,stroke:#94a3b8,stroke-dasharray:4
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Utilisateurs                              │
-└────────────────────────┬────────────────────────────────────────┘
-                         │
-                         ▼
-              ┌──────────────────────┐
-              │  LoadBalancer (SVC)  │
-              └──────────┬───────────┘
-                         │
-         ┌───────────────┼───────────────┐
-         │               │               │
-         ▼               ▼               ▼
-    ┌─────────┐    ┌─────────┐    ┌─────────┐
-    │Frontend │    │Backend  │    │Backend  │  ◄── HPA (auto-scaling)
-    │ (Nginx) │    │  API    │    │  API    │
-    └────┬────┘    └────┬────┘    └────┬────┘
-         │              │              │
-         └──────────────┼──────────────┘
-                        │
-         ┌──────────────┼──────────────┐
-         │              │              │
-         ▼              ▼              ▼
-    ┌─────────┐   ┌──────────┐   ┌─────────┐
-    │  Redis  │   │PostgreSQL│   │Prometheus│
-    │ (Cache) │   │   (DB)   │   │(Metrics)│
-    └─────────┘   └────┬─────┘   └────┬────┘
-                       │              │
-                       ▼              ▼
-                  ┌────────┐     ┌─────────┐
-                  │  PVC   │     │   PVC   │
-                  │  (DB)  │     │(Metrics)│
-                  └────────┘     └─────────┘
-                       ▲
-                       │
-                ┌──────┴──────┐
-                │initContainer│
-                │  (SQL Init) │
-                └─────────────┘
-```
+
+**Comment lire ce schéma :**
+- **Couleurs** : 🟦 Services (adresses stables) · 🟩 application · 🟧 données · 🟪 supervision. Tout vit dans le namespace `taskflow`.
+- **Flèches pleines** : le **trafic applicatif**, ce qu'une requête traverse.
+- **Flèches pointillées** : le **pilotage** (HPA) et la **supervision** (Prometheus). Ils observent les pods, ils ne sont jamais sur le chemin des requêtes.
+- D'où le HPA et Prometheus tirent-ils leurs chiffres ? Ce sont deux circuits différents, détaillés plus bas dans « Deux boucles à ne pas confondre ».
 
 ### Composants de l'application
 
-| Composant | Description | Type de Service | Réplicas | Scaling |
-|-----------|-------------|-----------------|----------|---------|
-| **Frontend** | Interface web (HTML/CSS/JS) | LoadBalancer | 1 | Fixe |
-| **Backend API** | API REST Flask (Python) | ClusterIP | 2-10 | **HPA activé** |
-| **PostgreSQL** | Base de données | ClusterIP | 1 | Fixe |
-| **Redis** | Cache en mémoire | ClusterIP | 1 | Fixe |
-| **Prometheus** | Collecte de métriques | ClusterIP | 1 | Fixe |
-| **Grafana** | Visualisation | LoadBalancer | 1 | Fixe |
-| **Load Generator** | Générateur de charge | Job | - | On-demand |
+| Composant | Rôle | Service | Pods | Stockage | Vu au |
+|-----------|------|---------|------|----------|-------|
+| **Frontend** | Sert la page HTML/JS et relaie `/api/*` vers le backend | LoadBalancer `:80` | 1 | - | TP8 (Services) |
+| **Backend API** | API REST Flask : lit les tâches, calcule les stats | ClusterIP `:5000` | **2 à 10 (HPA)** | - | TP4 (HPA) |
+| **PostgreSQL** | Base de données, chargée avec 1000 tâches au premier démarrage | ClusterIP `:5432` | 1 | PVC | TP3 (volumes) |
+| **Redis** | Cache des réponses de l'API (5 minutes) | ClusterIP `:6379` | 1 | - | TP2 |
+| **Prometheus** | Collecte et stocke les métriques | ClusterIP `:9090` | 1 | PVC | TP4 (monitoring) |
+| **Grafana** | Tableaux de bord | LoadBalancer `:3000` | 1 | - | TP4 (monitoring) |
+| **Load Generator** | Simule du trafic pour déclencher l'autoscaling | - (Job) | 5 | - | TP2 (Jobs) |
 
-### Flux de données
+### Le trajet d'une requête
 
-1. **Initialisation** :
-   - L'**initContainer** de PostgreSQL crée le schéma de la base de données
-   - Il charge **1000 tâches de test** pour simuler une application en production
+Quand vous ouvrez la liste des tâches, voici ce qui se passe réellement (vérifié sur cluster) :
 
-2. **Fonctionnement normal** :
-   - Les utilisateurs accèdent au **Frontend** via LoadBalancer
-   - Le Frontend envoie les requêtes à l'**API Backend**
-   - L'API interroge **PostgreSQL** pour les données
-   - L'API utilise **Redis** pour mettre en cache les résultats fréquents
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as Navigateur
+    participant FE as Frontend (nginx)
+    participant BE as Backend API (1 des N pods)
+    participant RD as Redis
+    participant PG as PostgreSQL
 
-3. **Auto-scaling** :
-   - Le **HPA** surveille l'utilisation CPU/mémoire des pods Backend
-   - Quand la charge augmente, le HPA **scale automatiquement** de 2 à 10 replicas
-   - Quand la charge diminue, il **descale** progressivement
+    U->>FE: GET /api/tasks?limit=2
+    Note over FE: /api/ → proxy_pass http://backend-api:5000<br/>(le Service choisit un pod)
+    FE->>BE: GET /tasks?limit=2
+    BE->>RD: GET "tasks:priority=None:..."
+    alt 1re requête : pas en cache (MISS)
+        RD-->>BE: (vide)
+        BE->>PG: SELECT ... FROM tasks
+        PG-->>BE: lignes
+        BE->>RD: SETEX (expire dans 300 s)
+        BE-->>FE: JSON "from_cache": false
+    else requêtes suivantes : en cache (HIT)
+        RD-->>BE: JSON déjà prêt
+        BE-->>FE: JSON "from_cache": true
+    end
+    FE-->>U: réponse
+```
 
-4. **Monitoring** :
-   - **Prometheus** collecte les métriques des pods (CPU, mémoire, requêtes)
-   - **Grafana** affiche des dashboards en temps réel
-   - Vous pouvez observer l'autoscaling en action
+Le champ `from_cache` de la réponse vous dit quel chemin a été pris. Vous le vérifierez vous-même en 8.2.
+
+### Deux boucles à ne pas confondre : autoscaling et monitoring
+
+C'est la confusion la plus fréquente sur ce TP : **le HPA n'utilise pas Prometheus**, et **Grafana ne pilote rien**. Il y a deux circuits de métriques complètement indépendants :
+
+```mermaid
+flowchart TB
+    subgraph A["Boucle d'autoscaling (agit)"]
+        direction LR
+        K1["kubelet<br/>de chaque nœud"] --> MS["metrics-server<br/>(valeurs instantanées,<br/>aucun historique)"]
+        MS --> H["HPA<br/>calcule toutes les 15 s"]
+        H -- "modifie spec.replicas" --> D["Deployment<br/>backend-api"]
+    end
+    subgraph B["Boucle de monitoring (observe)"]
+        direction LR
+        K2["kubelet (cAdvisor)<br/>+ /metrics du backend"] --> P["Prometheus<br/>(scrape toutes les 15 s,<br/>garde l'historique)"]
+        P --> G["Grafana<br/>(graphiques)"]
+        G --> V(["vos yeux"])
+    end
+    A ~~~ B
+    classDef acces fill:#e0e7ff,stroke:#4f46e5,color:#1e1b4b
+    classDef app fill:#dcfce7,stroke:#16a34a,color:#052e16
+    classDef data fill:#ffedd5,stroke:#ea580c,color:#431407
+    classDef mon fill:#f3e8ff,stroke:#9333ea,color:#3b0764
+    classDef ext fill:#f1f5f9,stroke:#475569,color:#0f172a
+    class K1,K2 ext
+    class MS,H,D app
+    class P,G mon
+    class V ext
+    style A fill:transparent,stroke:#16a34a,stroke-dasharray:4
+    style B fill:transparent,stroke:#9333ea,stroke-dasharray:4
+```
+
+| | Boucle d'autoscaling | Boucle de monitoring |
+|---|---|---|
+| Source | metrics-server (API `metrics.k8s.io`) | Prometheus |
+| Historique | Aucun : juste « maintenant » | Oui, stocké sur le PVC |
+| Qui l'utilise | Le HPA, `kubectl top` | Grafana, vous |
+| Si elle tombe en panne | **Plus d'autoscaling** (`<unknown>` dans `kubectl get hpa`) | L'application et l'autoscaling continuent, vous êtes juste aveugle |
+
+C'est pour ça que la Partie 1 vérifie metrics-server avant tout : sans lui, le HPA ne peut rien faire, même si Prometheus et Grafana fonctionnent parfaitement.
+
+### Le parcours du TP
+
+```mermaid
+flowchart LR
+    P1["1. Préparer<br/>metrics-server, image"] --> P2["2. PostgreSQL<br/>données + PVC"]
+    P2 --> P3["3. Redis"]
+    P3 --> P4["4. Backend<br/>+ HPA"]
+    P4 --> P5["5. Frontend<br/>reverse proxy"]
+    P5 --> P6["6. Prometheus<br/>+ Grafana"]
+    P6 --> P7["7-9. Charge<br/>et autoscaling"]
+    P7 --> P10["10. Analyse<br/>et nettoyage"]
+```
+
+On construit **de bas en haut** : d'abord ce dont les autres dépendent (la base), puis ce qui l'utilise (le backend), puis ce qui est exposé (le frontend). La supervision vient en dernier, pour observer une application qui tourne déjà.
 
 ## 🚀 Partie 1 : Préparation de l'environnement
 
@@ -305,12 +398,23 @@ spec:
 
 ### 2.1 Comprendre l'objectif
 
-Nous allons déployer PostgreSQL avec un **initContainer** qui :
-- Crée le schéma de la base de données (table `tasks`)
-- Insère **1000 tâches de test** pour simuler une application en production
-- S'exécute **avant** le démarrage du conteneur principal PostgreSQL
+PostgreSQL doit démarrer **avec une table `tasks` déjà remplie de 1000 tâches**, pour que l'application ait quelque chose à afficher et que le test de charge travaille sur des données réalistes.
 
-Ceci illustre un cas d'usage réel : **initialiser une base de données** avant le démarrage de l'application.
+On n'écrit pas de code pour ça : on utilise une convention de l'**image officielle `postgres`**. Au **tout premier démarrage** (répertoire de données vide), son script d'entrée exécute automatiquement tous les fichiers `.sql` et `.sh` qu'il trouve dans `/docker-entrypoint-initdb.d/`. Il suffit donc de monter notre script SQL à cet endroit, depuis une ConfigMap :
+
+```mermaid
+flowchart LR
+    CM["ConfigMap<br/>postgres-init-script<br/>(init.sql)"] -- "montée en volume sur" --> DIR["/docker-entrypoint-initdb.d/<br/>dans le conteneur postgres"]
+    DIR --> Q{"Répertoire de données<br/>(PVC) vide ?"}
+    Q -- "oui : 1er démarrage" --> RUN["docker-entrypoint.sh exécute init.sql<br/>CREATE TABLE, CREATE INDEX,<br/>INSERT 0 1000"]
+    Q -- "non : redémarrage" --> SKIP["script ignoré :<br/>les données du PVC sont réutilisées"]
+    RUN --> PVC[("PVC postgres-pvc")]
+    SKIP --> PVC
+```
+
+> ⚠️ **Conséquence à retenir** : modifier `init.sql` puis redémarrer le pod **ne change rien** tant que le PVC contient déjà une base. Le script ne tourne qu'une fois dans la vie du volume. Pour le rejouer, il faut supprimer le PVC (et donc les données).
+
+Et l'**initContainer** ? Il n'est pas là. Un initContainer sert à préparer ou attendre quelque chose **avant** qu'un conteneur démarre. Ici, c'est le **backend** qui a besoin d'attendre que la base soit prête : c'est donc dans le Deployment du backend que vous le trouverez (section 4.2).
 
 ### 2.2 ConfigMap pour le script d'initialisation
 
@@ -444,33 +548,6 @@ spec:
         seccompProfile:
           type: RuntimeDefault
 
-      initContainers:
-      - name: init-db-schema
-        image: postgres:17-alpine
-        command:
-        - sh
-        - -c
-        - |
-          echo "Waiting for PostgreSQL to be ready..."
-          sleep 10
-          echo "InitContainer completed successfully"
-        securityContext:
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
-          runAsNonRoot: true
-          runAsUser: 70
-          capabilities:
-            drop:
-            - ALL
-        volumeMounts:
-        - name: init-script
-          mountPath: /docker-entrypoint-initdb.d
-        - name: tmp
-          mountPath: /tmp
-        envFrom:
-        - secretRef:
-            name: postgres-secret
-
       containers:
       - name: postgres
         image: postgres:17-alpine
@@ -515,6 +592,13 @@ spec:
             - pg_isready
             - -U
             - taskflow
+            # -d explicite : sans lui, pg_isready cible par défaut une base
+            # nommée comme l'utilisateur ("taskflow"), qui n'existe pas - la
+            # vraie base est "taskflow_db" (POSTGRES_DB dans le Secret).
+            # pg_isready traite quand même un rejet "database does not
+            # exist" comme "serveur accepte les connexions" (il ne teste que
+            # l'atteignabilité du serveur, pas l'auth complète), donc le pod
+            # passait Ready malgré tout - mais ça spamme les logs en continu.
             - -d
             - taskflow_db
           initialDelaySeconds: 30
@@ -544,11 +628,10 @@ spec:
 ```
 
 **Points clés à comprendre** :
-- Le **initContainer** `init-db-schema` s'exécute en premier
-- Il monte le même script SQL que le conteneur principal
-- PostgreSQL exécute automatiquement les scripts dans `/docker-entrypoint-initdb.d/`
-- Les **1000 tâches** sont créées au premier démarrage
-- Le **PVC** garantit la persistance des données
+- La ConfigMap `postgres-init-script` est montée sur `/docker-entrypoint-initdb.d/` : l'image `postgres` exécute `init.sql` **au premier démarrage uniquement** (voir 2.1)
+- Les **1000 tâches** sont créées à ce moment-là
+- Le **PVC** garantit la persistance des données : aux démarrages suivants, le script n'est pas rejoué
+- La `readinessProbe` (`pg_isready`) empêche le Service d'envoyer du trafic avant que la base accepte les connexions
 
 **⚠️ Important sur `replicas: 1` et `strategy: Recreate`** :
 
@@ -609,14 +692,17 @@ kubectl apply -f 05-postgres-service.yaml
 # Voir le déploiement
 kubectl get deployment postgres
 
-# Voir les pods (y compris l'initContainer)
+# Voir le pod
 kubectl get pods -l app=postgres
 
-# Voir les logs de l'initContainer
-kubectl logs -l app=postgres -c init-db-schema
-
-# Voir les logs du conteneur principal
-kubectl logs -l app=postgres -c postgres
+# Voir l'exécution du script d'initialisation dans les logs
+kubectl logs -l app=postgres -c postgres | grep -A5 "docker-entrypoint-initdb.d"
+# Attendu :
+# /usr/local/bin/docker-entrypoint.sh: running /docker-entrypoint-initdb.d/init.sql
+# CREATE TABLE
+# CREATE INDEX
+# CREATE INDEX
+# INSERT 0 1000
 
 # Se connecter à PostgreSQL et vérifier les données
 kubectl exec -it deployment/postgres -- psql -U taskflow -d taskflow_db -c "SELECT COUNT(*) FROM tasks;"
@@ -800,6 +886,47 @@ spec:
         seccompProfile:
           type: RuntimeDefault
 
+      # Attente active de PostgreSQL : sans elle, les pods backend démarrent
+      # souvent avant la base (Deployments appliqués en même temps, PostgreSQL
+      # met plusieurs secondes à exécuter init.sql), échouent leur readiness et
+      # redémarrent. Le conteneur "api" ne démarre qu'une fois cet init terminé.
+      initContainers:
+      - name: wait-for-postgres
+        image: postgres:17-alpine   # même image que la base : fournit pg_isready
+        command:
+        - sh
+        - -c
+        - |
+          until pg_isready -h "$DATABASE_HOST" -p "$DATABASE_PORT" -U "$DATABASE_USER" -d "$DATABASE_NAME"; do
+            echo "PostgreSQL pas encore prêt, nouvel essai dans 2 s..."
+            sleep 2
+          done
+          echo "PostgreSQL prêt, démarrage de l'API."
+        env:
+        - name: DATABASE_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_USER
+        envFrom:
+        - configMapRef:
+            name: backend-config
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 70
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "16Mi"
+            cpu: "10m"
+          limits:
+            memory: "32Mi"
+            cpu: "50m"
+
       containers:
       - name: api
         image: taskflow-backend:latest
@@ -867,7 +994,52 @@ spec:
         emptyDir: {}
 ```
 
-**Note** : Les `requests.cpu` et `requests.memory` sont **essentiels** pour le HPA.
+**Trois choses à comprendre dans ce Deployment :**
+
+**1. L'initContainer `wait-for-postgres`.** Tous les Deployments sont appliqués à peu près en même temps, mais PostgreSQL met plusieurs secondes à démarrer (et plus encore la première fois, pendant qu'il exécute `init.sql`). Sans précaution, l'API démarrerait avant la base, échouerait ses premières connexions et redémarrerait. L'initContainer boucle sur `pg_isready` jusqu'à ce que la base réponde, et Kubernetes ne lance le conteneur `api` **qu'après sa réussite** :
+
+```mermaid
+sequenceDiagram
+    participant K as kubelet
+    participant I as initContainer<br/>wait-for-postgres
+    participant PG as Service postgres
+    participant A as conteneur api
+
+    K->>I: démarre
+    loop toutes les 2 s
+        I->>PG: pg_isready
+        PG-->>I: no response
+    end
+    I->>PG: pg_isready
+    PG-->>I: accepting connections
+    I-->>K: exit 0
+    K->>A: démarre (seulement maintenant)
+```
+
+Sur notre cluster de test, avec tout appliqué d'un coup, les logs de l'initContainer montraient 5 échecs (environ 10 secondes) avant `accepting connections`, puis l'API démarrait sans aucun redémarrage. C'est l'équivalent Kubernetes du `depends_on` de Docker Compose, en mieux : il attend que le service **réponde**, pas seulement qu'il soit lancé (voir la fiche du TP7).
+
+**2. D'où vient le code de l'API ?** Pas de l'image, en réalité :
+
+```mermaid
+flowchart LR
+    IMG["Image taskflow-backend<br/>Python + Flask + psycopg2<br/>+ redis + prometheus-client<br/>(+ une copie de app.py)"]
+    CM["ConfigMap backend-app-code<br/>(09a) : app.py"]
+    POD["Conteneur api<br/>/app/app.py"]
+    IMG -- "fournit l'environnement :<br/>Python et bibliothèques" --> POD
+    CM -- "montée sur /app :<br/>masque le app.py de l'image" --> POD
+    classDef acces fill:#e0e7ff,stroke:#4f46e5,color:#1e1b4b
+    classDef app fill:#dcfce7,stroke:#16a34a,color:#052e16
+    classDef data fill:#ffedd5,stroke:#ea580c,color:#431407
+    classDef mon fill:#f3e8ff,stroke:#9333ea,color:#3b0764
+    classDef ext fill:#f1f5f9,stroke:#475569,color:#0f172a
+    class IMG ext
+    class CM acces
+    class POD app
+```
+
+L'image fournit les **dépendances** ; la ConfigMap fournit le **code**, monté par-dessus `/app`. Avantage pour la formation : modifier le code se fait avec `kubectl apply -f 09a-backend-app-code.yaml` puis `kubectl rollout restart deployment/backend-api`, sans reconstruire d'image. En production, on ferait l'inverse (code dans l'image, versionné par son tag).
+
+**3. Les `requests`.** `requests.cpu: 100m` n'est pas qu'une réservation : c'est la **référence** du HPA. « 50 % de CPU » veut dire 50 % de 100m, soit 50 millicœurs, **pas** 50 % d'un cœur (voir 4.4). Sans `requests`, le HPA ne peut pas calculer de pourcentage et affiche `<unknown>`.
 
 Appliquer (la ConfigMap du code doit être créée **avant** le Deployment qui la monte) :
 ```bash
@@ -905,7 +1077,7 @@ kubectl apply -f 10-backend-service.yaml
 
 ### 4.4 HorizontalPodAutoscaler (HPA)
 
-**C'est ici que la magie opère !** Le HPA va surveiller l'utilisation CPU/mémoire et scaler automatiquement.
+Le HPA (HorizontalPodAutoscaler) ajuste le nombre de pods du backend pour que la consommation **moyenne** reste proche d'une cible. Ce n'est pas de la magie : c'est une boucle de contrôle qui refait le même calcul toutes les 15 secondes.
 
 Créer `11-backend-hpa.yaml` :
 
@@ -954,13 +1126,43 @@ spec:
       selectPolicy: Max
 ```
 
-**Explication des paramètres** :
-- **minReplicas: 2** : Jamais moins de 2 pods (haute disponibilité)
-- **maxReplicas: 10** : Maximum 10 pods (limite de ressources)
-- **CPU 50%** : Si l'utilisation CPU moyenne dépasse 50%, scale up
-- **Memory 70%** : Si l'utilisation mémoire dépasse 70%, scale up
-- **scaleUp** : Réaction rapide (15 secondes, max 4 pods à la fois)
-- **scaleDown** : Réaction lente (60 secondes, max 50% à la fois)
+#### Comment le HPA décide
+
+```mermaid
+flowchart LR
+    M["metrics-server :<br/>CPU de chaque pod"] --> C["moyenne ÷ requests<br/>= utilisation %"]
+    C --> F["replicas voulus =<br/>⌈ replicas actuels × utilisation ÷ cible ⌉"]
+    F --> MAX["plusieurs métriques ?<br/>on garde le PLUS GRAND résultat"]
+    MAX --> B["borné par min/max<br/>+ règles behavior"]
+    B --> D["Deployment<br/>spec.replicas"]
+    D -. "15 s plus tard, on recommence" .-> M
+```
+
+**Exemple chiffré** avec ce TP (requests CPU = `100m`, cible = 50 %) :
+
+| Situation | Calcul | Résultat |
+|---|---|---|
+| Au repos : 2 pods à 2m de CPU chacun | 2m ÷ 100m = 2 % → ⌈2 × 2 ÷ 50⌉ = 1 | **2** (on ne descend pas sous `minReplicas`) |
+| Sous charge : 2 pods à 200m chacun | 200m ÷ 100m = 200 % → ⌈2 × 200 ÷ 50⌉ = 8 | **8** (mais `behavior` limite le saut, voir ci-dessous) |
+| 8 pods à 60m chacun | 60 % → ⌈8 × 60 ÷ 50⌉ = ⌈9,6⌉ | **10** |
+| Charge arrêtée : 10 pods à 2m | 2 % → ⌈10 × 2 ÷ 50⌉ = 1 | **2**, mais progressivement (`scaleDown`) |
+
+La mémoire (cible 70 %) est calculée de la même façon, et le HPA retient la métrique qui demande **le plus** de pods. Un écart de moins de 10 % autour de la cible est ignoré, pour éviter les oscillations.
+
+#### Les paramètres
+
+| Paramètre | Valeur | Effet |
+|---|---|---|
+| `minReplicas` | 2 | Jamais moins de 2 pods : si l'un tombe, l'autre répond |
+| `maxReplicas` | 10 | Plafond : protège le cluster d'une charge anormale |
+| CPU `averageUtilization` | 50 % | Cible : 50 % des `requests`, soit 50m par pod |
+| Mémoire `averageUtilization` | 70 % | Cible : 70 % de 128Mi |
+| `scaleUp.stabilizationWindowSeconds` | 0 | Réagit immédiatement à une hausse |
+| `scaleUp.policies` | +100 % **ou** +4 pods / 15 s, `selectPolicy: Max` | À chaque tour, on peut ajouter le plus grand des deux : doubler, ou +4 |
+| `scaleDown.stabilizationWindowSeconds` | 60 | Avant de réduire, attend que la baisse dure 60 s |
+| `scaleDown.policies` | −50 % / 60 s | Retire au plus la moitié des pods par minute |
+
+**Pourquoi monter vite et descendre lentement ?** Manquer de pods pendant un pic coûte des erreurs aux utilisateurs ; garder quelques pods de trop pendant une minute ne coûte qu'un peu de ressources. Et une charge qui baisse une seconde peut remonter la suivante : la fenêtre de 60 s évite de supprimer des pods pour les recréer aussitôt.
 
 Appliquer :
 ```bash
@@ -988,9 +1190,32 @@ Le frontend est une application HTML/JavaScript statique servie par Nginx. Lorsq
 
 **Solution** : Nous configurons **Nginx comme reverse proxy**. Le frontend utilise une URL relative (`/api`) et Nginx redirige les requêtes vers le service backend interne.
 
+```mermaid
+flowchart LR
+    subgraph EXT["Hors du cluster"]
+        B["Navigateur<br/>exécute le JavaScript"]
+    end
+    subgraph CL["Dans le cluster (namespace taskflow)"]
+        N["nginx (frontend)<br/>location / → fichiers HTML<br/>location /api/ → proxy"]
+        S{{"Service backend-api<br/>ClusterIP :5000"}}
+        A["pods backend"]
+    end
+    B -- "GET /api/tasks<br/>(URL relative : même hôte que la page)" --> N
+    N -- "proxy_pass http://backend-api:5000<br/>(DNS interne, résolu DANS le cluster)" --> S --> A
+    B -. "✗ http://backend-api:5000<br/>inconnu du navigateur" .-> S
+    classDef acces fill:#e0e7ff,stroke:#4f46e5,color:#1e1b4b
+    classDef app fill:#dcfce7,stroke:#16a34a,color:#052e16
+    classDef data fill:#ffedd5,stroke:#ea580c,color:#431407
+    classDef mon fill:#f3e8ff,stroke:#9333ea,color:#3b0764
+    classDef ext fill:#f1f5f9,stroke:#475569,color:#0f172a
+    class B ext
+    class N,A app
+    class S acces
+    style EXT fill:transparent,stroke:#94a3b8,stroke-dasharray:4
+    style CL fill:transparent,stroke:#94a3b8,stroke-dasharray:4
 ```
-Navigateur → /api → Nginx (reverse proxy) → http://backend-api:5000
-```
+
+Le navigateur ne parle **qu'à nginx**, à la même adresse que la page. C'est nginx, qui tourne dans le cluster, qui sait résoudre `backend-api`.
 
 ### 5.1 Configuration Nginx avec Reverse Proxy
 
@@ -1380,6 +1605,12 @@ spec:
         fsGroup: 101
         seccompProfile:
           type: RuntimeDefault
+        # nginx écoute sur le port 80 en non-root sans aucune capability :
+        # containerd (microk8s, minikube récent) refuse ce bind sans ce sysctl
+        # "safe" -> CrashLoopBackOff sur "bind() to 0.0.0.0:80 failed (13)".
+        sysctls:
+        - name: net.ipv4.ip_unprivileged_port_start
+          value: "0"
 
       containers:
       - name: nginx
@@ -1481,7 +1712,38 @@ kubectl get svc frontend -n taskflow
 
 ### 6.1 Déployer Prometheus
 
-Nous allons utiliser une configuration simplifiée de Prometheus pour ce TP.
+Nous allons utiliser une configuration simplifiée de Prometheus pour ce TP. Prometheus fonctionne en **pull** : c'est lui qui va chercher (*scrape*) les métriques toutes les 15 secondes, personne ne les lui envoie. Notre configuration a deux sources (deux *jobs*) :
+
+```mermaid
+flowchart LR
+    P["Prometheus"]
+    subgraph J1["job kubernetes-pods"]
+        API["pods annotés<br/>prometheus.io/scrape: true<br/>→ backend-api :5000/metrics"]
+    end
+    subgraph J2["job kubernetes-cadvisor"]
+        KL["kubelet :10250/metrics/cadvisor<br/>→ CPU, mémoire, réseau<br/>de TOUS les conteneurs"]
+    end
+    P -- "découvre les pods via l'API Kubernetes,<br/>garde ceux qui ont l'annotation" --> API
+    P -- "découvre les nœuds via l'API Kubernetes" --> KL
+    G["Grafana"] -- "PromQL" --> P
+    classDef acces fill:#e0e7ff,stroke:#4f46e5,color:#1e1b4b
+    classDef app fill:#dcfce7,stroke:#16a34a,color:#052e16
+    classDef data fill:#ffedd5,stroke:#ea580c,color:#431407
+    classDef mon fill:#f3e8ff,stroke:#9333ea,color:#3b0764
+    classDef ext fill:#f1f5f9,stroke:#475569,color:#0f172a
+    class P,G mon
+    class API app
+    class KL ext
+    style J1 fill:transparent,stroke:#94a3b8,stroke-dasharray:4
+    style J2 fill:transparent,stroke:#94a3b8,stroke-dasharray:4
+```
+
+| Job | Ce qu'il récupère | Exemples de métriques |
+|---|---|---|
+| `kubernetes-pods` | Les métriques **de l'application**, exposées par le code Flask sur `/metrics` | `http_requests_total`, `cache_hits_total`, `tasks_total` |
+| `kubernetes-cadvisor` | Les métriques **des conteneurs**, mesurées par le kubelet | `container_cpu_usage_seconds_total`, `container_memory_usage_bytes` |
+
+La découverte automatique explique le **RBAC** de la section 6.2 : pour lister les pods et les nœuds, Prometheus doit en avoir le droit.
 
 Créer `15-prometheus-config.yaml` :
 
@@ -1923,6 +2185,10 @@ Le Load Generator va **simuler du trafic** vers l'API Backend pour :
 - **Déclencher l'autoscaling** du HPA
 - Observer le comportement en temps réel dans Grafana
 
+Le Job lance **5 pods en parallèle** (`parallelism: 5`). Chacun enchaîne en boucle des appels à l'API, dont `/stress?duration=2` qui fait travailler le CPU pendant 2 secondes. Il appelle directement le Service `backend-api` (pas le frontend) : on teste le backend, pas nginx.
+
+> 💡 Remarquez que `/tasks` sera servi **par Redis** après le premier appel (5 minutes de cache) : c'est surtout `/stress`, une boucle de calcul de 2 secondes, qui fait monter le CPU. Le cache est justement là pour que les lectures répétées ne coûtent presque rien.
+
 ### 7.2 Job Load Generator
 
 Créer `22-load-generator.yaml` :
@@ -2051,6 +2317,19 @@ pkill -f "kubectl.*port-forward.*backend-api"
 
 Vous devriez voir **1000 tâches** dans la base de données.
 
+**Vérifier le cache Redis** (toujours avec le port-forward actif) :
+
+```bash
+for i in 1 2 3; do curl -s "http://localhost:5000/tasks?limit=2" | jq '.from_cache'; done
+# Attendu :
+# false   ← 1er appel : lu dans PostgreSQL, puis mis en cache
+# true    ← servi par Redis
+# true
+
+# Les compteurs exposés à Prometheus le confirment
+curl -s http://localhost:5000/metrics | grep -E "^cache_(hits|misses)_total"
+```
+
 ### 8.3 Accéder au Frontend
 
 ```bash
@@ -2171,31 +2450,50 @@ watch -n 5 'kubectl top pods -n taskflow -l app=backend-api'
 
 ### 9.3 Ce que vous devriez observer
 
-**Phase 1 : Montée en charge (0-2 minutes)**
-- L'utilisation CPU des pods backend passe de ~5% à 60-80%
-- Le HPA détecte la charge excessive
+Voici un déroulé **réellement mesuré** sur un cluster de test (un nœud, 8 CPU). Les durées varieront chez vous selon la puissance de la machine, mais les **étapes** et leur logique seront les mêmes.
 
-**Phase 2 : Scale up (2-5 minutes)**
-- Le HPA crée de nouveaux pods (3, 4, 5, 6...)
-- Les nouveaux pods démarrent et deviennent Ready
-- La charge se répartit sur plus de pods
-- L'utilisation CPU par pod redescend
-
-**Phase 3 : Stabilisation (5-10 minutes)**
-- Le nombre de pods se stabilise (généralement 6-8 pods)
-- L'utilisation CPU se maintient autour de 50%
-
-**Phase 4 : Arrêt du load generator**
-```bash
-# Arrêter la charge
-kubectl delete job load-generator -n taskflow
+```mermaid
+%%{init: {"themeVariables": {"xyChart": {"plotColorPalette": "#16a34a"}}}}%%
+xychart-beta
+    title "Pods backend pendant le test (mesuré)"
+    x-axis "minutes depuis le lancement de la charge (Job supprimé vers 7 min)" ["0", "0,5", "0,75", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14"]
+    y-axis "replicas" 0 --> 11
+    line [2, 6, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 5, 4, 3, 2, 2]
 ```
 
-**Phase 5 : Scale down (10-15 minutes)**
-- L'utilisation CPU chute
-- Le HPA attend 60 secondes (stabilizationWindow)
-- Il réduit progressivement le nombre de pods
-- Retour à 2 pods (minReplicas)
+| Moment | Replicas | CPU moyen (cible 50 %) | Ce qui se passe |
+|---|---|---|---|
+| Avant la charge | 2 | 2 % | Repos : `minReplicas` s'applique |
+| + 30 s | **2 → 6** | 217 % | Le HPA voit la charge. Il voudrait ⌈2 × 217 ÷ 50⌉ = 9 pods, mais `scaleUp` limite chaque pas au plus grand de « +100 % » (+2) et « +4 pods » : **+4** |
+| + 45 s | **6 → 10** | ~380 % | 15 s plus tard, nouveau pas : le calcul demande encore plus, on atteint `maxReplicas` |
+| + 1 à 7 min | **10** (plafond) | **~170 à 200 %** | ⚠️ Pas de stabilisation à 50 % : la demande dépasse ce que 10 pods peuvent absorber. Le HPA voudrait plus de pods, `maxReplicas` l'en empêche |
+| Suppression du Job | 10 | reste haut ~1 min | Les pods du Job mettent un moment à s'arrêter, la charge continue pendant ce temps |
+| + 1 min après | 10 | **2 %** | La charge est vraiment finie. `scaleDown` attend 60 s (`stabilizationWindowSeconds`) pour être sûr que la baisse dure |
+| + 2 min 30 | **10 → 5** | 2 % | Premier pas de descente : −50 % |
+| puis chaque minute | **5 → 4 → 3 → 2** | 2 % | Descente pas à pas, une étape par minute (`periodSeconds: 60`) |
+| ≈ + 5 min 30 | **2** | 2 % | Retour à `minReplicas` |
+
+**Ce qu'il faut en retenir :**
+- **Monter prend moins d'une minute, descendre en prend plus de cinq.** C'est exactement ce que demande la section `behavior` (voir 4.4).
+- **Rester collé à `maxReplicas` avec un CPU au-dessus de la cible est un signal d'alerte en production.** L'autoscaling a atteint sa limite : il faut augmenter `maxReplicas`, donner plus de CPU à chaque pod, ou rendre l'application moins gourmande. Regardez `kubectl describe hpa backend-api-hpa -n taskflow` : la condition `ScalingLimited` le dit explicitement.
+- Les événements du HPA racontent toute l'histoire, avec l'heure et la raison de chaque changement :
+
+```bash
+kubectl get events -n taskflow --field-selector involvedObject.kind=HorizontalPodAutoscaler \
+  -o custom-columns=HEURE:.lastTimestamp,MESSAGE:.message --sort-by=.lastTimestamp
+# Exemple réel :
+# 10:04:08   New size: 6; reason: cpu resource utilization (percentage of request) above target
+# 10:04:23   New size: 10; reason: cpu resource utilization (percentage of request) above target
+# 10:13:39   New size: 5; reason: All metrics below target
+# 10:14:39   New size: 4; reason: All metrics below target
+# 10:15:39   New size: 3; reason: All metrics below target
+# 10:16:39   New size: 2; reason: All metrics below target
+```
+
+**Arrêter la charge :**
+```bash
+kubectl delete job load-generator -n taskflow
+```
 
 ### 9.4 Observer dans Grafana
 
@@ -2204,8 +2502,8 @@ Ouvrir le **dashboard pré-configuré "TaskFlow - Overview & Auto-scaling"** dan
 Pendant le test, observer en temps réel :
 
 **Section "Auto-scaling Backend API"** :
-1. 📈 **Nombre de Pods Backend (évolution)** : Passe de 2 à 8-10 pods
-2. 🔥 **CPU Usage - Backend Pods** : Monte rapidement vers 50% (seuil HPA)
+1. 📈 **Nombre de Pods Backend (évolution)** : Passe de 2 à 10 pods en moins d'une minute
+2. 🔥 **CPU Usage - Backend Pods** : Dépasse largement le seuil de 50 % et y reste tant que la charge dure (le HPA est plafonné à 10 pods)
 3. 🧠 **Memory Usage - Backend Pods** : Augmente progressivement
 
 **Section "Vue d'ensemble"** :
@@ -2217,9 +2515,9 @@ Pendant le test, observer en temps réel :
 - Observer l'ajout de nouveaux pods en temps réel
 
 **Timeline attendue** :
-- **0-2 min** : CPU monte rapidement, premiers pods créés
-- **2-5 min** : Stabilisation autour de 8-10 pods
-- **Après arrêt du load generator** : Scale-down progressif vers 2 pods (5-10 min)
+- **0-1 min** : CPU qui explose, 2 → 6 → 10 pods
+- **Pendant la charge** : 10 pods, CPU toujours au-dessus de la cible
+- **Après arrêt du load generator** : ~1 min de charge résiduelle, 60 s de stabilisation, puis 10 → 5 → 4 → 3 → 2 (≈ 5 min 30 au total)
 
 ## 📊 Partie 10 : Analyse et Nettoyage
 
@@ -2282,9 +2580,9 @@ kubectl delete -f 01-postgres-init-script.yaml
 ## 🎓 Concepts clés appris
 
 ### 1. initContainers
-- S'exécutent **avant** les conteneurs principaux
-- Utiles pour l'initialisation (DB schema, configuration, téléchargements)
-- Doivent se terminer avec succès pour que le pod démarre
+- S'exécutent **avant** les conteneurs principaux, un par un, et doivent réussir (`exit 0`)
+- Ici : `wait-for-postgres` retient l'API tant que la base ne répond pas à `pg_isready`
+- À distinguer du chargement des données, fait par l'image `postgres` elle-même via `/docker-entrypoint-initdb.d/` (au premier démarrage seulement)
 
 ### 2. HorizontalPodAutoscaler (HPA)
 - Scale automatiquement basé sur CPU/mémoire
@@ -2342,13 +2640,15 @@ Modifier pour avoir :
 
 - [ ] Tous les pods sont en état Running
 - [ ] La base de données contient 1000 tâches
+- [ ] Les logs de `wait-for-postgres` montrent l'attente puis `accepting connections`
+- [ ] Le 2e appel à `/api/tasks` répond `"from_cache": true`
 - [ ] Le frontend est accessible via LoadBalancer
 - [ ] Le HPA montre 2 replicas au repos
 - [ ] Prometheus collecte les métriques
 - [ ] Grafana affiche les dashboards
 - [ ] Le load generator augmente la charge
-- [ ] Le HPA scale de 2 à 8-10 pods
-- [ ] L'utilisation CPU se stabilise autour de 50%
+- [ ] Le HPA scale de 2 à 10 pods en moins d'une minute
+- [ ] Vous savez expliquer pourquoi le CPU reste au-dessus de 50 % à 10 pods
 - [ ] Le scale-down fonctionne après arrêt de la charge
 
 ## 📖 Ressources

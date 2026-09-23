@@ -127,7 +127,9 @@ data:
         if redis_client is None:
             return
         try:
-            redis_client.setex(key, ttl, json.dumps(value))
+            # default=str : les champs datetime (created_at) ne sont pas sérialisables
+            # en JSON ; sans lui, chaque écriture échouait et le cache restait vide.
+            redis_client.setex(key, ttl, json.dumps(value, default=str))
         except Exception as e:
             print(f"Cache set error: {e}")
 
