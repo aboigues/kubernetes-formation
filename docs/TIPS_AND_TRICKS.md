@@ -1069,21 +1069,20 @@ minikube config set memory 8192
 minikube config set driver docker
 ```
 
-### Utiliser le Docker de Minikube
+### Construire une image directement dans Minikube
 
 ```bash
-# Pointer vers le Docker de minikube
-eval $(minikube docker-env)
+# Construire dans le nœud minikube : pas besoin de registry !
+minikube image build -t myapp:latest .
 
-# Maintenant docker build va construire dans minikube
-docker build -t myapp:latest .
+# Vérifier qu'elle est bien dans le cluster
+minikube image ls | grep myapp
 
-# Plus besoin de push vers un registry!
+# Never : ne jamais tenter de la télécharger (sinon :latest => Always => ErrImagePull)
 kubectl run myapp --image=myapp:latest --image-pull-policy=Never
-
-# Revenir au Docker local
-eval $(minikube docker-env -u)
 ```
+
+> ⚠️ **Et `eval $(minikube docker-env)` ?** Cette astuce classique ne marche qu'avec le runtime **docker**. Depuis minikube v1.39, le runtime par défaut est **containerd** (même avec le driver docker) : `docker-env` passe alors par un pont SSH expérimental où `docker build` (BuildKit) échoue. Vérifiez votre runtime avec `minikube profile list` (colonne *Runtime*). Pour retrouver l'ancien comportement : `minikube start --container-runtime=docker`.
 
 ### Accès aux Services
 

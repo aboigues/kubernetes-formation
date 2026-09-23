@@ -263,18 +263,39 @@ cd tp10
 ```
 
 Le script `build-image.sh` effectue les opérations suivantes :
-1. ✅ Détecte automatiquement si Minikube est disponible et démarré
-2. ✅ Configure l'environnement Docker approprié (Minikube ou Docker local)
-3. ✅ Construit l'image `taskflow-backend:latest` avec le Dockerfile
-4. ✅ Rend l'image disponible directement dans Minikube
+1. ✅ Vérifie que Minikube est démarré
+2. ✅ Construit l'image `taskflow-backend:latest` **directement dans le nœud Minikube** avec `minikube image build`
+3. ✅ Vérifie que l'image apparaît bien dans le cache d'images du cluster
+
+C'est tout ce qu'il faut : le Deployment utilise `imagePullPolicy: Never`, donc le kubelet prend l'image dans ce cache au lieu d'aller la chercher sur Docker Hub.
+
+```mermaid
+flowchart LR
+    SRC["tp10/<br/>Dockerfile + app.py<br/>+ requirements.txt"] -- "minikube image build" --> BK["BuildKit<br/>DANS le nœud minikube"]
+    BK --> CACHE[("cache d'images du nœud<br/>(containerd ou docker)")]
+    CACHE -- "imagePullPolicy: Never" --> POD["pods backend-api"]
+    classDef app fill:#dcfce7,stroke:#16a34a,color:#052e16
+    classDef ext fill:#f1f5f9,stroke:#475569,color:#0f172a
+    classDef data fill:#ffedd5,stroke:#ea580c,color:#431407
+    class SRC ext
+    class BK,POD app
+    class CACHE data
+```
 
 **Vérifier que l'image est construite** :
 ```bash
-# Configurer le shell pour utiliser Docker de Minikube
-eval $(minikube docker-env)
+minikube image ls | grep taskflow-backend
+# Attendu : docker.io/library/taskflow-backend:latest
+```
 
-# Lister les images disponibles
-docker images | grep taskflow-backend
+> ⚠️ **Pourquoi pas `eval $(minikube docker-env)` puis `docker build` ?** C'est la méthode qu'on trouve dans beaucoup de tutoriels, mais elle ne marche qu'avec le runtime **docker**. Depuis **minikube v1.39.0**, le runtime par défaut est **containerd**, y compris avec le driver docker (vérifiez avec `minikube profile list` : colonne *Runtime*). `docker-env` branche alors votre CLI docker sur un pont SSH expérimental, et BuildKit échoue à travers ce pont (erreurs `404 page not found`, build interrompu). `minikube image build` utilise le BuildKit du nœud et fonctionne avec les deux runtimes.
+>
+> Si vous tenez à `docker-env`, il faut démarrer le cluster avec le runtime docker : `minikube delete && minikube start --container-runtime=docker`.
+
+**Si `minikube image build` échoue** (proxy, réseau…), plan B : construire avec votre Docker local, puis copier l'image dans le cluster :
+```bash
+docker build -t taskflow-backend:latest .
+minikube image load taskflow-backend:latest
 ```
 
 **Avantages de cette approche** :
