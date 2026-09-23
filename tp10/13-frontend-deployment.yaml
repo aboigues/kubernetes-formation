@@ -23,6 +23,12 @@ spec:
         fsGroup: 101
         seccompProfile:
           type: RuntimeDefault
+        # nginx écoute sur le port 80 en non-root sans aucune capability :
+        # containerd (microk8s, minikube récent) refuse ce bind sans ce sysctl
+        # "safe" -> CrashLoopBackOff sur "bind() to 0.0.0.0:80 failed (13)".
+        sysctls:
+        - name: net.ipv4.ip_unprivileged_port_start
+          value: "0"
 
       containers:
       - name: nginx

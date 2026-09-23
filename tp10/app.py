@@ -55,7 +55,8 @@ def set_cached(key, value, ttl=CACHE_TTL):
     if redis_client is None:
         return
     try:
-        redis_client.setex(key, ttl, json.dumps(value))
+        # default=str : les champs datetime ne sont pas sérialisables en JSON
+        redis_client.setex(key, ttl, json.dumps(value, default=str))
     except Exception as e:
         print(f"Cache set error: {e}")
 

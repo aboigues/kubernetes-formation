@@ -26,33 +26,6 @@ spec:
         seccompProfile:
           type: RuntimeDefault
 
-      initContainers:
-      - name: init-db-schema
-        image: postgres:17-alpine
-        command:
-        - sh
-        - -c
-        - |
-          echo "Waiting for PostgreSQL to be ready..."
-          sleep 10
-          echo "InitContainer completed successfully"
-        securityContext:
-          allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: true
-          runAsNonRoot: true
-          runAsUser: 70
-          capabilities:
-            drop:
-            - ALL
-        volumeMounts:
-        - name: init-script
-          mountPath: /docker-entrypoint-initdb.d
-        - name: tmp
-          mountPath: /tmp
-        envFrom:
-        - secretRef:
-            name: postgres-secret
-
       containers:
       - name: postgres
         image: postgres:17-alpine

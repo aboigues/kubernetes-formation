@@ -39,8 +39,8 @@ echo -e "${YELLOW}[1/8] Création du namespace $NAMESPACE${NC}"
 kubectl create namespace $NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
 echo ""
 
-# Déployer PostgreSQL (avec initContainer)
-echo -e "${YELLOW}[2/8] Déploiement de PostgreSQL avec initContainer${NC}"
+# Déployer PostgreSQL (init.sql chargé au premier démarrage)
+echo -e "${YELLOW}[2/8] Déploiement de PostgreSQL (1000 tâches au premier démarrage)${NC}"
 kubectl apply -f 01-postgres-init-script.yaml
 kubectl apply -f 02-postgres-secret.yaml
 kubectl apply -f 03-postgres-pvc.yaml

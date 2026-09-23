@@ -36,7 +36,7 @@ cd tp10/
 # Option 2 : Déploiement manuel étape par étape
 kubectl create namespace taskflow
 
-# PostgreSQL (avec initContainer qui crée 1000 tâches)
+# PostgreSQL (init.sql, monté dans /docker-entrypoint-initdb.d, crée 1000 tâches au 1er démarrage)
 kubectl apply -f 01-postgres-init-script.yaml
 kubectl apply -f 02-postgres-secret.yaml
 kubectl apply -f 03-postgres-pvc.yaml
@@ -187,7 +187,7 @@ Utilisateurs
 
 ## 🎯 Objectifs pédagogiques couverts
 
-- ✅ **initContainers** : PostgreSQL initialise 1000 tâches au démarrage
+- ✅ **initContainers** : le backend attend que PostgreSQL réponde (`wait-for-postgres`) avant de démarrer
 - ✅ **HPA** : Auto-scaling de 2 à 10 pods selon CPU/mémoire
 - ✅ **LoadBalancer** : Exposition du frontend et Grafana
 - ✅ **PVC** : Persistance pour PostgreSQL et Prometheus

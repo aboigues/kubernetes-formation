@@ -28,6 +28,47 @@ spec:
         seccompProfile:
           type: RuntimeDefault
 
+      # Attente active de PostgreSQL : sans elle, les pods backend démarrent
+      # souvent avant la base (Deployments appliqués en même temps, PostgreSQL
+      # met plusieurs secondes à exécuter init.sql), échouent leur readiness et
+      # redémarrent. Le conteneur "api" ne démarre qu'une fois cet init terminé.
+      initContainers:
+      - name: wait-for-postgres
+        image: postgres:17-alpine   # même image que la base : fournit pg_isready
+        command:
+        - sh
+        - -c
+        - |
+          until pg_isready -h "$DATABASE_HOST" -p "$DATABASE_PORT" -U "$DATABASE_USER" -d "$DATABASE_NAME"; do
+            echo "PostgreSQL pas encore prêt, nouvel essai dans 2 s..."
+            sleep 2
+          done
+          echo "PostgreSQL prêt, démarrage de l'API."
+        env:
+        - name: DATABASE_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: POSTGRES_USER
+        envFrom:
+        - configMapRef:
+            name: backend-config
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 70
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "16Mi"
+            cpu: "10m"
+          limits:
+            memory: "32Mi"
+            cpu: "50m"
+
       containers:
       - name: api
         image: taskflow-backend:latest
