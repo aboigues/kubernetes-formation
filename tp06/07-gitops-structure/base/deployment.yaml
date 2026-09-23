@@ -18,6 +18,14 @@ spec:
         fsGroup: 101         # rend les emptyDir ci-dessous inscriptibles par nginx
         seccompProfile:
           type: RuntimeDefault
+        # nginx écoute sur le port 80 alors qu'il tourne en non-root sans aucune
+        # capability. Le runtime docker autorise ce bind par défaut, containerd
+        # (microk8s, minikube récent) non : sans ce sysctl, CrashLoopBackOff sur
+        # "bind() to 0.0.0.0:80 failed (13: Permission denied)". Sysctl "safe",
+        # autorisé par défaut depuis Kubernetes 1.22.
+        sysctls:
+        - name: net.ipv4.ip_unprivileged_port_start
+          value: "0"
       containers:
       - name: app
         image: nginx:alpine

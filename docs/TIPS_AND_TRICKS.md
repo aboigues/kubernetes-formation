@@ -1243,7 +1243,7 @@ kubectl get all --all-namespaces -o yaml > all-resources-backup.yaml
 ```bash
 # ArgoCD
 kubectl create namespace argocd
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl apply -n argocd --server-side --force-conflicts -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 
 # Flux
 flux bootstrap github \

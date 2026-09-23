@@ -1,31 +1,30 @@
+# Exercice 8 (README, section 5.3) : prêt à l'emploi, aucune modification requise.
+# Déploie l'overlay dev de tp06/07-gitops-structure depuis ce dépôt de formation
+# (public : pas de compte GitHub nécessaire). Pour l'étape 6 (modifier Git),
+# remplacer repoURL par l'URL de votre fork.
+#
+# Volontairement SANS finalizer : supprimer cette Application laisse le
+# Deployment et le Service en place (checkpoint de l'étape 5).
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: my-app
+  name: my-app-dev
   namespace: argocd
 spec:
   project: default
 
   source:
-    # IMPORTANT: Remplacer par l'URL de votre repository GitOps réel
-    repoURL: https://github.com/username/my-gitops-repo.git  # À PERSONNALISER
-    targetRevision: HEAD
-    path: apps/my-app
+    repoURL: https://github.com/aboigues/kubernetes-formation.git
+    targetRevision: main
+    path: tp06/07-gitops-structure/overlays/dev
 
   destination:
     server: https://kubernetes.default.svc
-    namespace: default
+    namespace: dev
 
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
-      allowEmpty: false
     syncOptions:
     - CreateNamespace=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 5s
-        factor: 2
-        maxDuration: 3m

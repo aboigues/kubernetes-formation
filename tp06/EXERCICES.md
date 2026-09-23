@@ -284,7 +284,7 @@ kubectl diff -k 07-gitops-structure/overlays/production
 ```bash
 # Installer ArgoCD
 kubectl create namespace argocd
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl apply -n argocd --server-side --force-conflicts -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 
 # Attendre que les pods soient prêts
 kubectl wait --for=condition=ready pod --all -n argocd --timeout=300s
@@ -296,7 +296,8 @@ kubectl port-forward svc/argocd-server -n argocd 8080:443 &
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
 echo ""
 
-# Créer une application (après avoir modifié l'URL du repo)
+# Créer l'application (pointe sur ce dépôt public, aucune modification requise)
+# Parcours guidé complet : README.md, Partie 5.3
 kubectl apply -f 05-argocd/10-argocd-application.yaml
 ```
 
@@ -369,7 +370,7 @@ kubectl kustomize 07-gitops-structure/overlays/production
 - Tous les fichiers ont été testés et validés
 - Les exercices peuvent être exécutés indépendamment
 - Pour les exercices CI/CD, vous devrez adapter les workflows GitHub Actions à votre repository
-- Pour ArgoCD, vous devrez pointer vers votre repository Git
+- Pour ArgoCD, les Applications pointent sur ce dépôt public ; un fork n'est nécessaire que pour modifier Git (README, étape 6 de la section 5.3)
 
 ## Ressources
 

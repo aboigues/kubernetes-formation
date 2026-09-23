@@ -1,3 +1,5 @@
+# README, section 5.4 : déploie le chart de la Partie 1 (tp06/01-helm/my-app)
+# en surchargeant quelques valeurs, comme "helm install -f".
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -7,16 +9,13 @@ spec:
   project: default
 
   source:
-    # IMPORTANT: Remplacer par l'URL de votre repository GitOps réel
-    repoURL: https://github.com/username/my-gitops-repo.git  # À PERSONNALISER
-    targetRevision: HEAD
-    path: helm/my-app
+    repoURL: https://github.com/aboigues/kubernetes-formation.git   # ou votre fork
+    targetRevision: main
+    path: tp06/01-helm/my-app
     helm:
       releaseName: my-app
       values: |
         replicaCount: 3
-        image:
-          tag: "v1.0.0"
         resources:
           limits:
             memory: 256Mi
@@ -29,3 +28,5 @@ spec:
     automated:
       prune: true
       selfHeal: true
+    syncOptions:
+    - CreateNamespace=true

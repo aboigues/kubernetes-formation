@@ -1805,13 +1805,82 @@ kubectl describe httproute ab-testing-route
 
 ### 5.1 Introduction à GitOps
 
-**GitOps** : Git comme source de vérité pour l'infrastructure et les applications.
+**GitOps** : Git devient la **seule source de vérité** du cluster. On ne fait plus `kubectl apply` à la main (ni depuis la CI) : on modifie un dépôt Git, et un agent **installé dans le cluster** se charge d'aligner le cluster sur ce que dit Git.
 
 **Principes** :
-- Déclaratif : Infrastructure as Code
-- Versionné : Tout dans Git
-- Automatique : Déploiements automatiques
-- Réconciliation continue : État désiré vs état actuel
+- **Déclaratif** : le dépôt décrit l'état voulu (manifests, Kustomize, Helm), pas les commandes pour y arriver
+- **Versionné** : chaque changement est un commit → historique, relecture en PR, rollback par `git revert`
+- **Tiré (pull), pas poussé (push)** : c'est le cluster qui va chercher Git, pas la CI qui pousse dans le cluster
+- **Réconciliation continue** : l'agent compare **en permanence** l'état voulu (Git) et l'état réel (cluster), et corrige les écarts
+
+#### Push (Partie 3) vs Pull (GitOps)
+
+Dans la Partie 3, c'est la CI qui déploie : elle détient des identifiants du cluster et lance `kubectl apply`. Avec GitOps, la CI s'arrête à Git ; c'est ArgoCD, **dans** le cluster, qui déploie.
+
+```mermaid
+flowchart TB
+    subgraph PUSH["Modèle push (Partie 3 : GitHub Actions)"]
+        direction LR
+        D1["git push"] --> CI1["CI : test + build"]
+        CI1 -- "kubectl apply<br/>(la CI a un kubeconfig)" --> K1[("Cluster")]
+    end
+    subgraph PULL["Modèle pull (GitOps : ArgoCD)"]
+        direction LR
+        D2["git push"] --> G2[("Dépôt Git<br/>état voulu")]
+        A2["ArgoCD<br/>(dans le cluster)"] -- "1. lit (poll)" --> G2
+        A2 -- "2. compare et applique" --> K2[("Cluster")]
+    end
+    PUSH ~~~ PULL
+```
+
+| | Push (CI qui déploie) | Pull (GitOps) |
+|---|---|---|
+| Qui a les droits sur le cluster ? | La CI (secret kubeconfig hors du cluster) | Seulement ArgoCD, dans le cluster |
+| Que se passe-t-il si quelqu'un fait `kubectl edit` en prod ? | Rien : l'écart reste jusqu'au prochain déploiement | ArgoCD le détecte et peut le corriger |
+| Comment revenir en arrière ? | Relancer un ancien pipeline | `git revert` |
+| Où voir ce qui tourne ? | Dans les logs du dernier pipeline | Dans Git (et l'UI ArgoCD montre les écarts) |
+
+#### Comment ArgoCD fonctionne
+
+ArgoCD, c'est quelques pods dans le namespace `argocd`. Trois comptent pour comprendre le mécanisme :
+
+```mermaid
+flowchart LR
+    G[("Dépôt Git<br/>tp06/07-gitops-structure/overlays/dev")]
+    subgraph ARGO["namespace argocd"]
+        RS["argocd-repo-server<br/>clone Git et génère les YAML<br/>(kustomize build, helm template)"]
+        AC["argocd-application-controller<br/>compare voulu / réel<br/>puis applique"]
+        SV["argocd-server<br/>UI web, CLI argocd, API"]
+    end
+    API["API server Kubernetes"]
+    NS[("namespace dev<br/>Deployment, Service, Pods")]
+
+    G -- "clone / fetch" --> RS
+    RS -- "manifests rendus<br/>= état VOULU" --> AC
+    AC -- "watch<br/>= état RÉEL" --> API
+    AC -- "apply si écart" --> API
+    API --> NS
+    SV -. "affiche le statut" .-> AC
+```
+
+La ressource centrale est l'**Application** (un CRD d'ArgoCD). Elle relie **une source** (dépôt, révision, chemin) à **une destination** (cluster, namespace) :
+
+```mermaid
+flowchart LR
+    SRC[("source<br/>repoURL + targetRevision + path<br/><b>QUOI</b> déployer")]
+    APP["Application my-app-dev<br/>syncPolicy : automated, prune, selfHeal<br/><b>QUAND et COMMENT</b> corriger"]
+    DST[("destination<br/>server + namespace<br/><b>OÙ</b> déployer")]
+    SRC --> APP --> DST
+```
+
+ArgoCD calcule en continu deux statuts pour chaque Application :
+
+| Statut | Valeurs | Question à laquelle il répond |
+|---|---|---|
+| **Sync** | `Synced` / `OutOfSync` | Le cluster correspond-il à Git ? |
+| **Health** | `Healthy` / `Progressing` / `Degraded` / `Missing` | Ce qui tourne fonctionne-t-il ? (pods prêts, rollout terminé…) |
+
+Les deux sont indépendants : une application peut être `Synced` (le cluster est bien conforme à Git) et `Degraded` (mais ce que dit Git ne fonctionne pas, par exemple une image qui n'existe pas).
 
 ### 5.2 Installation d'ArgoCD
 
@@ -1819,107 +1888,249 @@ kubectl describe httproute ab-testing-route
 # Créer le namespace
 kubectl create namespace argocd
 
-# Installer ArgoCD
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+# Installer ArgoCD (--server-side est OBLIGATOIRE, voir l'encadré ci-dessous)
+kubectl apply -n argocd --server-side --force-conflicts \
+  -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 
-# Attendre que les pods soient prêts
-kubectl wait --for=condition=ready pod --all -n argocd --timeout=300s
+# Attendre que les pods soient prêts (le téléchargement des images peut prendre plusieurs minutes)
+kubectl wait --for=condition=ready pod --all -n argocd --timeout=600s
 
-# Exposer l'UI ArgoCD
-kubectl port-forward svc/argocd-server -n argocd 8080:443 &
+# Exposer l'UI ArgoCD (dans un terminal dédié, à laisser ouvert)
+kubectl port-forward svc/argocd-server -n argocd 8080:443
 
-# Récupérer le mot de passe initial
+# Récupérer le mot de passe initial de l'utilisateur admin
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
 echo ""
+```
 
-# Installer le CLI ArgoCD (optionnel)
-curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
-chmod +x /usr/local/bin/argocd
+Ouvrir https://localhost:8080, accepter le certificat auto-signé, se connecter avec `admin` et le mot de passe ci-dessus.
+
+> ⚠️ **Pourquoi `--server-side` ?** Un `kubectl apply` classique recopie tout l'objet dans l'annotation `kubectl.kubernetes.io/last-applied-configuration`, limitée à 256 Ko. Le CRD `applicationsets.argoproj.io` d'ArgoCD 3.x fait à lui seul plus de 370 Ko : sans `--server-side`, l'installation échoue avec `metadata.annotations: Too long`. L'apply côté serveur ne stocke pas cette annotation.
+
+```bash
+# Installer le CLI ArgoCD (optionnel : tout le TP se fait aussi avec kubectl et l'UI)
+curl -sSL -o ~/.local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+chmod +x ~/.local/bin/argocd
 
 # Login avec le CLI
 argocd login localhost:8080 --username admin --insecure
 ```
 
-### 5.3 Créer une application ArgoCD
+### 5.3 Hands-on : votre première application GitOps
 
-**Exercice 8 : Déployer avec ArgoCD**
+**Exercice 8 : Déployer avec ArgoCD, puis essayer de le contredire**
 
-Structure du repo Git :
+On ne déploie pas une application fictive : l'Application pointe sur **ce dépôt de formation**, qui est public. Elle déploie l'overlay `dev` du dossier [`07-gitops-structure/`](./07-gitops-structure/) : un nginx durci, un Service, un namespace `dev`.
 
+> 💡 Les étapes 1 à 5 ne nécessitent **aucun compte GitHub** : ArgoCD lit un dépôt public. Seule l'étape 6 (modifier Git) demande un dépôt où vous pouvez pousser.
+
+#### Étape 1 : regarder l'état voulu AVANT de déployer
+
+ArgoCD ne fait rien de magique : son `repo-server` exécute `kustomize build` sur le chemin indiqué. Vous pouvez faire exactement la même chose localement :
+
+```bash
+# Depuis la racine du dossier tp06/
+kubectl kustomize 07-gitops-structure/overlays/dev
 ```
-my-gitops-repo/
-├── apps/
-│   └── my-app/
-│       ├── deployment.yaml
-│       ├── service.yaml
-│       └── kustomization.yaml
-└── README.md
-```
 
-Créer `10-argocd-application.yaml` :
+C'est **cette sortie** qu'ArgoCD va maintenir dans le cluster. Repérez-y le namespace (`dev`), le nombre de replicas (`1`) et l'image.
+
+#### Étape 2 : créer l'Application
+
+Le fichier [`05-argocd/10-argocd-application.yaml`](./05-argocd/10-argocd-application.yaml) est prêt à l'emploi :
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: my-app
-  namespace: argocd
+  name: my-app-dev
+  namespace: argocd          # les Applications vivent toujours dans le namespace d'ArgoCD
 spec:
   project: default
 
-  source:
-    # IMPORTANT: Remplacer par l'URL de votre repository GitOps réel
-    repoURL: https://github.com/username/my-gitops-repo.git  # À PERSONNALISER
-    targetRevision: HEAD
-    path: apps/my-app
+  source:                    # QUOI déployer
+    repoURL: https://github.com/aboigues/kubernetes-formation.git
+    targetRevision: main     # branche, tag ou SHA de commit
+    path: tp06/07-gitops-structure/overlays/dev
 
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: default
+  destination:               # OÙ le déployer
+    server: https://kubernetes.default.svc   # = le cluster où tourne ArgoCD
+    namespace: dev
 
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-      allowEmpty: false
+  syncPolicy:                # QUAND et COMMENT corriger
+    automated:               # synchroniser sans clic dès qu'un écart est détecté
+      prune: true            # supprimer du cluster ce qui a disparu de Git
+      selfHeal: true         # annuler les modifications faites à la main dans le cluster
     syncOptions:
-    - CreateNamespace=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 5s
-        factor: 2
-        maxDuration: 3m
+    - CreateNamespace=true   # créer le namespace dev s'il n'existe pas
 ```
 
 ```bash
-# Créer l'application
-kubectl apply -f 10-argocd-application.yaml
+kubectl apply -f 05-argocd/10-argocd-application.yaml
 
-# Ou via le CLI
-argocd app create my-app \
-  --repo https://github.com/username/my-gitops-repo.git \
-  --path apps/my-app \
-  --dest-server https://kubernetes.default.svc \
-  --dest-namespace default \
-  --sync-policy automated
+# Suivre les deux statuts (Ctrl+C quand SYNC STATUS=Synced et HEALTH STATUS=Healthy)
+kubectl get application my-app-dev -n argocd -w
+```
 
-# Voir les applications
-argocd app list
+Remarquez que **vous n'avez jamais appliqué le Deployment vous-même** :
 
-# Voir les détails
-argocd app get my-app
+```bash
+kubectl get deploy,svc,pods -n dev
+```
 
-# Synchroniser manuellement
-argocd app sync my-app
+Dans l'UI, cliquez sur `my-app-dev` : l'arbre montre l'Application → Service / Deployment → ReplicaSet → Pod, avec le statut de chacun.
 
-# Voir l'historique
-argocd app history my-app
+> 🛠️ **L'application reste en `Unknown` avec une erreur `ComparisonError` ?** Lisez le message : `kubectl get application my-app-dev -n argocd -o jsonpath='{.status.conditions}'`. Un `TLS handshake timeout` vers github.com est une coupure réseau passagère : forcez une nouvelle lecture avec `kubectl annotate application my-app-dev -n argocd argocd.argoproj.io/refresh=hard --overwrite`.
+
+#### Étape 3 : modifier le cluster à la main
+
+> 🎯 **Avant de lancer la commande suivante, prédis :** on passe le Deployment à 3 replicas avec `kubectl scale`. Combien de replicas aura-t-il 10 secondes plus tard ? Pourquoi ?
+
+```bash
+kubectl scale deployment my-app -n dev --replicas=3
+kubectl get deployment my-app -n dev -w     # observer la colonne READY pendant ~10 s, puis Ctrl+C
+```
+
+<details>
+<summary>💡 Vérifie ta prédiction</summary>
+
+**1 replica.** Le Deployment passe brièvement à 3, puis revient à 1 en quelques secondes (moins de 5 s lors de nos tests).
+
+`selfHeal: true` : l'`application-controller` surveille (watch) les ressources qu'il gère. Dès que `spec.replicas` diffère de Git, l'Application passe `OutOfSync` et il ré-applique la version de Git. **Dans un cluster géré en GitOps, `kubectl scale` n'est pas un moyen de changer le nombre de replicas** : c'est une modification que le système annule. Pour changer durablement, il faut changer Git (étape 6).
+
+Même chose si vous supprimez une ressource : `kubectl delete svc my-app -n dev` → le Service est recréé en 1 à 2 secondes (avec une nouvelle ClusterIP).
+
+</details>
+
+#### Étape 4 : ajouter quelque chose que Git ne mentionne pas
+
+> 🎯 **Avant de lancer la commande suivante, prédis :** on ajoute à la main un label `ajout=manuel` sur le Deployment. ArgoCD va-t-il le retirer ? L'Application passera-t-elle `OutOfSync` ?
+
+```bash
+kubectl label deployment my-app -n dev ajout=manuel
+sleep 10
+kubectl get deployment my-app -n dev --show-labels
+kubectl get application my-app-dev -n argocd
+```
+
+<details>
+<summary>💡 Vérifie ta prédiction</summary>
+
+**Non, et non.** Le label reste, et l'Application reste `Synced`.
+
+ArgoCD ne compare que les champs **présents dans Git**. Git dit « replicas: 1 » → ce champ est surveillé. Git ne dit rien sur un label `ajout` → ArgoCD n'a aucun avis dessus. `selfHeal` corrige les **contradictions** avec Git, pas les **ajouts**.
+
+Conséquence pratique : GitOps ne garantit pas que le cluster est *exactement* Git. Il garantit que tout ce que Git décrit est respecté. Un champ que vous voulez imposer doit être écrit dans Git.
+
+</details>
+
+#### Étape 5 : supprimer l'Application
+
+> 🎯 **Avant de lancer la commande suivante, prédis :** on supprime l'objet Application `my-app-dev`. Le Deployment et le Service du namespace `dev` sont-ils supprimés avec lui ?
+
+```bash
+kubectl delete application my-app-dev -n argocd
+sleep 5
+kubectl get deploy,svc -n dev
+```
+
+<details>
+<summary>💡 Vérifie ta prédiction</summary>
+
+**Non : ils sont toujours là**, mais plus personne ne les surveille. Un `kubectl scale` resterait maintenant en place.
+
+Supprimer une Application sans **finalizer** supprime seulement le « contrat de surveillance », pas les ressources. Pour une suppression en cascade, il faut le finalizer `resources-finalizer.argocd.argoproj.io` dans les `metadata` de l'Application :
+
+```yaml
+metadata:
+  name: my-app-dev
+  namespace: argocd
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+```
+
+Avec ce finalizer (testé), `kubectl delete application` supprime d'abord le Deployment et le Service, puis l'Application. `kubectl` affiche un avertissement `prefer a domain-qualified finalizer name` : il est sans conséquence, c'est le nom documenté par ArgoCD.
+
+Ce comportement par défaut est volontaire : supprimer une Application par erreur ne doit pas raser la production.
+
+</details>
+
+Recréez l'Application pour la suite :
+
+```bash
+kubectl apply -f 05-argocd/10-argocd-application.yaml
+```
+
+#### Étape 6 : changer l'état voulu dans Git (le vrai GitOps)
+
+Il faut maintenant un dépôt **où vous pouvez pousser**.
+
+1. Faites un **fork** de https://github.com/aboigues/kubernetes-formation sur votre compte GitHub (GitLab ou un Gitea local fonctionnent aussi : ArgoCD accepte n'importe quel dépôt Git).
+2. Dans `05-argocd/10-argocd-application.yaml`, remplacez `repoURL` par l'URL de **votre** fork, puis ré-appliquez :
+
+   ```bash
+   kubectl apply -f 05-argocd/10-argocd-application.yaml
+   ```
+
+3. Dans votre fork, passez `replicas: 1` à `replicas: 3` dans `tp06/07-gitops-structure/overlays/dev/patch-deployment.yaml`, puis commit et push (ou éditez directement le fichier sur github.com).
+4. Observez :
+
+   ```bash
+   kubectl get application my-app-dev -n argocd -w
+   kubectl get deployment my-app -n dev -w
+   ```
+
+Le changement n'est **pas instantané** : par défaut, ArgoCD relit le dépôt toutes les **2 minutes, plus un décalage aléatoire allant jusqu'à 1 minute**, soit 3 minutes au pire (paramètres `timeout.reconciliation` et `timeout.reconciliation.jitter` du ConfigMap `argocd-cm`). Pour ne pas attendre, cliquez sur **Refresh** dans l'UI, ou lancez `argocd app get my-app-dev --refresh`. En production, on configure plutôt un **webhook** Git → ArgoCD pour une détection immédiate.
+
+Cette fois, le Deployment passe à 3 replicas **et y reste** : c'est Git qui a changé, pas le cluster.
+
+Ce qui s'est passé, dans l'ordre :
+
+```mermaid
+sequenceDiagram
+    actor Dev as Vous
+    participant Git as Votre fork (GitHub)
+    participant RS as argocd-repo-server
+    participant AC as argocd-application-controller
+    participant K8s as API server
+
+    Dev->>Git: git push (replicas: 3)
+    loop toutes les 2 à 3 min (ou bouton Refresh)
+        AC->>RS: quel est l'état voulu sur main ?
+        RS->>Git: git fetch
+        RS->>RS: kustomize build overlays/dev
+        RS-->>AC: manifests (replicas: 3)
+    end
+    AC->>K8s: état réel ? (replicas: 1)
+    AC->>AC: écart détecté → OutOfSync
+    AC->>K8s: apply (automated sync)
+    K8s-->>AC: replicas: 3 → Synced, Healthy
+```
+
+**Revenir en arrière** : pas de `kubectl rollout undo` (selfHeal l'annulerait). On annule le commit :
+
+```bash
+git revert HEAD
+git push
+```
+
+L'historique des synchronisations (quel commit a été déployé quand) est visible dans l'UI (**History and rollback**) ou avec `argocd app history my-app-dev`.
+
+**À vous** : dans votre fork, supprimez `tp06/07-gitops-structure/base/service.yaml` et retirez-le de `base/kustomization.yaml`, puis poussez. Grâce à `prune: true`, le Service doit disparaître du cluster. Que se passerait-il sans `prune` ? (Indice : regardez le statut Sync de l'Application.)
+
+#### Commandes utiles (CLI argocd)
+
+```bash
+argocd app list                      # toutes les applications et leurs statuts
+argocd app get my-app-dev            # détail : ressources, statuts, dernier sync
+argocd app diff my-app-dev           # différence Git ↔ cluster
+argocd app sync my-app-dev           # forcer une synchronisation (utile sans "automated")
+argocd app history my-app-dev        # commits déployés
 ```
 
 ### 5.4 GitOps avec Helm
 
-Créer `11-argocd-helm-app.yaml` :
+ArgoCD sait aussi rendre un chart Helm stocké dans Git : le `repo-server` exécute `helm template` au lieu de `kustomize build`. Le fichier [`05-argocd/11-argocd-helm-app.yaml`](./05-argocd/11-argocd-helm-app.yaml) déploie le chart que vous avez écrit en Partie 1 ([`01-helm/my-app`](./01-helm/my-app/)), en surchargeant certaines valeurs :
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
@@ -1931,16 +2142,14 @@ spec:
   project: default
 
   source:
-    # IMPORTANT: Remplacer par l'URL de votre repository GitOps réel
-    repoURL: https://github.com/username/my-gitops-repo.git  # À PERSONNALISER
-    targetRevision: HEAD
-    path: helm/my-app
+    repoURL: https://github.com/aboigues/kubernetes-formation.git   # ou votre fork
+    targetRevision: main
+    path: tp06/01-helm/my-app
     helm:
       releaseName: my-app
+      # Équivalent de "helm install -f" : surcharge values.yaml
       values: |
         replicaCount: 3
-        image:
-          tag: "v1.0.0"
         resources:
           limits:
             memory: 256Mi
@@ -1953,29 +2162,54 @@ spec:
     automated:
       prune: true
       selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
 ```
+
+```bash
+kubectl apply -f 05-argocd/11-argocd-helm-app.yaml
+kubectl get application my-helm-app -n argocd -w
+kubectl get pods -n production
+```
+
+⚠️ Différence importante avec la Partie 1 : `helm list -n production` **n'affiche rien**. ArgoCD utilise Helm uniquement pour **générer** les manifests, puis les applique lui-même. Il n'y a pas de release Helm dans le cluster, donc pas de `helm rollback` : le rollback passe par Git, comme à l'étape 6.
 
 ### 5.5 Environnements multiples avec ArgoCD
 
-Structure du repo :
+Le dossier [`07-gitops-structure/`](./07-gitops-structure/) contient déjà une structure Kustomize multi-environnements. **Une Application ArgoCD par environnement**, chacune pointant sur son overlay :
+
+```mermaid
+flowchart LR
+    subgraph GIT["Dépôt Git : tp06/07-gitops-structure"]
+        B["base/<br/>deployment + service"]
+        OD["overlays/dev<br/>1 replica"]
+        OS["overlays/staging<br/>2 replicas"]
+        OP["overlays/production<br/>5 replicas"]
+        B --> OD
+        B --> OS
+        B --> OP
+    end
+    OD --> AD["Application my-app-dev<br/>sync automatique"] --> ND[("ns dev")]
+    OS --> AS["Application my-app-staging<br/>sync automatique"] --> NS[("ns staging")]
+    OP --> AP["Application my-app-prod<br/>sync MANUEL"] --> NP[("ns production")]
+```
 
 ```
-my-gitops-repo/
+07-gitops-structure/
 ├── base/
 │   ├── deployment.yaml
 │   ├── service.yaml
 │   └── kustomization.yaml
-├── overlays/
-│   ├── dev/
-│   │   ├── kustomization.yaml
-│   │   └── patch-deployment.yaml
-│   ├── staging/
-│   │   ├── kustomization.yaml
-│   │   └── patch-deployment.yaml
-│   └── production/
-│       ├── kustomization.yaml
-│       └── patch-deployment.yaml
-└── README.md
+└── overlays/
+    ├── dev/
+    │   ├── kustomization.yaml
+    │   └── patch-deployment.yaml
+    ├── staging/
+    │   ├── kustomization.yaml
+    │   └── patch-deployment.yaml
+    └── production/
+        ├── kustomization.yaml
+        └── patch-deployment.yaml
 ```
 
 `base/kustomization.yaml` :
@@ -2033,32 +2267,37 @@ spec:
             cpu: "200m"
 ```
 
-Créer les applications ArgoCD pour chaque environnement :
+Créer les applications ArgoCD pour chaque environnement (`my-app-dev` existe déjà si vous avez fait l'exercice 8) :
 
 ```bash
-# Dev
-argocd app create my-app-dev \
-  --repo https://github.com/username/my-gitops-repo.git \
-  --path overlays/dev \
-  --dest-namespace dev \
-  --dest-server https://kubernetes.default.svc \
-  --sync-policy automated
+REPO=https://github.com/aboigues/kubernetes-formation.git   # ou votre fork
 
-# Staging
+# Staging : synchronisation automatique
 argocd app create my-app-staging \
-  --repo https://github.com/username/my-gitops-repo.git \
-  --path overlays/staging \
+  --repo $REPO \
+  --path tp06/07-gitops-structure/overlays/staging \
   --dest-namespace staging \
   --dest-server https://kubernetes.default.svc \
-  --sync-policy automated
+  --sync-policy automated --self-heal --auto-prune \
+  --sync-option CreateNamespace=true
 
-# Production (sync manuel)
+# Production : PAS de --sync-policy → sync manuel
 argocd app create my-app-prod \
-  --repo https://github.com/username/my-gitops-repo.git \
-  --path overlays/production \
+  --repo $REPO \
+  --path tp06/07-gitops-structure/overlays/production \
   --dest-namespace production \
-  --dest-server https://kubernetes.default.svc
+  --dest-server https://kubernetes.default.svc \
+  --sync-option CreateNamespace=true
 ```
+
+`my-app-prod` reste `OutOfSync` : ArgoCD voit l'écart mais **attend un humain**. C'est un choix courant pour la production : Git décrit ce qui *doit* partir, une personne décide *quand*.
+
+```bash
+argocd app diff my-app-prod    # ce qui changerait
+argocd app sync my-app-prod    # le déployer
+```
+
+> 💡 Si vous avez fait la section 5.4, l'application `my-helm-app` occupe déjà le namespace `production` avec un Deployment nommé `my-app` : deux Applications se disputeraient la même ressource. Supprimez `my-helm-app` d'abord (`kubectl delete application my-helm-app -n argocd`, puis `kubectl delete deploy,svc my-app -n production`, puisqu'il n'a pas de finalizer, cf. étape 5).
 
 ## Partie 6 : Bonnes pratiques de production
 

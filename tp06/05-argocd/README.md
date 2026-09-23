@@ -24,8 +24,10 @@ kubectl create namespace argocd
 ### Étape 2: Installer ArgoCD
 
 ```bash
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl apply -n argocd --server-side --force-conflicts -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 ```
+
+> ⚠️ `--server-side` est obligatoire : le CRD `applicationsets.argoproj.io` d'ArgoCD 3.x dépasse 370 Ko, au-delà de la limite de 256 Ko de l'annotation `last-applied-configuration` utilisée par un `kubectl apply` classique (erreur `metadata.annotations: Too long`).
 
 ### Étape 3: Attendre que les pods soient prêts
 
@@ -106,54 +108,34 @@ argocd login localhost:8080 --username admin --insecure
 
 ## 📁 Fichiers d'exemple
 
-Ce répertoire contient deux exemples d'applications ArgoCD:
+Les deux Applications pointent sur **ce dépôt de formation** (public) : elles s'appliquent telles quelles, sans compte GitHub ni modification.
 
-### 1. Application simple (10-argocd-application.yaml)
-
-Application basique déployant depuis un repository Git.
-
-**⚠️ Avant utilisation:**
-- Remplacer `https://github.com/username/my-gitops-repo.git` par votre repository
-- Adapter le `path` selon votre structure de repository
+| Fichier | Déploie | Namespace |
+|---|---|---|
+| `10-argocd-application.yaml` | l'overlay Kustomize `tp06/07-gitops-structure/overlays/dev` | `dev` |
+| `11-argocd-helm-app.yaml` | le chart Helm `tp06/01-helm/my-app` avec des valeurs surchargées | `production` |
 
 ```bash
-# Éditer le fichier pour mettre votre repository
-nano 10-argocd-application.yaml
-
-# Appliquer
 kubectl apply -f 10-argocd-application.yaml
-
-# Vérifier
-kubectl get application -n argocd
+kubectl get application -n argocd -w
 ```
 
-### 2. Application Helm (11-argocd-helm-app.yaml)
+👉 Le parcours complet, avec les schémas et les expériences guidées (selfHeal, suppression de l'Application, modification de Git), est dans le [README du TP6, Partie 5](../README.md#partie-5--gitops-avec-argocd).
 
-Application déployant un Chart Helm depuis un repository Git.
-
-**⚠️ Avant utilisation:**
-- Remplacer l'URL du repository
-- Adapter les valeurs Helm selon vos besoins
-
-```bash
-# Éditer le fichier
-nano 11-argocd-helm-app.yaml
-
-# Appliquer
-kubectl apply -f 11-argocd-helm-app.yaml
-```
+Pour **modifier Git** et voir ArgoCD suivre, remplacez `repoURL` par l'URL de votre fork du dépôt.
 
 ## 🎯 Premiers pas avec ArgoCD
 
 ### Créer une application via le CLI
 
 ```bash
-argocd app create my-app \
-  --repo https://github.com/VOTRE-USERNAME/VOTRE-REPO.git \
-  --path apps/my-app \
+argocd app create my-app-dev \
+  --repo https://github.com/aboigues/kubernetes-formation.git \
+  --path tp06/07-gitops-structure/overlays/dev \
   --dest-server https://kubernetes.default.svc \
-  --dest-namespace default \
-  --sync-policy automated
+  --dest-namespace dev \
+  --sync-policy automated --self-heal --auto-prune \
+  --sync-option CreateNamespace=true
 ```
 
 ### Commandes utiles
@@ -163,19 +145,19 @@ argocd app create my-app \
 argocd app list
 
 # Voir les détails d'une application
-argocd app get my-app
+argocd app get my-app-dev
 
 # Synchroniser manuellement
-argocd app sync my-app
+argocd app sync my-app-dev
 
 # Voir l'historique
-argocd app history my-app
+argocd app history my-app-dev
 
 # Rollback vers une version précédente
-argocd app rollback my-app
+argocd app rollback my-app-dev   # refusé si la sync automatique est active : en GitOps, on fait git revert
 
 # Supprimer une application
-argocd app delete my-app
+argocd app delete my-app-dev
 ```
 
 ## 🔄 Workflow GitOps avec ArgoCD
