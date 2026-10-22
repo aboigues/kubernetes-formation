@@ -56,7 +56,12 @@ jobs:
         run: |
           set -euo pipefail
           # Source de vérité : tout dossier tpNN-thème muni d'un verify.sh.
-          CANON="$(ls -d tp[0-9][0-9]-*/ | tr -d / | while read -r d; do [ -x "$d/verify.sh" ] && echo "$d"; done | xargs)"
+          # (Le bit exécutable est contrôlé par le job lint, pas ici.)
+          CANON=""
+          for d in tp[0-9][0-9]-*/; do
+            d="${d%/}"
+            if [ -f "$d/verify.sh" ]; then CANON="$CANON $d"; fi
+          done
 
           to_json() {
             if [ "$#" -eq 0 ]; then printf '[]'; else printf '%s\n' "$@" | jq -R . | jq -cs .; fi
