@@ -1,0 +1,90 @@
+# PostgreSQL : un StatefulSet d'un pod, avec SON volume persistant.
+#
+# Le Secret db-credentials n'est PAS dans ce dépôt : il se crée à la main
+# (voir le README), comme tout secret digne de ce nom.
+apiVersion: v1
+kind: Service
+metadata:
+  name: db
+  labels:
+    app: db
+spec:
+  clusterIP: ______            # TODO 4 : un Service « headless », sans IP virtuelle (un nom DNS par pod : db-0.db)
+  selector:
+    app: db
+  ports:
+    - port: 5432
+---
+apiVersion: apps/v1
+kind: ______                 # TODO 5 : le contrôleur des applications avec état
+metadata:
+  name: db
+  labels:
+    app: db
+    app.kubernetes.io/part-of: telemarche
+spec:
+  serviceName: ______          # TODO 6 : le Service headless qui donne leur nom DNS aux pods
+  replicas: 1
+  selector:
+    matchLabels:
+      app: db
+  template:
+    metadata:
+      labels:
+        app: db
+        app.kubernetes.io/part-of: telemarche
+    spec:
+      # Durcissement : l'utilisateur postgres de l'image alpine a l'UID 70.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: postgres:18.6-alpine
+          envFrom:
+            - secretRef:
+                name: ______     # TODO 7 : le Secret créé à la main (voir le README)
+          ports:
+            - containerPort: 5432
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\""]
+            periodSeconds: 5
+          volumeMounts:
+            - name: donnees
+              mountPath: ______  # TODO 8 : où PostgreSQL 18 range ses données (voir le README)
+            # Le système de fichiers est en lecture seule : PostgreSQL écrit
+            # sa socket et ses fichiers temporaires dans des volumes éphémères.
+            - name: run
+              mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+  volumeClaimTemplates:        # un volume PAR pod, créé à partir de ce modèle
+    - metadata:
+        name: ______             # TODO 9 : le nom utilisé par le volumeMount des données
+      spec:
+        accessModes: ["______"]   # TODO 10 : lecture-écriture par un seul nœud
+        resources:
+          requests:
+            storage: ______    # TODO 11 : 1 Gio

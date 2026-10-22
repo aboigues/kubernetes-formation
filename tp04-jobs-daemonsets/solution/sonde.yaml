@@ -1,0 +1,52 @@
+# Un agent de surveillance sur CHAQUE nœud : toutes les 10 s, il vérifie que la
+# vitrine répond depuis ce nœud et écrit le résultat dans ses journaux.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: sonde
+  labels:
+    app: sonde
+spec:
+  selector:
+    matchLabels:
+      app: sonde
+  template:
+    metadata:
+      labels:
+        app: sonde
+    spec:
+      # Durcissement standard du dépôt (expliqué au TP06) : ne pas modifier.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sonde
+          image: telemachlearning/curl:8.21.0
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          command: ["sh", "-c"]
+          args:
+            - |
+              while true; do
+                code=$(curl -s -o /dev/null -m 2 -w '%{http_code}' http://web/healthz)
+                echo "$(date +%T) noeud=$NODE_NAME web=$code"
+                sleep 10
+              done
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 32Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

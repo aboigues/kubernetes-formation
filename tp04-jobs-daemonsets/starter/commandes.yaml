@@ -1,0 +1,45 @@
+# Un traitement par lots : passer 5 commandes de test, 2 à la fois, puis s'arrêter.
+apiVersion: batch/v1
+kind: ______                 # TODO 3 : un traitement qui s'exécute jusqu'à sa réussite, puis s'arrête
+metadata:
+  name: commandes
+  labels:
+    app: commandes
+spec:
+  completions: ______         # TODO 4 : cinq exécutions réussies au total
+  parallelism: ______         # TODO 5 : deux à la fois au plus
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: commandes
+    spec:
+      restartPolicy: ______    # TODO 6 : un pod en échec n'est pas relancé sur place (le Job en crée un autre)
+      # Durcissement standard du dépôt (expliqué au TP06) : ne pas modifier.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: commande
+          image: telemachlearning/curl:8.21.0
+          command: ["sh", "-c"]
+          args:
+            - |
+              curl -sSf -m 5 --retry 10 --retry-connrefused --retry-delay 2 -X POST -H 'Content-Type: application/json' \
+                -d '{"product_id": 1, "quantity": 1}' http://api/api/orders
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 32Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

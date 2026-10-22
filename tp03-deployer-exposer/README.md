@@ -230,7 +230,7 @@ Trois suspects, dans l'ordre : `API_URL` (le nom du Service, `http://api`) ; le 
 2. **L'arrêt propre.** Supprimez un pod d'API pendant que `trafic` tourne : aucune erreur. Lisez ses derniers journaux (`kubectl logs <pod>` avant qu'il ne disparaisse) : que fait l'API entre la réception de `SIGTERM` et son arrêt ? À quoi sert `terminationGracePeriodSeconds` ?
 3. **`Recreate`.** Passez la stratégie de `api` à `type: Recreate` et refaites une mise à jour. Combien de lignes `!!` ?
 4. **Délai de progression.** Lancez `kubectl set image deployment/api api=telemachlearning/telemarche-api:1.2` avec `progressDeadlineSeconds: 60` : que dit `kubectl rollout status` au bout d'une minute ? Kubernetes revient-il en arrière tout seul ?
-5. **DaemonSet, Job, CronJob.** Ce sont les autres contrôleurs du module : ils font l'objet du TP04 (`tp04-jobs-daemonsets`, prochaine livraison du dépôt).
+5. **DaemonSet, Job, CronJob.** Ce sont les autres contrôleurs du module : ils font l'objet du [TP04](../tp04-jobs-daemonsets/).
 
 ---
 

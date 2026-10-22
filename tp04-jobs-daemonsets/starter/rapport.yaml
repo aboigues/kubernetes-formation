@@ -1,0 +1,51 @@
+# Un rapport planifié : toutes les 5 minutes, compter les commandes vues par l'API.
+apiVersion: batch/v1
+kind: ______                 # TODO 7 : un Job créé selon une planification
+metadata:
+  name: rapport
+  labels:
+    app: rapport
+spec:
+  schedule: ______             # TODO 8 : toutes les 5 minutes, en syntaxe cron, entre guillemets
+  concurrencyPolicy: ______    # TODO 9 : ne jamais lancer un rapport si le précédent tourne encore
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app: rapport
+        spec:
+          restartPolicy: Never
+          # Durcissement standard du dépôt (expliqué au TP06) : ne pas modifier.
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 100
+            runAsGroup: 101
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: rapport
+              image: telemachlearning/curl:8.21.0
+              command: ["sh", "-c"]
+              args:
+                - |
+                  # Une seule requête : chaque commande porte le nom du pod qui l'a enregistrée.
+                  r=$(curl -sSf -m 5 --retry 10 --retry-connrefused --retry-delay 2 http://api/api/orders) || exit 1
+                  n=$(echo "$r" | grep -o '"id"' | wc -l)
+                  pods=$(echo "$r" | grep -o '"pod":"[^"]*"' | sort -u | cut -d'"' -f4 | xargs)
+                  echo "$(date +%T) $n commande(s) vue(s) ; enregistrée(s) par : ${pods:-aucun pod}"
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 16Mi
+                limits:
+                  cpu: 100m
+                  memory: 32Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]

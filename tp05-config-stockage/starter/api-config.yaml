@@ -1,0 +1,13 @@
+# La configuration de l'API, sortie de l'image : on la change sans reconstruire.
+apiVersion: v1
+kind: ______                 # TODO 1 : l'objet qui porte une configuration non sensible
+metadata:
+  name: api-config
+data:
+  # Consommées en variables d'environnement (envFrom)
+  LOG_LEVEL: info
+  DB_HOST: ______              # TODO 2 : le nom DNS du Service de la base
+  # Consommé en fichier (volume monté dans /etc/api)
+  application.properties: |
+    cache.ttl=______           # TODO 3 : 300 secondes
+    pagination.taille=50

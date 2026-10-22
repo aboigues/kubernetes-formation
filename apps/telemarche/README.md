@@ -40,7 +40,7 @@ Pendant le démarrage, tout `/api/…` répond **503** : sans readiness probe, c
 | `DB_PORT`, `DB_NAME` | `5432`, `telemarche` | connexion PostgreSQL |
 | `DB_USER` ou `POSTGRES_USER` | `telemarche` | utilisateur (le premier défini l'emporte) |
 | `DB_PASSWORD` ou `POSTGRES_PASSWORD` | *(vide)* | mot de passe |
-| `CONFIG_FILE` | `/etc/api/application.properties` | fichier `clé=valeur` facultatif, affiché par `/api/info` |
+| `CONFIG_FILE` | `/etc/api/application.properties` | fichier `clé=valeur` facultatif, **relu à chaque appel** de `/api/info` |
 | `STARTUP_SECONDS` | `3` | durée du démarrage simulé |
 | `SHUTDOWN_SECONDS` | `5` | délai de vidange après `SIGTERM` |
 | `MEMORY_BALLAST_MB` | `0` | mémoire réservée au démarrage : pour provoquer un `OOMKilled` |
