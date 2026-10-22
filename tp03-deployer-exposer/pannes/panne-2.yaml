@@ -1,0 +1,69 @@
+# Panne n° 2 — signalée par l'équipe : « le pod redémarre sans arrêt ».
+# Ne lisez pas ce fichier pour trouver la panne : diagnostiquez-la avec kubectl.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: panne-2
+  labels:
+    app: panne-2
+    app.kubernetes.io/part-of: telemarche
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: panne-2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: panne-2
+        app.kubernetes.io/part-of: telemarche
+    spec:
+      # Durcissement standard du dépôt (expliqué au TP06) : ne pas modifier.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: telemachlearning/telemarche-api:1.0
+          env:
+            - name: LOG_LEVEL
+              value: bavard
+          ports:
+            - containerPort: 8080
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 2
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            periodSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 500m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

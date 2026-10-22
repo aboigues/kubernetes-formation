@@ -1,0 +1,14 @@
+# Le point d'accès stable de la vitrine, ouvert sur chaque nœud (NodePort).
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  labels:
+    app: web
+spec:
+  type: ______              # TODO 6 : le type qui ouvre un port sur chaque nœud
+  selector:
+    app: ______               # TODO 7 : les pods vers lesquels envoyer le trafic
+  ports:
+    - port: 80
+      targetPort: ______    # TODO 8 : le port du conteneur

@@ -1,0 +1,80 @@
+# L'API de Télémarché : 3 réplicas sans état, mis à jour sans coupure.
+apiVersion: apps/v1
+kind: ______                 # TODO 1 : l'objet qui gère les versions successives des pods
+metadata:
+  name: api
+  labels:
+    app: api
+    app.kubernetes.io/part-of: telemarche
+spec:
+  replicas: ______             # TODO 2 : trois réplicas
+  selector:
+    matchLabels:
+      app: api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: ______           # TODO 3 : un pod de plus autorisé pendant la mise à jour
+      maxUnavailable: ______     # TODO 4 : aucune baisse de capacité tolérée
+  template:
+    metadata:
+      labels:
+        app: api
+        app.kubernetes.io/part-of: telemarche
+    spec:
+      # Durcissement standard du dépôt (expliqué au TP06) : ne pas modifier.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: telemachlearning/telemarche-api:1.0
+          ports:
+            - containerPort: 8080
+          startupProbe:            # « a-t-elle fini de démarrer ? »
+            httpGet:
+              path: ______         # TODO 5 : le point d'entrée de vie de l'API
+              port: 8080
+            periodSeconds: 2
+            failureThreshold: 30
+          readinessProbe:          # « peut-elle recevoir du trafic maintenant ? »
+            httpGet:
+              path: ______         # TODO 6 : le point d'entrée de disponibilité de l'API
+              port: ______         # TODO 7
+            periodSeconds: 2
+          livenessProbe:           # « est-elle bloquée sans espoir de retour ? »
+            httpGet:
+              path: ______         # TODO 8 : surtout pas un point d'entrée qui dépend de la base
+              port: 8080
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 500m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+---
+# Le nom stable de l'API dans le cluster : http://api
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  labels:
+    app: api
+spec:
+  type: ______                 # TODO 9 : joignable uniquement depuis l'intérieur du cluster
+  selector:
+    app: ______                # TODO 10 : les pods de l'API
+  ports:
+    - port: 80
+      targetPort: ______         # TODO 11 : le port des conteneurs

@@ -1,0 +1,47 @@
+# Un client qui interroge Télémarché 5 fois par seconde, DEPUIS le cluster, en
+# passant par la vitrine (web -> api) comme un vrai navigateur.
+#
+#   kubectl apply -f outils/trafic.yaml
+#   kubectl logs -f trafic          # une ligne par requête : heure, code HTTP, version, pod
+#   kubectl delete -f outils/trafic.yaml
+#
+# Chaque ligne en erreur (code autre que 200) est préfixée de « !! ».
+apiVersion: v1
+kind: Pod
+metadata:
+  name: trafic
+  labels:
+    app: trafic
+spec:
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 100
+    runAsGroup: 101
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: trafic
+      image: telemachlearning/curl:8.21.0
+      command: ["sh", "-c"]
+      args:
+        - |
+          while true; do
+            r=$(curl -s -m 2 -w ' %{http_code}' http://web/api/info)
+            code=${r##* }
+            v=$(echo "$r" | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
+            p=$(echo "$r" | sed -n 's/.*"pod":"\([^"]*\)".*/\1/p')
+            if [ "$code" = 200 ]; then echo "$(date +%T) $code api $v $p"; else echo "!! $(date +%T) $code"; fi
+            sleep 0.2
+          done
+      resources:
+        requests:
+          cpu: 20m
+          memory: 16Mi
+        limits:
+          cpu: 100m
+          memory: 32Mi
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]

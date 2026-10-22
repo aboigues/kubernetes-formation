@@ -1,0 +1,41 @@
+# La vitrine de Télémarché, décrite en mode déclaratif.
+apiVersion: apps/v1
+kind: ______              # TODO 1 : le type d'objet qui maintient N pods identiques
+metadata:
+  name: web
+  labels:
+    app: web
+spec:
+  replicas: ______          # TODO 2 : trois exemplaires de la vitrine
+  selector:
+    matchLabels:
+      app: ______           # TODO 3 : doit correspondre aux labels du template ci-dessous
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      # Durcissement standard du dépôt : présent dès le premier TP, expliqué au TP06.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: web
+          image: ______         # TODO 4 : telemachlearning/telemarche-web, en version 1.0 (jamais latest)
+          ports:
+            - containerPort: ______   # TODO 5 : le port sur lequel écoute la vitrine (voir « kubectl logs »)
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

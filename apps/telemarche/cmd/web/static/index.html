@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Télémarché</title>
+<style>
+  :root { --fond: #f7f4ee; --texte: #2b2a27; --accent: #2f6f4f; --doux: #6b675f; --carte: #fff; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: var(--fond); color: var(--texte); }
+  header { background: var(--accent); color: #fff; padding: 1.2rem 1.5rem; }
+  header h1 { margin: 0; font-size: 1.6rem; }
+  header p { margin: .3rem 0 0; opacity: .85; }
+  main { max-width: 60rem; margin: 0 auto; padding: 1.5rem; }
+  .grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 1rem; }
+  .produit { background: var(--carte); border-radius: .5rem; padding: 1rem; box-shadow: 0 1px 3px #0002; }
+  .prix { color: var(--accent); font-weight: 600; }
+  .etat { font-family: ui-monospace, monospace; font-size: .85rem; background: var(--carte);
+          border-left: 4px solid var(--accent); padding: .8rem 1rem; margin-bottom: 1.5rem; }
+  .erreur { border-left-color: #b3261e; color: #b3261e; }
+  footer { color: var(--doux); font-size: .8rem; text-align: center; padding: 2rem 1rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Télémarché</h1>
+  <p>Les produits frais de Telemach, livrés par Kubernetes.</p>
+</header>
+<main>
+  <div id="etat" class="etat">Interrogation de l'API…</div>
+  <div id="produits" class="grille"></div>
+</main>
+<footer id="pied">Télémarché — fil rouge de la formation Kubernetes Telemach Learning</footer>
+<script>
+const euros = c => (c / 100).toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
+
+async function charger() {
+  const etat = document.getElementById("etat");
+  try {
+    const [web, info, produits] = await Promise.all([
+      fetch("version").then(r => r.json()),
+      fetch("api/info").then(r => { if (!r.ok) throw new Error("api/info : HTTP " + r.status); return r.json(); }),
+      fetch("api/products").then(r => { if (!r.ok) throw new Error("api/products : HTTP " + r.status); return r.json(); }),
+    ]);
+    etat.className = "etat";
+    etat.textContent = `web ${web.version} (pod ${web.pod}) → api ${info.version} (pod ${info.pod}, stockage : ${info.stockage})`;
+    document.getElementById("produits").innerHTML = produits.map(p =>
+      `<div class="produit"><div>${p.nom}</div><div class="prix">${euros(p.prix_centimes)}</div></div>`).join("");
+  } catch (e) {
+    etat.className = "etat erreur";
+    etat.textContent = "L'API ne répond pas : " + e.message;
+  }
+}
+charger();
+setInterval(charger, 3000);
+</script>
+</body>
+</html>

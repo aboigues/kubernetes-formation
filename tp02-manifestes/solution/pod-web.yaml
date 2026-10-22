@@ -1,0 +1,39 @@
+# La vitrine, dans un pod nu elle aussi.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: web-demo
+  labels:
+    app: web
+    app.kubernetes.io/name: web
+    app.kubernetes.io/version: "1.0"
+    app.kubernetes.io/part-of: telemarche
+    environnement: recette
+spec:
+  # Durcissement standard du dépôt (expliqué au TP06) : ne pas modifier.
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: web
+      image: telemachlearning/telemarche-web:1.0
+      ports:
+        - containerPort: 8080
+      env:
+        - name: LOG_LEVEL
+          value: info
+      resources:
+        requests:
+          cpu: 50m
+          memory: 32Mi
+        limits:
+          cpu: 200m
+          memory: 64Mi
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]
