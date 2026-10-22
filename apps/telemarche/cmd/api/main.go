@@ -94,7 +94,7 @@ func main() {
 		st, mode = pg, "postgresql"
 	}
 
-	app := &server{store: st, mode: mode, config: readConfig(env("CONFIG_FILE", "/etc/api/application.properties"))}
+	app := &server{store: st, mode: mode, configFile: env("CONFIG_FILE", "/etc/api/application.properties")}
 	port := env("PORT", "8080")
 	srv := &http.Server{Addr: ":" + port, Handler: app.routes(), ReadHeaderTimeout: 5 * time.Second}
 
@@ -136,9 +136,11 @@ var ballast []byte
 // ---------------------------------------------------------------------------
 
 type server struct {
-	store  store
-	mode   string
-	config map[string]string
+	store store
+	mode  string
+	// Relu à chaque appel de /api/info : on y voit la mise à jour d'une
+	// ConfigMap montée en volume, sans redémarrer le pod.
+	configFile string
 }
 
 func (s *server) routes() http.Handler {
@@ -190,9 +192,15 @@ func (s *server) ready(w http.ResponseWriter, r *http.Request) {
 	case draining.Load():
 		http.Error(w, "arrêt en cours", http.StatusServiceUnavailable)
 	default:
-		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		// Moins que le timeoutSeconds par défaut d'une probe (1 s) : sinon le
+		// kubelet abandonne d'abord, et le journal ne dit que « context canceled »
+		// au lieu de la vraie cause.
+		ctx, cancel := context.WithTimeout(context.Background(), 800*time.Millisecond)
 		defer cancel()
 		if err := s.store.Ready(ctx); err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				err = errors.New("base injoignable (pas de réponse en 800 ms)")
+			}
 			log.Warn("pas prêt", "err", err)
 			http.Error(w, "stockage indisponible : "+err.Error(), http.StatusServiceUnavailable)
 			return
@@ -211,7 +219,7 @@ func (s *server) info(w http.ResponseWriter, _ *http.Request) {
 		"version":  version,
 		"pod":      hostname,
 		"stockage": s.mode,
-		"config":   s.config,
+		"config":   readConfig(s.configFile),
 	})
 }
 

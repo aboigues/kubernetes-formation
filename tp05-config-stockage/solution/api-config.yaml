@@ -1,0 +1,13 @@
+# La configuration de l'API, sortie de l'image : on la change sans reconstruire.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-config
+data:
+  # Consommées en variables d'environnement (envFrom)
+  LOG_LEVEL: info
+  DB_HOST: db
+  # Consommé en fichier (volume monté dans /etc/api)
+  application.properties: |
+    cache.ttl=300
+    pagination.taille=50

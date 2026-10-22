@@ -1,0 +1,42 @@
+# Créer le schéma et le catalogue de départ, une fois, puis s'arrêter.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migration
+  labels:
+    app: migration
+spec:
+  backoffLimit: 4
+  template:
+    metadata:
+      labels:
+        app: migration
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migration
+          image: telemachlearning/telemarche-api:1.0
+          command: ["______"]    # TODO 12 : le programme de migration livré dans l'image (voir apps/telemarche/README.md)
+          envFrom:
+            - configMapRef:
+                name: ______     # TODO 13 : la configuration de l'API
+            - secretRef:
+                name: ______     # TODO 14 : les identifiants de la base
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 500m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

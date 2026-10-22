@@ -1,0 +1,44 @@
+# Panne — signalée par l'équipe : « le Job d'import n'en finit pas d'échouer ».
+# Ne lisez pas ce fichier pour trouver la panne : diagnostiquez-la avec kubectl.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: import
+  labels:
+    app: import
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app: import
+    spec:
+      restartPolicy: Never
+      # Durcissement standard du dépôt (expliqué au TP06) : ne pas modifier.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: commande
+          image: telemachlearning/curl:8.21.0
+          command: ["sh", "-c"]
+          args:
+            - |
+              curl -sSf -m 5 --retry 10 --retry-connrefused --retry-delay 2 -X POST -H 'Content-Type: application/json' \
+                -d '{"product_id": 42, "quantity": 1}' http://api/api/orders
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 32Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
