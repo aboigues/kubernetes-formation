@@ -533,6 +533,30 @@ les 3 images sont à 0 CVE OS corrigeable.
 rebuild mensuel échouera dès sa première exécution — volontairement, et avec le message
 qui dit quoi faire.
 
+### Session 2026-10-22 - Refonte v2 : socle et TP01 à TP03
+
+**Objectif** : lancer la refonte v2 — format starter/solution/verify.sh
+de docker-formation, un dépôt pour **deux** formations (DEVOPS-012, 2 j ; DEVOPS-010, 3 j).
+
+**Décisions** (validées par l'utilisateur) : catalogue unique de 14 TP fins + deux parcours ;
+release v1.0.0 puis retrait progressif de l'ancien contenu ; fil rouge Télémarché avec images
+maison ; démarrage par un socle + pilote tp01-03. Détail : `ROADMAP-V2.md` (non versionné sur main :
+branche `claude/roadmap-v2` et `.git/info/exclude`).
+
+**Réalisations** :
+- `apps/telemarche/` (Go 1.27.3, pgx 5.11.0, distroless, non-root 65532, port 8080) : mode
+  mémoire sans `DB_HOST`, PostgreSQL sinon, `/app/migrate` pour le Job ; 503 sur `/api/*`
+  pendant le démarrage (sans quoi un Deployment sans readiness passait le test de mise à jour).
+- `scripts/lib.sh`, `scripts/preflight.sh`, `ci.yml`, `telemarche-images.yml`.
+- TP01 à TP03 testés sur minikube 1.39.0 / Kubernetes 1.37.1 / containerd.
+
+**Pièges trouvés** :
+- `minikube image load` redémarre containerd : nœud brièvement NotReady → `verify.sh` attend
+  (`kubectl wait`) au lieu de contrôler instantanément.
+- `golang.org/x/text` 0.29.0 (tiré par pgx) vulnérable → 0.43.0.
+- Test négatif du TP03 : sans probes, 7 requêtes sur 23 échouent pendant la mise à jour ;
+  avec la solution, 0 sur ~50 (deux passages).
+
 ## Décisions importantes
 
 ### Architecture d'automatisation (2025-12-12)

@@ -221,60 +221,6 @@ jobs:
             fi
           done
 
-  test-tp1-basics:
-    name: Test TP1 - Basic Kubernetes Deployment
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Minikube
-        uses: medyagh/setup-minikube@latest
-        with:
-          kubernetes-version: 'v1.32.0'
-
-      - name: Verify Minikube
-        run: |
-          kubectl version --client
-          kubectl cluster-info
-          kubectl get nodes
-
-      - name: Make test script executable
-        run: chmod +x tp01/test-tp1.sh
-
-      - name: Run TP1 basic tests
-        run: |
-          cd tp01
-          ./test-tp1.sh
-
-  test-tp2-manifests:
-    name: Test TP2 - Kubernetes Manifests
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Minikube
-        uses: medyagh/setup-minikube@latest
-        with:
-          kubernetes-version: 'v1.32.0'
-
-      - name: Verify Minikube
-        run: |
-          kubectl version --client
-          kubectl cluster-info
-          kubectl get nodes
-
-      - name: Make test script executable
-        run: chmod +x tp02/test-tp2.sh
-
-      - name: Run TP2 manifest tests
-        run: |
-          cd tp02
-          ./test-tp2.sh
-
   test-tp3-storage:
     name: Test TP3 - Storage Configuration
     runs-on: ubuntu-latest

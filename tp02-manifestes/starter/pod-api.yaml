@@ -1,0 +1,39 @@
+# L'API de Télémarché, en version stable, dans un pod « nu » (sans contrôleur).
+apiVersion: ______         # TODO 1 : le groupe/version de l'API des pods (kubectl explain pod | head)
+kind: ______               # TODO 2 : le type d'objet
+metadata:
+  name: api-demo
+  labels:
+    app: ______             # TODO 3 : le label court utilisé par les sélecteurs (« api »)
+    app.kubernetes.io/name: api
+    app.kubernetes.io/version: ______   # TODO 4 : "1.0" — entre guillemets, voir les indices
+    app.kubernetes.io/part-of: telemarche
+    environnement: recette
+spec:
+  # Durcissement standard du dépôt (expliqué au TP06) : ne pas modifier.
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: api
+      image: ______         # TODO 5 : telemachlearning/telemarche-api en version 1.0
+      ports:
+        - containerPort: ______   # TODO 6 : le port d'écoute de l'API
+      env:
+        - name: ______      # TODO 7 : la variable qui règle la verbosité des journaux (voir apps/telemarche/README.md)
+          value: info
+      resources:
+        requests:
+          cpu: 50m
+          memory: 32Mi
+        limits:
+          cpu: 200m
+          memory: 64Mi
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]

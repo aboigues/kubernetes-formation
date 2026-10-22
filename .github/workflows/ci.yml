@@ -1,0 +1,198 @@
+name: TP — vérification
+
+# « Si ce n'est pas testé par GitHub Actions, ça ne fonctionne pas. »
+# Chaque TP est validé en exécutant son verify.sh sur la solution de référence,
+# dans un vrai cluster minikube identique au lab (containerd, Kubernetes 1.37).
+#
+# Matrice DYNAMIQUE : on ne rejoue que les TP modifiés par le commit. Un
+# changement PARTAGÉ (scripts/, apps/telemarche/ ou ce workflow) relance TOUS les
+# TP, puisqu'il peut tous les casser.
+#
+# Sécurité chaîne d'appro : pas d'action aquasecurity/* (compromises en 2025) ;
+# Trivy et kubeconform tournent depuis leurs images officielles, épinglées.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "tp[0-9][0-9]-*/**"
+      - "scripts/**"
+      - "apps/telemarche/**"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    paths:
+      - "tp[0-9][0-9]-*/**"
+      - "scripts/**"
+      - "apps/telemarche/**"
+      - ".github/workflows/ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  KUBERNETES_VERSION: v1.37.1
+  MINIKUBE_VERSION: 1.39.0
+  TRIVY_IMAGE: aquasec/trivy:0.76.1
+  KUBECONFORM_IMAGE: ghcr.io/yannh/kubeconform:v0.8.0
+
+jobs:
+  # 1) Déterminer la liste des TP à tester à partir des fichiers modifiés.
+  select:
+    runs-on: ubuntu-latest
+    outputs:
+      tps: ${{ steps.pick.outputs.tps }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: pick
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          # Source de vérité : tout dossier tpNN-thème muni d'un verify.sh.
+          CANON="$(ls -d tp[0-9][0-9]-*/ | tr -d / | while read -r d; do [ -x "$d/verify.sh" ] && echo "$d"; done | xargs)"
+
+          to_json() {
+            if [ "$#" -eq 0 ]; then printf '[]'; else printf '%s\n' "$@" | jq -R . | jq -cs .; fi
+          }
+
+          CHANGED=""
+          if [ "$EVENT" = "pull_request" ]; then
+            git fetch --no-tags --depth=200 origin "$BASE_REF" >/dev/null 2>&1 || true
+            CHANGED="$(git diff --name-only "origin/${BASE_REF}...HEAD" 2>/dev/null || true)"
+          elif [ -n "${BEFORE:-}" ] \
+               && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] \
+               && git cat-file -e "$BEFORE" 2>/dev/null; then
+            CHANGED="$(git diff --name-only "$BEFORE" "$SHA" 2>/dev/null || true)"
+          fi
+
+          if [ -z "$CHANGED" ] || printf '%s\n' "$CHANGED" \
+               | grep -qE '^(scripts/|apps/telemarche/|\.github/workflows/ci\.yml$)'; then
+            TPS="$(to_json $CANON)"
+          else
+            SEL=""
+            for tp in $(printf '%s\n' "$CHANGED" | grep -oE '^tp[0-9]{2}-[^/]+' | sort -u); do
+              case " $CANON " in *" $tp "*) SEL="$SEL $tp" ;; esac
+            done
+            TPS="$(to_json $SEL)"
+          fi
+          echo "tps=$TPS" >> "$GITHUB_OUTPUT"
+          echo "TP sélectionnés pour ce run : $TPS"
+
+  # 2) Contrôles statiques, sans cluster : rapides, ils échouent avant les longs.
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Chaque starter contient des trous, chaque solution n'en contient aucun
+        run: |
+          set -euo pipefail
+          rc=0
+          for tp in tp[0-9][0-9]-*/; do
+            tp="${tp%/}"
+            [ -x "$tp/verify.sh" ] || { echo "::error::$tp : verify.sh absent ou non exécutable"; rc=1; continue; }
+            if [ -d "$tp/starter" ] && ! grep -rq '______' "$tp/starter"; then
+              echo "::error::$tp/starter ne contient aucun trou « ______ »"; rc=1
+            fi
+            if grep -rn '______' "$tp/solution" 2>/dev/null; then
+              echo "::error::$tp/solution contient encore des trous"; rc=1
+            fi
+          done
+          exit $rc
+
+      - name: Aucun manifeste ne fixe metadata.namespace
+        # verify.sh déploie dans un namespace jetable : un namespace écrit en dur
+        # ferait échouer l'apply (ou pire, viserait le namespace du stagiaire).
+        run: |
+          set -euo pipefail
+          if grep -rnE '^  namespace:' tp[0-9][0-9]-*/{starter,solution,pannes,outils} 2>/dev/null; then
+            echo "::error::metadata.namespace interdit dans les manifestes des TP"; exit 1
+          fi
+
+      - name: Schémas Kubernetes (kubeconform, ${{ env.KUBERNETES_VERSION }})
+        run: |
+          set -euo pipefail
+          dirs=$(ls -d tp[0-9][0-9]-*/solution tp[0-9][0-9]-*/pannes tp[0-9][0-9]-*/outils 2>/dev/null | xargs)
+          docker run --rm -v "$PWD":/w:ro -w /w "$KUBECONFORM_IMAGE" \
+            -strict -summary -kubernetes-version "${KUBERNETES_VERSION#v}" $dirs
+
+      - name: Sécurité des manifestes (trivy config, 0 HIGH/CRITICAL)
+        # Trivy n'accepte qu'une cible : on rassemble ce qui est réellement
+        # déployé (solution, pannes, outils), sans les starters à trous.
+        run: |
+          set -euo pipefail
+          SCAN="$(mktemp -d)"
+          for d in tp[0-9][0-9]-*/solution tp[0-9][0-9]-*/pannes tp[0-9][0-9]-*/outils; do
+            [ -d "$d" ] && mkdir -p "$SCAN/$(dirname "$d")" && cp -r "$d" "$SCAN/$d"
+          done
+          docker run --rm -v "$SCAN":/scan:ro "$TRIVY_IMAGE" config \
+            --quiet --severity HIGH,CRITICAL --exit-code 1 /scan
+
+      - name: Scripts shell (shellcheck)
+        run: |
+          set -euo pipefail
+          shellcheck -x -S warning scripts/*.sh tp[0-9][0-9]-*/verify.sh
+
+  # 3) Rejouer verify.sh solution dans un cluster neuf, un TP par job.
+  tp:
+    needs: [select, lint]
+    if: ${{ needs.select.outputs.tps != '[]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        tp: ${{ fromJson(needs.select.outputs.tps) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cluster minikube ${{ env.MINIKUBE_VERSION }} / Kubernetes ${{ env.KUBERNETES_VERSION }}
+        uses: medyagh/setup-minikube@v0.0.21
+        with:
+          minikube-version: ${{ env.MINIKUBE_VERSION }}
+          kubernetes-version: ${{ env.KUBERNETES_VERSION }}
+          driver: docker
+          container-runtime: containerd
+          cpus: max
+          memory: max
+
+      # Les images du fil rouge sont construites depuis les sources de la PR et
+      # chargées dans le cluster : on teste le code de la PR, pas ce qui est
+      # publié sur Docker Hub.
+      - name: Images Télémarché (1.0 et 1.1)
+        working-directory: apps/telemarche
+        run: |
+          set -euo pipefail
+          for v in 1.0 1.1; do
+            for t in api web; do
+              docker build -q --target "$t" --build-arg VERSION="$v" -t "telemachlearning/telemarche-$t:$v" .
+            done
+          done
+          minikube image load \
+            telemachlearning/telemarche-api:1.0 telemachlearning/telemarche-api:1.1 \
+            telemachlearning/telemarche-web:1.0 telemachlearning/telemarche-web:1.1
+
+      - name: verify.sh solution — ${{ matrix.tp }}
+        run: ./${{ matrix.tp }}/verify.sh solution
+
+      - name: verify.sh starter doit échouer — ${{ matrix.tp }}
+        # Un starter qui passerait la vérification ne laisserait rien à faire.
+        run: |
+          if ./${{ matrix.tp }}/verify.sh starter; then
+            echo "::error::le starter de ${{ matrix.tp }} passe verify.sh : il ne laisse rien à compléter"; exit 1
+          fi
+
+      - name: État du cluster en cas d'échec
+        if: failure()
+        run: |
+          kubectl get nodes -o wide || true
+          kubectl get all -A || true
+          kubectl get events -A --sort-by=.lastTimestamp | tail -40 || true

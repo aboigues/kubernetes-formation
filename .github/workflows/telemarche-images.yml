@@ -1,0 +1,102 @@
+name: Images Télémarché
+
+# Construit et publie les images du fil rouge (apps/telemarche/) sur Docker Hub :
+#   telemachlearning/telemarche-api:{1.0,1.1}
+#   telemachlearning/telemarche-web:{1.0,1.1}
+#
+# Les deux versions sortent du même code : seul le numéro injecté au build
+# change (/version, /api/info, métrique telemarche_build_info). C'est voulu :
+# les TP ont besoin de deux versions VISIBLEMENT différentes pour observer un
+# rolling update, pas de deux comportements.
+#
+# Multi-architecture (amd64 + arm64) : les stagiaires sur Mac Apple Silicon
+# tirent la même étiquette.
+#
+# Barrière : une image qui porte une faille HIGH/CRITICAL corrigeable n'est pas
+# publiée. Images distroless « static » : il n'y a pas de paquets OS, seules les
+# dépendances Go comptent.
+#
+# Publication : uniquement sur main (après merge) ou à la demande. Une PR ne fait
+# que construire et scanner.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/telemarche/**"
+      - ".github/workflows/telemarche-images.yml"
+  pull_request:
+    paths:
+      - "apps/telemarche/**"
+      - ".github/workflows/telemarche-images.yml"
+  schedule:
+    # Le 1er du mois, avec les autres images durcies : récupérer les correctifs
+    # de l'image de base distroless et de la chaîne Go.
+    - cron: "0 3 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  VERSIONS: "1.0 1.1"
+  TRIVY_IMAGE: aquasec/trivy:0.76.1
+
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Go — tests statiques
+        working-directory: apps/telemarche
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD":/src -w /src golang:1.27.3-alpine sh -c '
+            test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+            go vet ./...
+            go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...'
+
+      - name: Construire (amd64) et scanner
+        working-directory: apps/telemarche
+        run: |
+          set -euo pipefail
+          for t in api web; do
+            docker build -q --target "$t" --build-arg VERSION=scan -t "telemarche-$t:scan" .
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$TRIVY_IMAGE" image \
+              --quiet --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 "telemarche-$t:scan"
+          done
+
+      - name: Publier ?
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then echo "publish=false" >> "$GITHUB_OUTPUT"
+          else echo "publish=true" >> "$GITHUB_OUTPUT"; fi
+
+      - uses: docker/setup-qemu-action@v4
+        if: steps.mode.outputs.publish == 'true'
+
+      - uses: docker/setup-buildx-action@v4
+        if: steps.mode.outputs.publish == 'true'
+
+      - uses: docker/login-action@v4
+        if: steps.mode.outputs.publish == 'true'
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Publier les images multi-architecture
+        if: steps.mode.outputs.publish == 'true'
+        working-directory: apps/telemarche
+        run: |
+          set -euo pipefail
+          for v in $VERSIONS; do
+            for t in api web; do
+              docker buildx build --pull --no-cache --platform linux/amd64,linux/arm64 \
+                --target "$t" --build-arg VERSION="$v" \
+                --label org.opencontainers.image.source="${{ github.server_url }}/${{ github.repository }}" \
+                --label org.opencontainers.image.revision="${{ github.sha }}" \
+                -t "telemachlearning/telemarche-$t:$v" --push .
+            done
+          done
