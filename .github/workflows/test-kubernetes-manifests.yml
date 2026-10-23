@@ -1,5 +1,11 @@
 name: Test Kubernetes Manifests
 
+# ANCIENNE GÉNÉRATION (v1) : les dossiers « tpNN » (tp04/, tp06/…), retirés un à
+# un par la refonte. Les TP v2 (« tpNN-thème ») sont validés par ci.yml, de façon
+# bloquante : schémas stricts, trivy config, verify.sh sur un vrai cluster.
+# Les boucles ci-dessous découvrent les dossiers v1 restants par motif : un
+# dossier supprimé disparaît de lui-même, sans liste à tenir à jour.
+
 on:
   push:
     branches: [ main, claude/** ]
@@ -60,7 +66,7 @@ jobs:
         run: |
           echo "Validating YAML files in all TPs and docs..."
           shopt -s nullglob
-          for tp in tp01 tp02 tp03 tp04 tp05 tp06 tp07 tp08 tp09 tp10 docs; do
+          for tp in tp[0-9][0-9] docs; do   # v1 seulement (la v2, tpNN-thème, est dans ci.yml)
             if [ -d "$tp" ]; then
               echo "Validating YAML files in $tp/"
               if compgen -G "$tp/*.yaml" > /dev/null; then
@@ -177,7 +183,7 @@ jobs:
         run: |
           echo "Validating all Kubernetes manifests with kubeconform..."
           shopt -s nullglob
-          for tp in tp01 tp02 tp03 tp04 tp05 tp06 tp07 tp08 tp09 tp10 docs; do
+          for tp in tp[0-9][0-9] docs; do   # v1 seulement (la v2, tpNN-thème, est dans ci.yml)
             if [ -d "$tp" ]; then
               echo ""
               echo "=== Validating $tp ==="
@@ -201,7 +207,7 @@ jobs:
         run: |
           echo "Testing kubectl dry-run on all manifests..."
           shopt -s nullglob
-          for tp in tp01 tp02 tp03 tp04 tp05 tp06 tp07 tp08 tp09 tp10 docs; do
+          for tp in tp[0-9][0-9] docs; do   # v1 seulement (la v2, tpNN-thème, est dans ci.yml)
             if [ -d "$tp" ]; then
               echo ""
               echo "=== Dry-run validation for $tp ==="
@@ -584,106 +590,6 @@ jobs:
         run: |
           kubectl delete namespace taskflow --ignore-not-found=true --timeout=60s || true
 
-  validate-readme-manifests:
-    name: Extract and Validate README Manifests
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install dependencies
-        run: |
-          pip install pyyaml
-
-      - name: Extract YAML from README files
-        run: |
-          python3 << 'PYTHON_SCRIPT'
-          import re
-          import yaml
-          import os
-          from pathlib import Path
-
-          def extract_yaml_blocks(readme_path):
-              """Extract YAML blocks from a markdown file."""
-              with open(readme_path, 'r', encoding='utf-8') as f:
-                  content = f.read()
-
-              # Find all YAML code blocks
-              pattern = r'```yaml\n(.*?)```'
-              matches = re.findall(pattern, content, re.DOTALL)
-              return matches
-
-          def validate_yaml(yaml_content, source):
-              """Validate YAML syntax."""
-              try:
-                  # Try to parse as YAML
-                  docs = list(yaml.safe_load_all(yaml_content))
-
-                  # Check for Kubernetes resources
-                  k8s_count = 0
-                  for doc in docs:
-                      if doc and isinstance(doc, dict):
-                          if 'apiVersion' in doc and 'kind' in doc:
-                              k8s_count += 1
-
-                  return True, k8s_count
-              except yaml.YAMLError as e:
-                  return False, str(e)
-
-          # Process all TP README files
-          tps = ['tp1', 'tp2', 'tp3', 'tp4', 'tp5', 'tp6', 'tp7', 'tp8', 'tp9', 'tp10']
-          total_yaml = 0
-          total_k8s = 0
-          errors = []
-
-          for tp in tps:
-              readme_path = Path(tp) / 'README.md'
-              if not readme_path.exists():
-                  continue
-
-              print(f"\n{'='*60}")
-              print(f"Processing {readme_path}")
-              print(f"{'='*60}")
-
-              yaml_blocks = extract_yaml_blocks(readme_path)
-              print(f"Found {len(yaml_blocks)} YAML blocks")
-
-              for i, yaml_content in enumerate(yaml_blocks, 1):
-                  total_yaml += 1
-                  valid, result = validate_yaml(yaml_content, f"{tp}/README.md block {i}")
-
-                  if valid:
-                      k8s_count = result
-                      if k8s_count > 0:
-                          total_k8s += k8s_count
-                          print(f"  ✓ Block {i}: Valid YAML with {k8s_count} Kubernetes resource(s)")
-                  else:
-                      error_msg = f"{tp}/README.md block {i}: {result}"
-                      errors.append(error_msg)
-                      print(f"  ✗ Block {i}: Invalid YAML - {result}")
-
-          print(f"\n{'='*60}")
-          print(f"Summary")
-          print(f"{'='*60}")
-          print(f"Total YAML blocks: {total_yaml}")
-          print(f"Total Kubernetes resources: {total_k8s}")
-          print(f"Errors: {len(errors)}")
-
-          if errors:
-              print("\nErrors found:")
-              for error in errors[:10]:  # Show first 10 errors
-                  print(f"  - {error}")
-
-          # Don't fail the job on validation errors, just report
-          print(f"\n✓ README manifest extraction completed")
-          PYTHON_SCRIPT
-
   lint-readme:
     name: Lint README Files
     runs-on: ubuntu-latest
@@ -695,7 +601,7 @@ jobs:
       - name: Check README files exist
         run: |
           echo "Checking README files..."
-          for tp in tp01 tp02 tp03 tp04 tp05 tp06 tp07 tp08 tp09 tp10; do
+          for tp in tp[0-9][0-9] tp[0-9][0-9]-*; do
             if [ -f "$tp/README.md" ]; then
               echo "✓ $tp/README.md exists ($(wc -l < "$tp/README.md") lines)"
             else

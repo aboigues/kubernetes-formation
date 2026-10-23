@@ -21,5 +21,8 @@ monitoring-agent:*
 taskflow-backend:*
 taskflow-frontend:*
 
+# --- Version qui n'existe pas, volontairement (panne n° 1 du TP03 : ImagePullBackOff) ---
+telemachlearning/telemarche-api:1.2
+
 # --- Registres fictifs utilisés dans les exemples ---
 private-registry.example.com/*
