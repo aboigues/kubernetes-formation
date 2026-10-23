@@ -1,0 +1,4 @@
+Télémarché {{ .Values.api.image.tag | default .Chart.AppVersion }} est installé : release « {{ .Release.Name }} », namespace « {{ .Release.Namespace }} », révision {{ .Release.Revision }}.
+
+  kubectl get pods -l app.kubernetes.io/instance={{ .Release.Name }} -n {{ .Release.Namespace }}
+  kubectl get --raw /api/v1/namespaces/{{ .Release.Namespace }}/services/http:{{ include "telemarche.nom" . }}-web:80/proxy/api/info

@@ -1,0 +1,7 @@
+# Surcharges de PRODUCTION : seules les clés qui changent par rapport à values.yaml.
+#   helm upgrade --install telemarche ./telemarche -f telemarche/values-prod.yaml
+web:
+  replicas: 2
+api:
+  replicas: 3
+  logLevel: warn

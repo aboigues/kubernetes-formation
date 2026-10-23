@@ -110,7 +110,7 @@ Ouvrez la vitrine (`minikube service web -n telemarche --url`) : le pied de page
 Passez une commande, puis supprimez **tout ce qui tourne** :
 
 ```bash
-kubectl port-forward service/web 8080:80 &
+kubectl port-forward service/web 8080:80 & sleep 2      # laisser au tunnel le temps de s'ouvrir
 curl -s -X POST localhost:8080/api/orders -d '{"product_id": 3, "quantity": 2}'; echo
 kubectl delete pod db-0
 kubectl rollout restart deployment/api

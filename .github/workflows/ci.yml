@@ -35,6 +35,10 @@ env:
   MINIKUBE_VERSION: 1.39.0
   TRIVY_IMAGE: aquasec/trivy:0.76.1
   KUBECONFORM_IMAGE: ghcr.io/yannh/kubeconform:v0.8.0
+  # Helm 4 (les runners n'ont que Helm 3) : binaire officiel, checksum FIGÉ ici
+  # plutôt que téléchargé à côté de l'archive, qui ne prouverait rien.
+  HELM_VERSION: v4.3.1
+  HELM_SHA256: 0403a88ae20913d11b10a2467b50087721fea7581736da6b9d3992f5357fe54b
 
 jobs:
   # 1) Déterminer la liste des TP à tester à partir des fichiers modifiés.
@@ -100,6 +104,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Helm ${{ env.HELM_VERSION }}
+        run: |
+          set -euo pipefail
+          curl -fsSLo helm.tgz "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
+          echo "${HELM_SHA256}  helm.tgz" | sha256sum -c -
+          tar -xzf helm.tgz linux-amd64/helm
+          sudo install -m 0755 linux-amd64/helm /usr/local/bin/helm
+          rm -rf helm.tgz linux-amd64
+          helm version --short
+
       - name: Chaque starter contient des trous, chaque solution n'en contient aucun
         run: |
           set -euo pipefail
@@ -135,7 +149,27 @@ jobs:
             -schema-location default \
             -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
             -skip InitConfiguration,ClusterConfiguration,JoinConfiguration,KubeletConfiguration \
+            -ignore-filename-pattern '/templates/' -ignore-filename-pattern 'Chart\.yaml$' \
+            -ignore-filename-pattern '/values[^/]*\.yaml$' \
             $dirs
+
+      - name: Charts Helm (helm lint, puis rendu validé par kubeconform)
+        # Les templates ne sont pas du YAML : on valide ce qu'ils produisent, avec
+        # les values par défaut puis chaque fichier values-*.yaml du chart.
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for chart in tp[0-9][0-9]-*/solution/*/Chart.yaml; do
+            dir="$(dirname "$chart")"
+            echo "== $dir"
+            helm lint "$dir"
+            for v in "" "$dir"/values-*.yaml; do
+              echo "-- values : ${v:-défaut}"
+              helm template rendu "$dir" ${v:+-f "$v"} \
+                | docker run --rm -i "$KUBECONFORM_IMAGE" -strict -summary \
+                    -kubernetes-version "${KUBERNETES_VERSION#v}" -
+            done
+          done
 
       - name: Configurations kubeadm (kubeadm config validate, ${{ env.KUBERNETES_VERSION }})
         # Sans schéma pour kubeconform : on les fait valider par kubeadm lui-même.
@@ -189,6 +223,16 @@ jobs:
           cni: ${{ startsWith(matrix.tp, 'tp11-') && 'calico' || 'auto' }}
           cpus: max
           memory: max
+
+      - name: Helm ${{ env.HELM_VERSION }}
+        run: |
+          set -euo pipefail
+          curl -fsSLo helm.tgz "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz"
+          echo "${HELM_SHA256}  helm.tgz" | sha256sum -c -
+          tar -xzf helm.tgz linux-amd64/helm
+          sudo install -m 0755 linux-amd64/helm /usr/local/bin/helm
+          rm -rf helm.tgz linux-amd64
+          helm version --short
 
       - name: Prérequis du cluster — ${{ matrix.tp }}
         # Addons, contrôleurs ou nœuds supplémentaires qu'un TP fait installer

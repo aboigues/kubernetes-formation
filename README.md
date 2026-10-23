@@ -11,7 +11,7 @@
 
 Ici, on **apprend en faisant** : chaque TP part de manifestes à trous que vous complétez vous-même, et un script vérifie que l'objectif est atteint — pas de copier/coller passif.
 
-> 🚧 **Dépôt en cours de refonte (v2).** Les TP au nouveau format sont listés ci-dessous ; les dossiers `tp04/`, `tp06/`, `tp07/` et `tp10/` sont l'**ancienne génération**, retirée au fur et à mesure. L'état complet d'avant la refonte reste disponible : voir [Ancienne génération (v1)](#-ancienne-génération-v1).
+> **Nouvelle génération (v2).** Les 14 TP ci-dessous remplacent l'ancienne génération, entièrement retirée du dépôt. Elle reste consultable : voir [Ancienne génération (v1)](#-ancienne-génération-v1).
 
 ---
 
@@ -76,9 +76,9 @@ Chaque TP fournit son **état de départ** : vous pouvez faire un TP sans avoir 
 | [TP09](tp09-placement-maintenance/) | Placement et maintenance : anti-affinité, taints et tolerations, `drain`, PodDisruptionBudget | ✅ |
 | [TP10](tp10-installer-cluster/) | Installer un cluster avec kubeadm : 3 VM AlmaLinux 10, containerd, Calico, certificats, sauvegarde etcd | ✅ ¹ |
 | [TP11](tp11-network-policies/) | Network Policies avec Calico : tout interdire, DNS, ouvrir flux par flux, limites des labels | ✅ |
-| TP12 | Helm | 🚧 |
-| TP13 | Observabilité : Prometheus, Grafana, journaux | 🚧 |
-| TP14 | Projet final : exploiter Télémarché et résoudre des incidents | 🚧 |
+| [TP12](tp12-helm/) | Helm 4 : écrire le chart de Télémarché, values par environnement, upgrade, rollback, server-side apply | ✅ |
+| [TP13](tp13-observabilite/) | Observabilité : kube-prometheus-stack, ServiceMonitor, PromQL, alertes testées par la panne, Grafana | ✅ |
+| [TP14](tp14-projet-final/) | Projet final : mettre Télémarché en production, cinq incidents à diagnostiquer, rapport d'astreinte | ✅ |
 
 ### Parcours DEVOPS-012 — déployer et exploiter un cluster (2 jours)
 
@@ -167,9 +167,9 @@ Avant la refonte, le dépôt proposait 11 TP au format « manifestes complets »
 | `tp01` — premier déploiement | TP01 |
 | `tp02` — manifestes (pods, deployments, services, WordPress) | TP02, TP03 (WordPress → TP05) |
 | `tp03` — persistance | TP05 |
-| `tp04` — monitoring et logs | TP06 (HPA), TP13 |
+| `tp04` — monitoring et logs | TP06 (HPA), TP13 (EFK : v1 seulement) |
 | `tp05` — sécurité et RBAC | TP08, TP11 |
-| `tp06` — production, Helm, CI/CD | TP12 |
+| `tp06` — production, Helm, CI/CD | TP12 (Kustomize, ArgoCD, Tekton : v1 seulement) |
 | `tp07` — migration Compose → Kubernetes | — (v1) |
 | `tp08` — réseau | TP03, TP11 |
 | `tp09` — multi-nœud | TP09 |

@@ -31,21 +31,6 @@
 # Historique : les 2 entrées fluentd/libcurl4t64 (CVE-2026-5773, CVE-2026-6276)
 # ont été retirées le 2026-09-01, l'amont ayant reconstruit l'image entre-temps.
 # Voir la note de mémoire « barriere-scan-images-actionnable ».
-vulnerabilities:
-  # ── alpine/helm:3.22.1 (v1 tp06/tekton, Tekton Task helm-deploy) ──
-  # Alpine a publié le correctif (libexpat 2.8.5-r0 → 2.9.0-r0) ; c'est l'image
-  # alpine/helm qui n'a pas été reconstruite depuis (tag 3.22.1 du 2026-10-16).
-  # Mesuré le 2026-10-23 : 3.22.1 est le tag le plus récent de la ligne 3.x, et
-  # la seule CVE bloquante restante des 26 images du périmètre ; aucune autre
-  # image ne porte cette CVE (l'exception ne masque donc rien ailleurs).
-  #
-  # À l'expiration : soit l'amont a republié le tag (l'entrée devient sans
-  # objet, la retirer), soit le v1 tp06 a été retiré au lot 5 de la refonte
-  # (idem), soit il faut durcir l'image dans docker/hardened/.
-  - id: CVE-2026-77214
-    purl: "pkg:apk/alpine/libexpat"
-    statement: >-
-      libexpat 2.8.5-r0, corrigé en 2.9.0-r0 chez Alpine. Non corrigeable par un
-      bump : alpine/helm:3.22.1 est le dernier tag et n'a pas été reconstruit.
-      Image du v1 tp06, retiré au lot 5 de la refonte.
-    expired_at: 2026-11-13
+# 2026-10-23 : l'exception CVE-2026-77214 (libexpat, alpine/helm:3.22.1) est
+# partie avec le dossier v1 tp06/, seul utilisateur de l'image, retiré au lot 5.
+vulnerabilities: []

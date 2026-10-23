@@ -1,0 +1,38 @@
+# Panne — signalée par l'équipe : « le service de stock a été livré ce matin ».
+# Ne lisez pas ce fichier pour trouver la panne : laissez la supervision la trouver.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stock
+  labels:
+    app: stock
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: stock
+  template:
+    metadata:
+      labels:
+        app: stock
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: stock
+          image: telemachlearning/telemarche-api:1.0
+          env:
+            - name: LOG_LEVEL
+              value: bavard
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 100m, memory: 64Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

@@ -1,0 +1,16 @@
+# Dire à Prometheus où trouver les métriques de l'API : les Services qui portent
+# le label app=api (dans CE namespace), port « http », chemin /metrics.
+apiVersion: monitoring.coreos.com/v1
+kind: ______               # TODO 1 : l'objet de prometheus-operator qui décrit une cible à collecter
+metadata:
+  name: api
+  labels:
+    app: api
+spec:
+  selector:
+    matchLabels:
+      app: ______            # TODO 2 : les Services de l'API
+  endpoints:
+    - port: ______           # TODO 3 : le NOM du port du Service (kubectl get svc api -o yaml)
+      path: ______           # TODO 4 : le chemin où l'API publie ses métriques
+      interval: 15s
