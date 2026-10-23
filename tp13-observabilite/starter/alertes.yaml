@@ -1,0 +1,30 @@
+# Deux alertes d'exploitant pour Télémarché, évaluées par Prometheus et
+# transmises à Alertmanager.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: telemarche
+  labels:
+    app.kubernetes.io/part-of: telemarche
+spec:
+  groups:
+    - name: telemarche
+      rules:
+        # Un conteneur qui redémarre en boucle (CrashLoopBackOff), où qu'il soit.
+        - alert: ConteneurRedemarreEnBoucle
+          # TODO 5 : plus de 2 redémarrages en 5 minutes (fonction increase, métrique de kube-state-metrics)
+          expr: ______(kube_pod_container_status_restarts_total[5m]) > 2
+          for: ______             # TODO 7 : la condition doit tenir une minute avant d'alerter
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.namespace }}/{{ $labels.pod }} : {{ $value | humanize }} redémarrages en 5 min"
+        # Plus aucun pod de l'API disponible (étape 5 : pourquoi pas « up »).
+        - alert: TelemarcheApiIndisponible
+          # TODO 6 : le nombre de réplicas DISPONIBLES du Deployment api, publié par kube-state-metrics
+          expr: ______{deployment="api"} == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Aucun pod de l'API disponible dans {{ $labels.namespace }}"

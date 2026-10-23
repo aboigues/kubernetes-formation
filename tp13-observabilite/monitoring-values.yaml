@@ -1,0 +1,41 @@
+# Valeurs du chart kube-prometheus-stack pour le TP13 (étape 1).
+prometheus:
+  prometheusSpec:
+    # Par défaut, Prometheus n'adopte que les ServiceMonitors et les règles
+    # portant le label de SA release Helm. Ici : tous, dans tous les namespaces.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    scrapeInterval: 15s
+    evaluationInterval: 15s
+    retention: 1d
+    resources:
+      requests: {cpu: 100m, memory: 400Mi}
+      limits: {memory: 1Gi}
+
+grafana:
+  # Le mot de passe admin n'est PAS ici : prerequis.sh (ou l'étape 1) le tire au
+  # hasard. Celui du chart par défaut, « prom-operator », est public.
+  sidecar:
+    dashboards:
+      searchNamespace: ALL        # les tableaux de bord vivent avec leur application
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {memory: 256Mi}
+
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests: {cpu: 10m, memory: 32Mi}
+      limits: {memory: 128Mi}
+
+# Sous minikube, ces composants ne sont pas joignables par Prometheus : sans ces
+# lignes, des alertes « …Down » sonneraient en permanence pour rien.
+kubeEtcd:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false

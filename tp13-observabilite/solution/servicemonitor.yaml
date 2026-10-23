@@ -1,0 +1,16 @@
+# Dire à Prometheus où trouver les métriques de l'API : les Services qui portent
+# le label app=api (dans CE namespace), port « http », chemin /metrics.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: api
+  labels:
+    app: api
+spec:
+  selector:
+    matchLabels:
+      app: api
+  endpoints:
+    - port: http             # le NOM du port du Service, pas son numéro
+      path: /metrics
+      interval: 15s
