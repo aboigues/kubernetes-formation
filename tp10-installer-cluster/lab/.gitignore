@@ -1,0 +1,2 @@
+# État local de Vagrant (machines créées, clés SSH) : propre à chaque poste.
+.vagrant/
