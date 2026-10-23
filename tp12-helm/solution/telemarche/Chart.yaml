@@ -1,0 +1,6 @@
+apiVersion: v2
+name: telemarche
+description: Télémarché, la boutique en ligne fil rouge de la formation (vitrine + API)
+type: application
+version: 0.1.0          # la version du CHART : à monter à chaque modification du chart
+appVersion: "1.0"       # la version de l'APPLICATION déployée par défaut

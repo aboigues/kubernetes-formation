@@ -1,0 +1,56 @@
+# La vitrine : elle relaie /api/ vers l'API de LA MÊME release.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "telemarche.nom" . }}-web
+  labels:
+    {{- include "telemarche.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  replicas: {{ .Values.web.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: web
+  template:
+    metadata:
+      labels:
+        {{- include "telemarche.labels" . | nindent 8 }}
+        app.kubernetes.io/component: web
+    spec:
+      securityContext:
+        {{- include "telemarche.securite.pod" . | nindent 8 }}
+      containers:
+        - name: web
+          image: "{{ .Values.web.image.repository }}:{{ .Values.web.image.tag | default .Chart.AppVersion }}"
+          env:
+            - name: API_URL
+              value: "http://______"   # TODO 4 : le Service de l'API de CETTE release (nom calculé, comme dans api.yaml)
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet: {path: /ready, port: 8080}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /healthz, port: 8080}
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.web.resources | nindent 12 }}
+          securityContext:
+            {{- include "telemarche.securite.conteneur" . | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "telemarche.nom" . }}-web
+  labels:
+    {{- include "telemarche.labels" . | nindent 4 }}
+    app.kubernetes.io/component: web
+spec:
+  type: {{ .Values.web.service.type }}
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: web
+  ports:
+    - port: 80
+      targetPort: 8080

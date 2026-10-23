@@ -76,7 +76,7 @@ Chaque TP fournit son **état de départ** : vous pouvez faire un TP sans avoir 
 | [TP09](tp09-placement-maintenance/) | Placement et maintenance : anti-affinité, taints et tolerations, `drain`, PodDisruptionBudget | ✅ |
 | [TP10](tp10-installer-cluster/) | Installer un cluster avec kubeadm : 3 VM AlmaLinux 10, containerd, Calico, certificats, sauvegarde etcd | ✅ ¹ |
 | [TP11](tp11-network-policies/) | Network Policies avec Calico : tout interdire, DNS, ouvrir flux par flux, limites des labels | ✅ |
-| TP12 | Helm | 🚧 |
+| [TP12](tp12-helm/) | Helm 4 : écrire le chart de Télémarché, values par environnement, upgrade, rollback, server-side apply | ✅ |
 | TP13 | Observabilité : Prometheus, Grafana, journaux | 🚧 |
 | TP14 | Projet final : exploiter Télémarché et résoudre des incidents | 🚧 |
 

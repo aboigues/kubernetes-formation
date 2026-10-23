@@ -1,0 +1,24 @@
+# Valeurs par défaut du chart : celles d'un environnement de développement.
+# Chaque clé est lue par un template ({{ .Values.… }}) ; surchargez-les avec
+# -f values-prod.yaml ou --set api.replicas=3.
+
+web:
+  replicas: 1
+  image:
+    repository: telemachlearning/telemarche-web
+    tag: ""             # vide : on prend appVersion (Chart.yaml)
+  service:
+    type: ClusterIP
+  resources:
+    requests: {cpu: 50m, memory: 32Mi}
+    limits: {cpu: 200m, memory: 64Mi}
+
+api:
+  replicas: 1
+  image:
+    repository: telemachlearning/telemarche-api
+    tag: ""
+  logLevel: debug
+  resources:
+    requests: {cpu: 50m, memory: 32Mi}
+    limits: {cpu: 500m, memory: 64Mi}
