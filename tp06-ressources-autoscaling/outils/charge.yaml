@@ -1,0 +1,54 @@
+# Outil fourni : une charge CPU sur l'API pendant 3 minutes, puis le Job se
+# termine tout seul. Quatre pods envoient en boucle des requêtes /api/charge,
+# qui occupent chacune un cœur de l'API pendant 200 ms.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: charge
+  labels:
+    app: charge
+spec:
+  completions: 4
+  parallelism: 4
+  backoffLimit: 4
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app: charge
+    spec:
+      restartPolicy: Never
+      # Durcissement standard du dépôt (expliqué à l'étape 2) : ne pas modifier.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: charge
+          image: telemachlearning/curl:8.21.0
+          env:
+            - name: DUREE_S
+              value: "180"
+          command: ["sh", "-c"]
+          args:
+            - |
+              fin=$(( $(date +%s) + DUREE_S ))
+              n=0
+              while [ "$(date +%s)" -lt "$fin" ]; do
+                curl -s -o /dev/null -m 5 'http://api/api/charge?ms=200' && n=$((n+1))
+              done
+              echo "$n requêtes envoyées en ${DUREE_S} s"
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 32Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

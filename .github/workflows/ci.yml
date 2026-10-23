@@ -126,8 +126,12 @@ jobs:
         run: |
           set -euo pipefail
           dirs=$(ls -d tp[0-9][0-9]-*/solution tp[0-9][0-9]-*/pannes tp[0-9][0-9]-*/outils 2>/dev/null | xargs)
+          # Les CRD (Gateway API…) sont validées par le catalogue communautaire de schémas.
           docker run --rm -v "$PWD":/w:ro -w /w "$KUBECONFORM_IMAGE" \
-            -strict -summary -kubernetes-version "${KUBERNETES_VERSION#v}" $dirs
+            -strict -summary -kubernetes-version "${KUBERNETES_VERSION#v}" \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            $dirs
 
       - name: Sécurité des manifestes (trivy config, 0 HIGH/CRITICAL)
         # Trivy n'accepte qu'une cible : on rassemble ce qui est réellement
@@ -144,7 +148,7 @@ jobs:
       - name: Scripts shell (shellcheck)
         run: |
           set -euo pipefail
-          shellcheck -x -S warning scripts/*.sh tp[0-9][0-9]-*/verify.sh
+          shellcheck -x -S warning scripts/*.sh tp[0-9][0-9]-*/*.sh
 
   # 3) Rejouer verify.sh solution dans un cluster neuf, un TP par job.
   tp:
@@ -168,6 +172,14 @@ jobs:
           container-runtime: containerd
           cpus: max
           memory: max
+
+      - name: Prérequis du cluster — ${{ matrix.tp }}
+        # Addons, contrôleurs ou nœuds supplémentaires qu'un TP fait installer
+        # dans son README (metrics-server, Traefik, nœuds…) : scriptés dans
+        # prerequis.sh. AVANT le chargement des images, pour que les nœuds
+        # ajoutés reçoivent aussi celles de la PR.
+        run: |
+          if [ -x "${{ matrix.tp }}/prerequis.sh" ]; then ./${{ matrix.tp }}/prerequis.sh; else echo "aucun"; fi
 
       # Les images du fil rouge sont construites depuis les sources de la PR et
       # chargées dans le cluster : on teste le code de la PR, pas ce qui est

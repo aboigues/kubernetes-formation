@@ -1,0 +1,17 @@
+# Les valeurs par défaut de chaque conteneur qui n'en précise pas, et les
+# bornes qu'aucun conteneur ne peut dépasser.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: defauts
+spec:
+  limits:
+    - type: Container
+      defaultRequest:
+        cpu: 100m
+        memory: 64Mi
+      default:
+        cpu: 500m
+        memory: 128Mi
+      max:
+        memory: 512Mi

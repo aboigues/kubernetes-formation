@@ -1,0 +1,29 @@
+# Étape 2 : une image qui démarre en root par défaut (busybox), lancée avec
+# le garde-fou runAsNonRoot mais SANS runAsUser. Que va faire le kubelet ?
+apiVersion: v1
+kind: Pod
+metadata:
+  name: racine
+  labels:
+    app: racine
+spec:
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: racine
+      image: busybox:1.38.0
+      command: ["sh", "-c", "id; sleep 3600"]
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          cpu: 50m
+          memory: 32Mi
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]

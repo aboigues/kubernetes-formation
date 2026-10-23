@@ -1,0 +1,85 @@
+# L'identité de l'outil de supervision : il lit les pods et leurs journaux,
+# rien d'autre. Un ServiceAccount, un Role (les droits), un RoleBinding (le lien).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: supervision
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: lecture-pods
+rules:
+  - apiGroups: [""]               # "" : le groupe de base (pods, services, secrets…)
+    resources: ["pods", ______]     # TODO 6 : et leurs journaux (une sous-ressource)
+    verbs: ______                    # TODO 7 : lire, lister, suivre — et rien d'autre
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: supervision-lecture
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ______                  # TODO 8 : le Role à attribuer
+subjects:
+  # Sans « namespace », le sujet est cherché dans celui du RoleBinding.
+  - kind: ServiceAccount
+    name: ______                # TODO 9 : à qui on l'attribue
+---
+# Outil fourni : « appel MÉTHODE RESSOURCE [NAMESPACE] » interroge l'API
+# server avec l'identité du pod, et affiche le code HTTP de la réponse.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: outil-appel
+data:
+  appel: |
+    #!/bin/sh
+    D=/var/run/secrets/kubernetes.io/serviceaccount
+    NS="${3:-$(cat "$D/namespace")}"
+    printf '%s %s (namespace %s) -> ' "$1" "$2" "$NS"
+    curl -s -o /dev/null -w '%{http_code}\n' -X "$1" --cacert "$D/ca.crt" \
+      -H "Authorization: Bearer $(cat "$D/token")" \
+      "https://kubernetes.default.svc/api/v1/namespaces/$NS/$2"
+---
+# Le pod de supervision : il porte l'identité « supervision ».
+apiVersion: v1
+kind: Pod
+metadata:
+  name: supervision
+  labels:
+    app: supervision
+spec:
+  serviceAccountName: ______    # TODO 10 : l'identité que porte ce pod
+  # Durcissement standard du dépôt (expliqué au TP06) : ne pas modifier.
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 100
+    runAsGroup: 101
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: supervision
+      image: telemachlearning/curl:8.21.0
+      command: ["sleep", "infinity"]
+      volumeMounts:
+        - name: outil
+          mountPath: /outils
+      resources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+        limits:
+          cpu: 100m
+          memory: 32Mi
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]
+  volumes:
+    - name: outil
+      configMap:
+        name: outil-appel
+        defaultMode: 0555

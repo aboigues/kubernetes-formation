@@ -1,0 +1,42 @@
+# Les routes de Télémarché, gérées par l'équipe applicative dans SON namespace,
+# et rattachées au Gateway « entree » de l'exploitant.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: telemarche
+  labels:
+    app.kubernetes.io/part-of: telemarche
+spec:
+  parentRefs:
+    - name: ______            # TODO 4 : le Gateway de l'exploitant
+      namespace: ______       # TODO 5 : son namespace
+  hostnames:
+    - ______                  # TODO 6 : le nom de domaine de la boutique
+  rules:
+    # 1. Les testeurs (en-tête X-Canari: oui) voient toujours la nouvelle API.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+          headers:
+            - name: X-Canari
+              value: ______   # TODO 7 : la valeur qui désigne un testeur
+      backendRefs:
+        - name: api-canari
+          port: 80
+    # 2. Les autres appels à l'API : 90 % vers la version stable, 10 % vers la canari.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      backendRefs:
+        - name: api
+          port: 80
+          weight: ______      # TODO 8 : 90 % du trafic
+        - name: api-canari
+          port: 80
+          weight: ______      # TODO 9 : 10 % du trafic
+    # 3. Tout le reste : la vitrine.
+    - backendRefs:
+        - name: ______        # TODO 10 : le Service de la vitrine
+          port: 80

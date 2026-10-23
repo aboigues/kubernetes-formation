@@ -1,0 +1,44 @@
+# Panne — signalée par l'équipe : « l'inventaire ne démarre jamais, et il n'y a aucun journal à lire ».
+# Ne lisez pas ce fichier pour trouver la panne : diagnostiquez-la avec kubectl.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventaire
+  labels:
+    app: inventaire
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inventaire
+  template:
+    metadata:
+      labels:
+        app: inventaire
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: inventaire
+          image: telemachlearning/telemarche-api:1.0
+          env:
+            - name: MEMORY_BALLAST_MB
+              value: "0"
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: "64"
+              memory: 32Mi
+            limits:
+              cpu: "64"
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

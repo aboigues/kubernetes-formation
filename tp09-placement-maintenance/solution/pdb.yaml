@@ -1,0 +1,12 @@
+# Pendant une maintenance (drain), jamais moins de 2 pods d'API disponibles.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api
+  labels:
+    app: api
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: api

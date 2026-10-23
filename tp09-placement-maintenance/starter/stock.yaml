@@ -1,0 +1,74 @@
+# Le service de stock : il a besoin d'un disque rapide, sur le nœud qui lui est réservé.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stock
+  labels:
+    app: stock
+    app.kubernetes.io/part-of: telemarche
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: stock
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: stock
+        app.kubernetes.io/part-of: telemarche
+    spec:
+      # La toleration AUTORISE le nœud réservé (taint dedie=stock) ;
+      # le nodeSelector y ENVOIE le pod. Il faut les deux.
+      tolerations:
+        - key: ______          # TODO 3 : la clé du taint posé à l'étape 3
+          operator: Equal
+          value: ______        # TODO 4 : sa valeur
+          effect: ______       # TODO 5 : son effet
+      nodeSelector:
+        disque: ______         # TODO 6 : le label du nœud au disque rapide
+      # Durcissement standard du dépôt (expliqué au TP06) : ne pas modifier.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: stock
+          image: telemachlearning/telemarche-api:1.0
+          ports:
+            - containerPort: 8080
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 2
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            periodSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 500m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

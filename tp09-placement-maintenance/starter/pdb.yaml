@@ -1,0 +1,12 @@
+# Pendant une maintenance (drain), jamais moins de 2 pods d'API disponibles.
+apiVersion: policy/v1
+kind: ______                 # TODO 7 : un budget d'interruptions
+metadata:
+  name: api
+  labels:
+    app: api
+spec:
+  minAvailable: ______         # TODO 8 : jamais moins de deux pods disponibles
+  selector:
+    matchLabels:
+      app: ______              # TODO 9 : les pods protégés

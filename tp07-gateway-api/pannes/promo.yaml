@@ -1,0 +1,18 @@
+# Panne — signalée par le marketing : « la page promo.telemarche.local renvoie une erreur ».
+# Ne lisez pas ce fichier pour trouver la panne : diagnostiquez-la avec kubectl.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: promo
+  labels:
+    app.kubernetes.io/part-of: telemarche
+spec:
+  parentRefs:
+    - name: entree
+      namespace: traefik
+  hostnames:
+    - promo.telemarche.local
+  rules:
+    - backendRefs:
+        - name: vitrine
+          port: 80
