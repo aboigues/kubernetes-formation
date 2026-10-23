@@ -19,9 +19,11 @@ grafana:
   sidecar:
     dashboards:
       searchNamespace: ALL        # les tableaux de bord vivent avec leur application
+  # Mesuré : Grafana 13 occupe ~240 Mi au repos. Une limite à 256 Mi le faisait
+  # tuer (OOMKilled) dès qu'il chargeait un peu plus : en CI, à chaque démarrage.
   resources:
-    requests: {cpu: 50m, memory: 128Mi}
-    limits: {memory: 256Mi}
+    requests: {cpu: 50m, memory: 256Mi}
+    limits: {memory: 512Mi}
 
 alertmanager:
   alertmanagerSpec:
