@@ -26,12 +26,17 @@ from pathlib import Path
 
 import yaml
 
-# Répertoires scannés (mêmes cibles que les autres jobs de la CI)
-SCAN_DIRS = [
-    "tp01", "tp02", "tp03", "tp04", "tp05",
-    "tp06", "tp07", "tp08", "tp09", "tp10",
-    "docs",
-]
+# Répertoires scannés : tous les dossiers de TP (ancienne génération « tpNN »
+# et nouvelle « tpNN-thème »), découverts à chaque exécution, plus docs/.
+# Une liste écrite en dur oubliait les nouveaux TP sans que rien ne le signale.
+SCAN_GLOBS = ("tp[0-9][0-9]", "tp[0-9][0-9]-*")
+EXTRA_DIRS = ("docs",)
+
+
+def scan_dirs(root: Path) -> list[Path]:
+    dirs = {d for pattern in SCAN_GLOBS for d in root.glob(pattern) if d.is_dir()}
+    dirs.update(root / d for d in EXTRA_DIRS if (root / d).is_dir())
+    return sorted(dirs)
 
 # Clés dont la valeur est une liste de conteneurs portant un champ "image"
 CONTAINER_KEYS = (
@@ -102,11 +107,12 @@ def main() -> int:
     scannable: set[str] = set()
     skipped: dict[str, str] = {}
 
-    for scan_dir in SCAN_DIRS:
-        directory = root / scan_dir
-        if not directory.is_dir():
-            continue
+    for directory in scan_dirs(root):
         for path in sorted(list(directory.rglob("*.yaml")) + list(directory.rglob("*.yml"))):
+            # starter/ : manifestes à trous (« image: ______ ») ; leurs vraies
+            # images sont celles de solution/, déjà scannées.
+            if "starter" in path.relative_to(root).parts:
+                continue
             try:
                 documents = list(yaml.safe_load_all(path.read_text(encoding="utf-8")))
             except yaml.YAMLError:
