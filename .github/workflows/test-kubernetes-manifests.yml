@@ -496,27 +496,6 @@ jobs:
           cd tp08
           ./test-tp8.sh || echo "Some tests failed but continuing..."
 
-  test-tp9-multi-node:
-    name: Test TP9 - Multi-Node Management
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Minikube
-        uses: medyagh/setup-minikube@latest
-        with:
-          kubernetes-version: 'v1.32.0'
-
-      - name: Make test script executable
-        run: chmod +x tp09/test-tp9.sh
-
-      - name: Run TP9 multi-node tests
-        run: |
-          cd tp09
-          ./test-tp9.sh
-
   test-tp10-synthesis:
     name: Test TP10 - Synthesis Project (TaskFlow)
     runs-on: ubuntu-latest

@@ -173,6 +173,14 @@ jobs:
           cpus: max
           memory: max
 
+      - name: Prérequis du cluster — ${{ matrix.tp }}
+        # Addons, contrôleurs ou nœuds supplémentaires qu'un TP fait installer
+        # dans son README (metrics-server, Traefik, nœuds…) : scriptés dans
+        # prerequis.sh. AVANT le chargement des images, pour que les nœuds
+        # ajoutés reçoivent aussi celles de la PR.
+        run: |
+          if [ -x "${{ matrix.tp }}/prerequis.sh" ]; then ./${{ matrix.tp }}/prerequis.sh; else echo "aucun"; fi
+
       # Les images du fil rouge sont construites depuis les sources de la PR et
       # chargées dans le cluster : on teste le code de la PR, pas ce qui est
       # publié sur Docker Hub.
@@ -188,12 +196,6 @@ jobs:
           minikube image load \
             telemachlearning/telemarche-api:1.0 telemachlearning/telemarche-api:1.1 \
             telemachlearning/telemarche-web:1.0 telemachlearning/telemarche-web:1.1
-
-      - name: Prérequis du cluster — ${{ matrix.tp }}
-        # Addons, contrôleurs ou nœuds supplémentaires qu'un TP fait installer
-        # dans son README (metrics-server, Traefik…) : scriptés dans prerequis.sh.
-        run: |
-          if [ -x "${{ matrix.tp }}/prerequis.sh" ]; then ./${{ matrix.tp }}/prerequis.sh; else echo "aucun"; fi
 
       - name: verify.sh solution — ${{ matrix.tp }}
         run: ./${{ matrix.tp }}/verify.sh solution

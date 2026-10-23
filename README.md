@@ -11,7 +11,7 @@
 
 Ici, on **apprend en faisant** : chaque TP part de manifestes à trous que vous complétez vous-même, et un script vérifie que l'objectif est atteint — pas de copier/coller passif.
 
-> 🚧 **Dépôt en cours de refonte (v2).** Les TP au nouveau format sont listés ci-dessous ; les dossiers `tp04/` à `tp10/` sont l'**ancienne génération**, retirée au fur et à mesure. L'état complet d'avant la refonte reste disponible : voir [Ancienne génération (v1)](#-ancienne-génération-v1).
+> 🚧 **Dépôt en cours de refonte (v2).** Les TP au nouveau format sont listés ci-dessous ; les dossiers `tp04/` à `tp08/` et `tp10/` sont l'**ancienne génération**, retirée au fur et à mesure. L'état complet d'avant la refonte reste disponible : voir [Ancienne génération (v1)](#-ancienne-génération-v1).
 
 ---
 
@@ -73,7 +73,7 @@ Chaque TP fournit son **état de départ** : vous pouvez faire un TP sans avoir 
 | [TP06](tp06-ressources-autoscaling/) | Ressources et autoscaling : requests/limits, QoS, `OOMKilled`, durcissement, HPA | ✅ |
 | [TP07](tp07-gateway-api/) | Gateway API avec Traefik : Gateway, HTTPRoute, routage par en-tête, canari pondéré | ✅ |
 | [TP08](tp08-namespaces-rbac/) | Namespaces, quotas et RBAC : ResourceQuota, LimitRange, ServiceAccount, Role, `auth can-i` | ✅ |
-| TP09 | Placement et maintenance : affinités, taints, `drain`, PodDisruptionBudget | 🚧 |
+| [TP09](tp09-placement-maintenance/) | Placement et maintenance : anti-affinité, taints et tolerations, `drain`, PodDisruptionBudget | ✅ |
 | TP10 | Installer un cluster avec kubeadm | 🚧 |
 | TP11 | Network Policies | 🚧 |
 | TP12 | Helm | 🚧 |
