@@ -1,0 +1,17 @@
+# Le réseau des pods : Calico, installé par son opérateur (tigera-operator).
+# Seule l'Installation est déclarée : ni API server Calico, ni Goldmane, ni
+# Whisker (observabilité des flux), trop gourmands pour les VM du lab.
+#   kubectl apply -f calico.yaml      (APRÈS tigera-operator.yaml, voir l'étape 6)
+apiVersion: operator.tigera.io/v1
+kind: Installation
+metadata:
+  name: default
+spec:
+  calicoNetwork:
+    ipPools:
+      - name: default-ipv4-ippool
+        blockSize: 26
+        cidr: 10.244.0.0/16           # le podSubnet de kubeadm-config.yaml : ils DOIVENT être égaux
+        encapsulation: VXLANCrossSubnet
+        natOutgoing: Enabled
+        nodeSelector: all()

@@ -1,0 +1,12 @@
+# Le point de départ de toute politique réseau : dans ce namespace, plus aucun
+# pod ne reçoit ni n'envoie quoi que ce soit, sauf ce qu'une autre
+# NetworkPolicy autorise explicitement.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: tout-interdire
+spec:
+  podSelector: {}            # {} : tous les pods du namespace
+  policyTypes:
+    - Ingress
+    - Egress

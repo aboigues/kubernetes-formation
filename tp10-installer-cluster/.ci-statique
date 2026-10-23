@@ -1,0 +1,1 @@
+TP10 : pas de cluster en CI (kubeadm demande des machines). Contrôles statiques seulement ; validation sur le lab Vagrant (lab/), voir README.

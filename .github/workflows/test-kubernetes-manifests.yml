@@ -362,27 +362,6 @@ jobs:
           kubectl delete -f tp04/08-fluentd-daemonset.yaml --ignore-not-found=true
           kubectl delete namespace logging --ignore-not-found=true --timeout=60s || true
 
-  test-tp5-security:
-    name: Test TP5 - Security and RBAC
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Minikube
-        uses: medyagh/setup-minikube@latest
-        with:
-          kubernetes-version: 'v1.32.0'
-
-      - name: Make test script executable
-        run: chmod +x tp05/test-tp5.sh
-
-      - name: Run TP5 security tests
-        run: |
-          cd tp05
-          ./test-tp5.sh
-
   test-tp6-production:
     name: Test TP6 - Production and CI/CD
     runs-on: ubuntu-latest
@@ -474,27 +453,6 @@ jobs:
         run: |
           cd tp07
           ./test-tp7.sh cleanup || true
-
-  test-tp8-networking:
-    name: Test TP8 - Networking
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Minikube
-        uses: medyagh/setup-minikube@latest
-        with:
-          kubernetes-version: 'v1.32.0'
-
-      - name: Make test script executable
-        run: chmod +x tp08/test-tp8.sh
-
-      - name: Run TP8 networking tests
-        run: |
-          cd tp08
-          ./test-tp8.sh || echo "Some tests failed but continuing..."
 
   test-tp10-synthesis:
     name: Test TP10 - Synthesis Project (TaskFlow)

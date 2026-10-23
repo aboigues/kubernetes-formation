@@ -1,0 +1,24 @@
+# La vitrine : ouverte à tous les clients, et autorisée à appeler l'API.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: web
+spec:
+  podSelector:
+    matchLabels:
+      app: web
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - ports:                 # pas de « from » : de n'importe où
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: api
+      ports:
+        - protocol: TCP
+          port: 8080         # le port du POD, pas celui du Service (80)
