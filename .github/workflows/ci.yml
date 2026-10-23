@@ -60,6 +60,9 @@ jobs:
           CANON=""
           for d in tp[0-9][0-9]-*/; do
             d="${d%/}"
+            # .ci-statique : TP sans cluster possible en CI (kubeadm demande des
+            # machines) ; seuls les contrôles statiques du job lint s'y appliquent.
+            if [ -f "$d/.ci-statique" ]; then echo "$d : contrôles statiques seulement ($(cat "$d/.ci-statique"))"; continue; fi
             if [ -f "$d/verify.sh" ]; then CANON="$CANON $d"; fi
           done
 
@@ -131,7 +134,19 @@ jobs:
             -strict -summary -kubernetes-version "${KUBERNETES_VERSION#v}" \
             -schema-location default \
             -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            -skip InitConfiguration,ClusterConfiguration,JoinConfiguration,KubeletConfiguration \
             $dirs
+
+      - name: Configurations kubeadm (kubeadm config validate, ${{ env.KUBERNETES_VERSION }})
+        # Sans schéma pour kubeconform : on les fait valider par kubeadm lui-même.
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(tp[0-9][0-9]-*/solution/kubeadm-config*.yaml)
+          [ "${#files[@]}" -gt 0 ] || { echo "aucune"; exit 0; }
+          curl -fsSLo kubeadm "https://dl.k8s.io/release/${KUBERNETES_VERSION}/bin/linux/amd64/kubeadm"
+          chmod +x kubeadm
+          for f in "${files[@]}"; do echo "== $f"; ./kubeadm config validate --config "$f"; done
 
       - name: Sécurité des manifestes (trivy config, 0 HIGH/CRITICAL)
         # Trivy n'accepte qu'une cible : on rassemble ce qui est réellement
@@ -148,7 +163,7 @@ jobs:
       - name: Scripts shell (shellcheck)
         run: |
           set -euo pipefail
-          shellcheck -x -S warning scripts/*.sh tp[0-9][0-9]-*/*.sh
+          shellcheck -x -S warning scripts/*.sh tp[0-9][0-9]-*/*.sh tp[0-9][0-9]-*/solution/*.sh
 
   # 3) Rejouer verify.sh solution dans un cluster neuf, un TP par job.
   tp:

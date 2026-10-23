@@ -1,0 +1,47 @@
+# Lab du TP10 : trois VM AlmaLinux 10, NUES (rien de Kubernetes n'y est installé :
+# c'est l'objet du TP). Fournisseurs : libvirt (Linux, WSL2 avec KVM) ou VirtualBox.
+#
+#   vagrant up                 # crée cp-1, worker-1, worker-2
+#   vagrant ssh cp-1           # se connecter à un nœud
+#   vagrant destroy -f         # tout supprimer
+#
+# Réseau : chaque VM a DEUX cartes. La première sert à Vagrant (accès SSH,
+# Internet) ; la seconde, en 10.30.0.0/24 avec une adresse fixe, sert au cluster.
+# Tout est en 10.x : le réseau des pods (192.168.0.0/16, celui de Calico) ne doit
+# chevaucher aucun réseau des nœuds.
+
+NOEUDS = {
+  "cp-1"     => { ip: "10.30.0.11", cpus: 2, memoire: 3072 },   # control plane + Calico : 2 Go ne suffisent pas
+  "worker-1" => { ip: "10.30.0.21", cpus: 1, memoire: 1536 },
+  "worker-2" => { ip: "10.30.0.22", cpus: 1, memoire: 1536 },
+}
+
+HOSTS = NOEUDS.map { |nom, n| "#{n[:ip]} #{nom}" }.join("\n")
+
+Vagrant.configure("2") do |config|
+  config.vm.box = "almalinux/10"
+  config.vm.box_version = "10.2.20260914"
+  config.vm.synced_folder ".", "/vagrant", disabled: true
+
+  NOEUDS.each do |nom, n|
+    config.vm.define nom do |noeud|
+      noeud.vm.hostname = nom
+      noeud.vm.network :private_network, ip: n[:ip]
+
+      noeud.vm.provider :libvirt do |lv|
+        lv.cpus = n[:cpus]
+        lv.memory = n[:memoire]
+        lv.management_network_address = "10.20.0.0/24"   # pas le 192.168.121.0/24 par défaut
+      end
+      noeud.vm.provider :virtualbox do |vb|
+        vb.cpus = n[:cpus]
+        vb.memory = n[:memoire]
+      end
+
+      # Seule préparation fournie : que les nœuds se connaissent par leur nom.
+      noeud.vm.provision "shell", inline: <<~SHELL
+        grep -q " cp-1$" /etc/hosts || printf '%s\\n' "#{HOSTS}" >> /etc/hosts
+      SHELL
+    end
+  end
+end

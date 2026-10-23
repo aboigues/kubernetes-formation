@@ -74,7 +74,7 @@ Chaque TP fournit son **état de départ** : vous pouvez faire un TP sans avoir 
 | [TP07](tp07-gateway-api/) | Gateway API avec Traefik : Gateway, HTTPRoute, routage par en-tête, canari pondéré | ✅ |
 | [TP08](tp08-namespaces-rbac/) | Namespaces, quotas et RBAC : ResourceQuota, LimitRange, ServiceAccount, Role, `auth can-i` | ✅ |
 | [TP09](tp09-placement-maintenance/) | Placement et maintenance : anti-affinité, taints et tolerations, `drain`, PodDisruptionBudget | ✅ |
-| TP10 | Installer un cluster avec kubeadm | 🚧 |
+| [TP10](tp10-installer-cluster/) | Installer un cluster avec kubeadm : 3 VM AlmaLinux 10, containerd, Calico, certificats, sauvegarde etcd | ✅ ¹ |
 | [TP11](tp11-network-policies/) | Network Policies avec Calico : tout interdire, DNS, ouvrir flux par flux, limites des labels | ✅ |
 | TP12 | Helm | 🚧 |
 | TP13 | Observabilité : Prometheus, Grafana, journaux | 🚧 |
@@ -137,6 +137,8 @@ cd tp03-deployer-exposer
 `verify.sh` déploie dans un namespace **jetable** (`tpNN-verify`) qu'il supprime ensuite : il ne touche jamais à votre namespace de travail `telemarche`. Pour garder ce namespace et l'inspecter après un échec : `KEEP=1 ./verify.sh`.
 
 La CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) fait exactement la même chose, et vérifie en plus que chaque `starter/` **échoue** — un starter qui passerait ne laisserait rien à apprendre.
+
+¹ **Exception : le TP10.** kubeadm s'installe sur des machines, et la CI n'en a pas : elle ne fait que les contrôles statiques (trous, syntaxe, `kubeadm config validate`). Sa validation de bout en bout se fait sur le lab Vagrant fourni (`tp10-installer-cluster/lab/`).
 
 ---
 
