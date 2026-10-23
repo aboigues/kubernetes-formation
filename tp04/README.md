@@ -981,7 +981,7 @@ spec:
           type: RuntimeDefault
       containers:
       - name: grafana
-        image: grafana/grafana:13.2.1
+        image: grafana/grafana:13.2.4
         ports:
         - containerPort: 3000
           name: web
