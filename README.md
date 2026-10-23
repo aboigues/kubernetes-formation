@@ -11,7 +11,7 @@
 
 Ici, on **apprend en faisant** : chaque TP part de manifestes à trous que vous complétez vous-même, et un script vérifie que l'objectif est atteint — pas de copier/coller passif.
 
-> 🚧 **Dépôt en cours de refonte (v2).** Les TP au nouveau format sont listés ci-dessous ; les dossiers `tp04/`, `tp06/`, `tp07/` et `tp10/` sont l'**ancienne génération**, retirée au fur et à mesure. L'état complet d'avant la refonte reste disponible : voir [Ancienne génération (v1)](#-ancienne-génération-v1).
+> 🚧 **Dépôt en cours de refonte (v2).** Les TP au nouveau format sont listés ci-dessous ; le dossier `tp10/` est le dernier de l'**ancienne génération**, retirée au fur et à mesure. L'état complet d'avant la refonte reste disponible : voir [Ancienne génération (v1)](#-ancienne-génération-v1).
 
 ---
 
@@ -167,9 +167,9 @@ Avant la refonte, le dépôt proposait 11 TP au format « manifestes complets »
 | `tp01` — premier déploiement | TP01 |
 | `tp02` — manifestes (pods, deployments, services, WordPress) | TP02, TP03 (WordPress → TP05) |
 | `tp03` — persistance | TP05 |
-| `tp04` — monitoring et logs | TP06 (HPA), TP13 |
+| `tp04` — monitoring et logs | TP06 (HPA), TP13 (EFK : v1 seulement) |
 | `tp05` — sécurité et RBAC | TP08, TP11 |
-| `tp06` — production, Helm, CI/CD | TP12 |
+| `tp06` — production, Helm, CI/CD | TP12 (Kustomize, ArgoCD, Tekton : v1 seulement) |
 | `tp07` — migration Compose → Kubernetes | — (v1) |
 | `tp08` — réseau | TP03, TP11 |
 | `tp09` — multi-nœud | TP09 |

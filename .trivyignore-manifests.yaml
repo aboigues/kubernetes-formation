@@ -34,33 +34,8 @@
 # Ce critère n'est recevable que VÉRIFIÉ : il faut montrer que le résultat de
 # `kustomize build` est bien durci. Sinon c'est un blanc-seing.
 
-misconfigurations:
-  # ── tp06/07-gitops-structure/overlays/*/patch-deployment.yaml ──
-  # Patchs Kustomize (`patchesStrategicMerge`), pas des manifests déployables : ils
-  # ne redéclarent que l'image et les ressources, tout le reste vient de la base.
-  #
-  # Vérifié le 2026-07-27 avec `kustomize build` sur les trois overlays : le
-  # Deployment produit porte bien le securityContext du pod ET du conteneur, les
-  # volumeMounts et les volumes hérités de `base/deployment.yaml`. Dupliquer ces
-  # blocs dans chaque patch serait redondant, et enseignerait à l'élève l'inverse
-  # de ce que Kustomize sert à faire.
-  #
-  # Pour le revérifier :
-  #   kustomize build tp06/07-gitops-structure/overlays/dev | grep -A4 securityContext
-  - id: KSV-0118
-    paths:
-      - "tp06/07-gitops-structure/overlays/dev/patch-deployment.yaml"
-      - "tp06/07-gitops-structure/overlays/staging/patch-deployment.yaml"
-      - "tp06/07-gitops-structure/overlays/production/patch-deployment.yaml"
-    statement: >-
-      Patch Kustomize partiel, pas un manifest complet. Le securityContext vient de
-      base/deployment.yaml et est présent dans le résultat de `kustomize build`,
-      vérifié sur les trois overlays.
-  - id: KSV-0014
-    paths:
-      - "tp06/07-gitops-structure/overlays/dev/patch-deployment.yaml"
-      - "tp06/07-gitops-structure/overlays/staging/patch-deployment.yaml"
-      - "tp06/07-gitops-structure/overlays/production/patch-deployment.yaml"
-    statement: >-
-      Patch Kustomize partiel : readOnlyRootFilesystem est déclaré dans la base et
-      présent dans le résultat de `kustomize build`, vérifié sur les trois overlays.
+# Aucune exception active au 2026-10-23. Les dernières (patchs Kustomize de
+# tp06/07-gitops-structure, KSV-0118/KSV-0014) sont parties avec le dossier v1
+# tp06/, retiré au lot 5 de la refonte : ce qui périme une exception, c'est la
+# suppression du fichier concerné.
+misconfigurations: []
