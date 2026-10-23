@@ -11,7 +11,7 @@
 
 Ici, on **apprend en faisant** : chaque TP part de manifestes à trous que vous complétez vous-même, et un script vérifie que l'objectif est atteint — pas de copier/coller passif.
 
-> 🚧 **Dépôt en cours de refonte (v2).** Les TP au nouveau format sont listés ci-dessous ; les dossiers `tp04/` à `tp11/` sont l'**ancienne génération**, retirée au fur et à mesure. L'état complet d'avant la refonte reste disponible : voir [Ancienne génération (v1)](#-ancienne-génération-v1).
+> 🚧 **Dépôt en cours de refonte (v2).** Les TP au nouveau format sont listés ci-dessous ; les dossiers `tp04/` à `tp10/` sont l'**ancienne génération**, retirée au fur et à mesure. L'état complet d'avant la refonte reste disponible : voir [Ancienne génération (v1)](#-ancienne-génération-v1).
 
 ---
 
@@ -71,7 +71,7 @@ Chaque TP fournit son **état de départ** : vous pouvez faire un TP sans avoir 
 | [TP04](tp04-jobs-daemonsets/) | DaemonSet, Job et CronJob : sonde par nœud, lot de commandes, rapport planifié | ✅ |
 | [TP05](tp05-config-stockage/) | Configuration et stockage : ConfigMap, Secret, PVC, StatefulSet PostgreSQL, Job de migration | ✅ |
 | [TP06](tp06-ressources-autoscaling/) | Ressources et autoscaling : requests/limits, QoS, `OOMKilled`, durcissement, HPA | ✅ |
-| TP07 | Gateway API (Traefik) | 🚧 |
+| [TP07](tp07-gateway-api/) | Gateway API avec Traefik : Gateway, HTTPRoute, routage par en-tête, canari pondéré | ✅ |
 | TP08 | Namespaces, quotas et RBAC | 🚧 |
 | TP09 | Placement et maintenance : affinités, taints, `drain`, PodDisruptionBudget | 🚧 |
 | TP10 | Installer un cluster avec kubeadm | 🚧 |

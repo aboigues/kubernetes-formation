@@ -1,0 +1,16 @@
+# Le point d'entrée du cluster, géré par l'exploitant : il vit dans le
+# namespace de Traefik (kubectl apply -n traefik) et accepte les routes de
+# tous les namespaces.
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: entree
+spec:
+  gatewayClassName: traefik
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 8000            # le point d'entrée « web » de Traefik
+      allowedRoutes:
+        namespaces:
+          from: All

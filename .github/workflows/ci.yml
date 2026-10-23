@@ -126,8 +126,12 @@ jobs:
         run: |
           set -euo pipefail
           dirs=$(ls -d tp[0-9][0-9]-*/solution tp[0-9][0-9]-*/pannes tp[0-9][0-9]-*/outils 2>/dev/null | xargs)
+          # Les CRD (Gateway API…) sont validées par le catalogue communautaire de schémas.
           docker run --rm -v "$PWD":/w:ro -w /w "$KUBECONFORM_IMAGE" \
-            -strict -summary -kubernetes-version "${KUBERNETES_VERSION#v}" $dirs
+            -strict -summary -kubernetes-version "${KUBERNETES_VERSION#v}" \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            $dirs
 
       - name: Sécurité des manifestes (trivy config, 0 HIGH/CRITICAL)
         # Trivy n'accepte qu'une cible : on rassemble ce qui est réellement

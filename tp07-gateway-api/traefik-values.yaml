@@ -1,0 +1,16 @@
+# Valeurs du chart Helm de Traefik pour le TP07 (étape 1).
+# Traefik lit la Gateway API ; le Gateway, c'est vous qui l'écrivez (gateway.yaml).
+providers:
+  kubernetesGateway:
+    enabled: true
+  kubernetesIngress:
+    enabled: false
+  kubernetesCRD:
+    enabled: false
+gateway:
+  enabled: false        # pas de Gateway par défaut : nous créons « entree »
+gatewayClass:
+  enabled: true         # la GatewayClass « traefik »
+service:
+  spec:
+    type: ClusterIP     # pas d'équilibreur de charge sous minikube : on passe par port-forward
