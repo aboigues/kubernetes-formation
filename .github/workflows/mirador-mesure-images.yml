@@ -1,0 +1,210 @@
+name: Mirador Mesure Images
+
+# Workflow déclenché par Mirador (workflow_dispatch) quand un correctif change le
+# tag d'une image. Mirador ne choisit pas le tag : il fournit, pour chaque image,
+# le tag en place et les tags publiés de la même ligne (jamais en arrière). Ce
+# workflow les MESURE avec les filtres de la barrière du dépôt, et n'ouvre la PR
+# que si un tag fait strictement baisser le nombre de CVE bloquantes. Sinon, il
+# publie le tableau des mesures dans une Issue : aucun tag publié ne corrige.
+#
+# Pourquoi : kubernetes-formation#216, où Mirador a proposé des tags de mémoire
+# (grafana 13.2.1 → 11.4.0, helm 3.22.0 → 3.14.0), soit 7 → 43 CVE bloquantes.
+#
+# Entrées STRUCTURÉES, validées avant usage, jamais interpolées dans un script
+# (passées par l'environnement) : sûr contre l'injection.
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_branch:
+        description: "Branche de base"
+        required: true
+        default: "main"
+      head_branch:
+        description: "Branche de correction à créer (mirador/…)"
+        required: true
+      images:
+        description: 'JSON : [{"image": "grafana/grafana", "actuel": "13.2.1", "candidats": ["13.2.4"]}]'
+        required: true
+      issue:
+        description: "Issue Mirador où publier le résultat ; vide pour en ouvrir une sur abstention"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+env:
+  # ⚠️ À ALIGNER sur la barrière du dépôt (ex. scan-images.yml) : la mesure doit
+  # compter exactement ce que la barrière bloque, avec la même version de Trivy.
+  SEVERITE: "HIGH,CRITICAL"
+  PKG_TYPES: "os"
+  IGNORE_UNFIXED: "true"
+  TRIVY_VERSION: "v0.72.0"
+
+jobs:
+  mesure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.base_branch }}
+
+      - uses: aquasecurity/setup-trivy@v0.3.1
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+
+      - name: Mesurer les tags candidats
+        env:
+          IMAGES: ${{ inputs.images }}
+          MESURES: ${{ runner.temp }}/mirador-mesures
+        run: |
+          set -euo pipefail
+          mkdir -p "$MESURES"
+          : > "$MESURES/tableau.md"
+          : > "$MESURES/retenus.tsv"
+          : > "$MESURES/abstentions.md"
+
+          refuser() { echo "::error::Entrée refusée : $1" >&2; exit 1; }
+          RE_IMAGE='^[A-Za-z0-9][A-Za-z0-9._/:-]{0,254}$'
+          RE_TAG='^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$'
+
+          options=(--quiet --image-src remote --scanners vuln --format json
+                   --pkg-types "$PKG_TYPES" --severity "$SEVERITE")
+          if [ "$IGNORE_UNFIXED" = "true" ]; then options+=(--ignore-unfixed); fi
+
+          # Nombre de CVE bloquantes (une par paquet × CVE, comme la table de la
+          # barrière), ou chaîne vide si l'image n'a pas pu être mesurée.
+          bloquantes() {
+            local n
+            n=$(trivy image "${options[@]}" "$1" 2>"$MESURES/erreur.log" \
+              | jq '[.Results[]?.Vulnerabilities[]?] | length') || true
+            if [ -z "$n" ]; then
+              echo "::warning::Mesure impossible pour $1" >&2
+              cat "$MESURES/erreur.log" >&2
+            fi
+            echo "$n"
+          }
+
+          echo "$IMAGES" | jq -e 'type == "array" and length > 0' > /dev/null \
+            || refuser "images doit être une liste JSON non vide"
+
+          while IFS= read -r entree; do
+            image=$(jq -r '.image' <<< "$entree")
+            actuel=$(jq -r '.actuel' <<< "$entree")
+            [[ "$image" =~ $RE_IMAGE ]] || refuser "image $image"
+            [[ "$actuel" =~ $RE_TAG ]] || refuser "tag $actuel"
+
+            n_actuel=$(bloquantes "$image:$actuel")
+            if [ -z "$n_actuel" ]; then
+              echo "| \`$image\` | $actuel (en place) | non mesurable | |" >> "$MESURES/tableau.md"
+              echo "- \`$image:$actuel\` : le tag en place n'a pas pu être mesuré." >> "$MESURES/abstentions.md"
+              continue
+            fi
+            echo "| \`$image\` | $actuel (en place) | $n_actuel | |" >> "$MESURES/tableau.md"
+
+            tags=() ; mesures=()
+            choisi="" ; n_choisi="$n_actuel"
+            while IFS= read -r candidat; do
+              [ -n "$candidat" ] || continue
+              [[ "$candidat" =~ $RE_TAG ]] || refuser "tag $candidat"
+              n=$(bloquantes "$image:$candidat")
+              tags+=("$candidat") ; mesures+=("${n:-non mesurable}")
+              # Strictement moins : à égalité, le premier candidat (le plus proche
+              # du tag en place) l'emporte.
+              if [ -n "$n" ] && [ "$n" -lt "$n_choisi" ]; then
+                choisi="$candidat" ; n_choisi="$n"
+              fi
+            done < <(jq -r '.candidats[]?' <<< "$entree")
+
+            for i in "${!tags[@]}"; do
+              if [ "${tags[$i]}" = "$choisi" ]; then
+                echo "| \`$image\` | **${tags[$i]}** | **${mesures[$i]}** | ✅ retenu |"
+              else
+                echo "| \`$image\` | ${tags[$i]} | ${mesures[$i]} | |"
+              fi
+            done >> "$MESURES/tableau.md"
+            if [ ${#tags[@]} -eq 0 ]; then
+              echo "| \`$image\` | — | | aucun tag publié de la même ligne |" >> "$MESURES/tableau.md"
+            fi
+
+            if [ -n "$choisi" ]; then
+              printf '%s\t%s\t%s\n' "$image" "$actuel" "$choisi" >> "$MESURES/retenus.tsv"
+              if [ "$n_choisi" -gt 0 ]; then
+                echo "- \`$image:$choisi\` : $n_choisi bloquante(s) restante(s) après la montée, qu'aucun tag publié de la même ligne ne corrige. La barrière restera rouge sur cette image." >> "$MESURES/abstentions.md"
+              fi
+            else
+              echo "- \`$image:$actuel\` ($n_actuel bloquante(s)) : aucun tag publié de la même ligne ne fait baisser ce nombre. Correctif amont attendu." >> "$MESURES/abstentions.md"
+            fi
+          done < <(echo "$IMAGES" | jq -c '.[]')
+
+          cat "$MESURES/tableau.md"
+
+      - name: Ouvrir la pull request, ou publier l'abstention
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_BRANCH: ${{ inputs.base_branch }}
+          HEAD_BRANCH: ${{ inputs.head_branch }}
+          ISSUE: ${{ inputs.issue }}
+          MESURES: ${{ runner.temp }}/mirador-mesures
+        run: |
+          set -euo pipefail
+          [[ "$HEAD_BRANCH" =~ ^mirador/[A-Za-z0-9._/-]+$ ]] || { echo "::error::head_branch refusée" >&2; exit 1; }
+          [[ "$ISSUE" =~ ^[0-9]*$ ]] || { echo "::error::issue refusée" >&2; exit 1; }
+
+          options="--image-src remote --scanners vuln --pkg-types $PKG_TYPES --severity $SEVERITE"
+          if [ "$IGNORE_UNFIXED" = "true" ]; then options="$options --ignore-unfixed"; fi
+          {
+            echo "## Mesures"
+            echo
+            echo "Mirador n'a pas choisi ces tags : il a mesuré les tags publiés de la même ligne que le tag en place (jamais en arrière). « Bloquantes » = ce que compte \`trivy image $options\` (Trivy $TRIVY_VERSION), soit les filtres de la barrière du dépôt. Les exceptions de \`.trivyignore.yaml\` ne sont pas appliquées : elles restent une décision humaine."
+            echo
+            echo "| Image | Tag | CVE bloquantes | |"
+            echo "|---|---|---|---|"
+            cat "$MESURES/tableau.md"
+            if [ -s "$MESURES/abstentions.md" ]; then
+              echo
+              echo "## Sans correctif publié"
+              echo
+              cat "$MESURES/abstentions.md"
+              echo
+              echo "Si une CVE est corrigée chez la distribution mais que l'image amont n'a pas été reconstruite, une exception datée dans \`.trivyignore.yaml\` peut se justifier. C'est une décision humaine : Mirador ne l'écrit pas."
+            fi
+          } > "$MESURES/corps.md"
+
+          if [ ! -s "$MESURES/retenus.tsv" ]; then
+            titre="[Mirador] Aucun tag publié ne corrige les CVE bloquantes"
+            if [ -n "$ISSUE" ]; then
+              gh issue reopen "$ISSUE" || true
+              gh issue comment "$ISSUE" --body-file "$MESURES/corps.md"
+            else
+              gh issue create --title "$titre" --body-file "$MESURES/corps.md"
+            fi
+            exit 0
+          fi
+
+          git config user.name "mirador-ci-cd[bot]"
+          git config user.email "mirador@users.noreply.github.com"
+          git switch -c "$HEAD_BRANCH"
+          resume=()
+          while IFS=$'\t' read -r image actuel choisi; do
+            export ANCIENNE="$image:$actuel" NOUVELLE="$image:$choisi"
+            git grep -lzF -- "$ANCIENNE" | xargs -0 -r perl -pi -e \
+              's/(?<![\w.\/-])\Q$ENV{ANCIENNE}\E(?![\w.-])/$ENV{NOUVELLE}/g'
+            resume+=("$image $actuel → $choisi")
+          done < "$MESURES/retenus.tsv"
+          if git diff --quiet; then
+            echo "::error::Aucune référence remplacée : les images ne sont plus référencées telles quelles." >&2
+            exit 1
+          fi
+
+          titre="fix(images): $(IFS=,; echo "${resume[*]}" | sed 's/,/, /g') (tags mesurés)"
+          git commit -am "$titre"
+          git push -u origin "$HEAD_BRANCH"
+          url=$(gh pr create --base "$BASE_BRANCH" --head "$HEAD_BRANCH" \
+            --title "$titre" --body-file "$MESURES/corps.md")
+          if [ -n "$ISSUE" ]; then
+            gh issue comment "$ISSUE" --body "Pull request ouverte à partir des mesures : $url"
+          fi
