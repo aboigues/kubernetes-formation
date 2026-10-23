@@ -11,7 +11,7 @@
 
 Ici, on **apprend en faisant** : chaque TP part de manifestes à trous que vous complétez vous-même, et un script vérifie que l'objectif est atteint — pas de copier/coller passif.
 
-> 🚧 **Dépôt en cours de refonte (v2).** Les TP au nouveau format sont listés ci-dessous ; le dossier `tp10/` est le dernier de l'**ancienne génération**, retirée au fur et à mesure. L'état complet d'avant la refonte reste disponible : voir [Ancienne génération (v1)](#-ancienne-génération-v1).
+> **Nouvelle génération (v2).** Les 14 TP ci-dessous remplacent l'ancienne génération, entièrement retirée du dépôt. Elle reste consultable : voir [Ancienne génération (v1)](#-ancienne-génération-v1).
 
 ---
 
@@ -78,7 +78,7 @@ Chaque TP fournit son **état de départ** : vous pouvez faire un TP sans avoir 
 | [TP11](tp11-network-policies/) | Network Policies avec Calico : tout interdire, DNS, ouvrir flux par flux, limites des labels | ✅ |
 | [TP12](tp12-helm/) | Helm 4 : écrire le chart de Télémarché, values par environnement, upgrade, rollback, server-side apply | ✅ |
 | [TP13](tp13-observabilite/) | Observabilité : kube-prometheus-stack, ServiceMonitor, PromQL, alertes testées par la panne, Grafana | ✅ |
-| TP14 | Projet final : exploiter Télémarché et résoudre des incidents | 🚧 |
+| [TP14](tp14-projet-final/) | Projet final : mettre Télémarché en production, cinq incidents à diagnostiquer, rapport d'astreinte | ✅ |
 
 ### Parcours DEVOPS-012 — déployer et exploiter un cluster (2 jours)
 
