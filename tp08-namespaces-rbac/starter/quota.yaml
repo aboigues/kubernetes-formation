@@ -1,0 +1,13 @@
+# Le budget du namespace : ce que toute l'équipe peut réserver, au total.
+# Appliqué au namespace où on le crée (kubectl apply -n …).
+apiVersion: v1
+kind: ______                 # TODO 1 : le budget global d'un namespace
+metadata:
+  name: budget
+spec:
+  hard:
+    requests.cpu: "1"
+    requests.memory: ______    # TODO 2 : 512 Mi réservés au total
+    limits.memory: 1Gi
+    pods: ______               # TODO 3 : dix pods au plus (une chaîne : "10")
+    persistentvolumeclaims: "2"

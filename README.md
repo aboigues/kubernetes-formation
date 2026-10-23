@@ -72,7 +72,7 @@ Chaque TP fournit son **état de départ** : vous pouvez faire un TP sans avoir 
 | [TP05](tp05-config-stockage/) | Configuration et stockage : ConfigMap, Secret, PVC, StatefulSet PostgreSQL, Job de migration | ✅ |
 | [TP06](tp06-ressources-autoscaling/) | Ressources et autoscaling : requests/limits, QoS, `OOMKilled`, durcissement, HPA | ✅ |
 | [TP07](tp07-gateway-api/) | Gateway API avec Traefik : Gateway, HTTPRoute, routage par en-tête, canari pondéré | ✅ |
-| TP08 | Namespaces, quotas et RBAC | 🚧 |
+| [TP08](tp08-namespaces-rbac/) | Namespaces, quotas et RBAC : ResourceQuota, LimitRange, ServiceAccount, Role, `auth can-i` | ✅ |
 | TP09 | Placement et maintenance : affinités, taints, `drain`, PodDisruptionBudget | 🚧 |
 | TP10 | Installer un cluster avec kubeadm | 🚧 |
 | TP11 | Network Policies | 🚧 |

@@ -1,0 +1,17 @@
+# Les valeurs par défaut de chaque conteneur qui n'en précise pas, et les
+# bornes qu'aucun conteneur ne peut dépasser.
+apiVersion: v1
+kind: ______                 # TODO 4 : des valeurs par défaut et des bornes, conteneur par conteneur
+metadata:
+  name: defauts
+spec:
+  limits:
+    - type: Container
+      defaultRequest:         # TODO 5 : les requests données à qui n'en précise pas
+        cpu: ______
+        memory: ______
+      default:
+        cpu: 500m
+        memory: 128Mi
+      max:
+        memory: 512Mi
