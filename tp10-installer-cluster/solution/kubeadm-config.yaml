@@ -19,7 +19,8 @@ kubernetesVersion: v1.37.1
 # derrière un répartiteur, il suffira de faire pointer ce nom ailleurs.
 controlPlaneEndpoint: cp-1:6443
 networking:
-  podSubnet: 192.168.0.0/16         # doit correspondre au réseau des pods de Calico
+  podSubnet: 10.244.0.0/16          # doit correspondre au réseau des pods de Calico ;
+                                    # PAS 192.168.0.0/16 (défaut de Calico) : les salles sont en 192.168.x
   serviceSubnet: 10.96.0.0/12
 ---
 apiVersion: kubelet.config.k8s.io/v1beta1

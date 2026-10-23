@@ -7,8 +7,8 @@
 #
 # Réseau : chaque VM a DEUX cartes. La première sert à Vagrant (accès SSH,
 # Internet) ; la seconde, en 10.30.0.0/24 avec une adresse fixe, sert au cluster.
-# Tout est en 10.x : le réseau des pods (192.168.0.0/16, celui de Calico) ne doit
-# chevaucher aucun réseau des nœuds.
+# Le réseau des pods (10.244.0.0/16) et celui des Services (10.96.0.0/12) ne
+# doivent chevaucher aucun réseau des nœuds.
 
 NOEUDS = {
   "cp-1"     => { ip: "10.30.0.11", cpus: 2, memoire: 3072 },   # control plane + Calico : 2 Go ne suffisent pas
@@ -31,7 +31,7 @@ Vagrant.configure("2") do |config|
       noeud.vm.provider :libvirt do |lv|
         lv.cpus = n[:cpus]
         lv.memory = n[:memoire]
-        lv.management_network_address = "10.20.0.0/24"   # pas le 192.168.121.0/24 par défaut
+        lv.management_network_address = "10.20.0.0/24"   # pas le 192.168.121.0/24 par défaut : en salle, 192.168.x est pris
       end
       noeud.vm.provider :virtualbox do |vb|
         vb.cpus = n[:cpus]

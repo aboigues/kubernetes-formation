@@ -15,7 +15,7 @@ L'outil officiel pour cela est **kubeadm**. Il ne crée pas les machines et n'in
 | `worker-1` | `10.30.0.21` | nœud de travail | kubelet, containerd, kube-proxy |
 | `worker-2` | `10.30.0.22` | nœud de travail | kubelet, containerd, kube-proxy |
 
-Réseau des pods : **`192.168.0.0/16`** (Calico). Réseau des Services : `10.96.0.0/12`. Aucun des deux ne doit chevaucher celui des nœuds.
+Réseau des pods : **`10.244.0.0/16`** (Calico). Réseau des Services : `10.96.0.0/12`. Aucun des deux ne doit chevaucher celui des nœuds : en salle, les postes sont en `192.168.<salle>.<poste>`, c'est pourquoi on n'utilise **pas** le réseau par défaut de Calico, `192.168.0.0/16`.
 
 ## 🎯 Objectif vérifiable
 

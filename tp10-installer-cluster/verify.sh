@@ -55,7 +55,7 @@ assert_eq "Aucun pod applicatif sur le control plane" "0" \
   "$(k get pods -n "$NS" -o jsonpath='{range .items[*]}{.spec.nodeName}{"\n"}{end}' | grep -cx cp-1 || true)"
 assert_eq "Les pods sont répartis sur les deux workers" "2" \
   "$(k get pods -n "$NS" -o jsonpath='{range .items[*]}{.spec.nodeName}{"\n"}{end}' | sort -u | grep -c .)"
-assert_contains "Les pods ont une adresse du réseau des pods (192.168.x.x)" "192.168." \
+assert_contains "Les pods ont une adresse du réseau des pods (10.244.x.x)" "10.244." \
   "$(k get pods -n "$NS" -l app=api -o jsonpath='{.items[0].status.podIP}')"
 wait_svc_http web 80 /api/info 90 || true
 assert_contains "La vitrine joint l'API d'un autre nœud (DNS + réseau des pods)" '"service":"api"' "$(svc_get web 80 /api/info || true)"
