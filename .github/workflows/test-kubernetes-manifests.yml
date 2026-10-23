@@ -1,7 +1,8 @@
 name: Test Kubernetes Manifests
 
-# ANCIENNE GÉNÉRATION (v1) : les dossiers « tpNN » (il ne reste que tp10/), retirés un à
-# un par la refonte. Les TP v2 (« tpNN-thème ») sont validés par ci.yml, de façon
+# ANCIENNE GÉNÉRATION (v1) : les dossiers « tpNN », tous retirés par la refonte
+# (le dernier, tp10/, au lot 5). Restent ici les contrôles transverses : docs/,
+# APIs dépréciées, scan trivy du dépôt, images durcies de docker/hardened/. Les TP v2 (« tpNN-thème ») sont validés par ci.yml, de façon
 # bloquante : schémas stricts, trivy config, verify.sh sur un vrai cluster.
 # Les boucles ci-dessous découvrent les dossiers v1 restants par motif : un
 # dossier supprimé disparaît de lui-même, sans liste à tenir à jour.
@@ -227,136 +228,6 @@ jobs:
             fi
           done
 
-  test-tp10-synthesis:
-    name: Test TP10 - Synthesis Project (TaskFlow)
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Minikube
-        uses: medyagh/setup-minikube@latest
-        with:
-          kubernetes-version: 'v1.32.0'
-          cpus: 4
-          memory: 4096
-
-      - name: Enable metrics-server
-        run: |
-          minikube addons enable metrics-server
-          kubectl wait --for=condition=ready pod -l k8s-app=metrics-server -n kube-system --timeout=120s
-
-      - name: Verify Minikube
-        run: |
-          kubectl version --client
-          kubectl cluster-info
-          kubectl get nodes
-
-      - name: Create namespace
-        run: kubectl create namespace taskflow
-
-      # 09b-backend-deployment.yaml référence taskflow-backend:latest avec
-      # imagePullPolicy: Never - l'image doit donc exister dans le cache
-      # d'images de CE minikube avant le déploiement, pas juste être buildable
-      # (le job "Build TP Dockerfiles" la construit bien, mais sous un autre
-      # tag - tp10-backend:ci - et sur un runner totalement différent, donc
-      # invisible ici). `minikube image build` construit directement dans le
-      # cache du cluster, sans dépendre du driver (docker/none/...).
-      - name: Build TaskFlow backend image inside Minikube
-        run: minikube image build -t taskflow-backend:latest tp10/
-
-      - name: Deploy TP10 resources
-        run: |
-          echo "Deploying PostgreSQL..."
-          kubectl apply -f tp10/01-postgres-init-script.yaml
-          kubectl apply -f tp10/02-postgres-secret.yaml
-          kubectl apply -f tp10/03-postgres-pvc.yaml
-          kubectl apply -f tp10/04-postgres-deployment.yaml
-          kubectl apply -f tp10/05-postgres-service.yaml
-
-          echo "Deploying Redis..."
-          kubectl apply -f tp10/06-redis-deployment.yaml
-          kubectl apply -f tp10/07-redis-service.yaml
-
-          echo "Deploying Backend API..."
-          kubectl apply -f tp10/08-backend-config.yaml
-          kubectl apply -f tp10/09a-backend-app-code.yaml
-          kubectl apply -f tp10/09b-backend-deployment.yaml
-          kubectl apply -f tp10/10-backend-service.yaml
-          kubectl apply -f tp10/11-backend-hpa.yaml
-
-          echo "Deploying Frontend..."
-          kubectl apply -f tp10/12a-frontend-config.yaml
-          kubectl apply -f tp10/12b-frontend-nginx-config.yaml
-          kubectl apply -f tp10/13-frontend-deployment.yaml
-          kubectl apply -f tp10/14-frontend-service.yaml
-
-          echo "Deploying Prometheus..."
-          kubectl apply -f tp10/15-prometheus-config.yaml
-          kubectl apply -f tp10/16-prometheus-rbac.yaml
-          kubectl apply -f tp10/17-prometheus-pvc.yaml
-          kubectl apply -f tp10/18-prometheus-deployment.yaml
-          kubectl apply -f tp10/19-prometheus-service.yaml
-
-          echo "Deploying Grafana..."
-          kubectl apply -f tp10/20a-grafana-datasource.yaml
-          kubectl apply -f tp10/20b-grafana-deployment.yaml
-          kubectl apply -f tp10/21-grafana-service.yaml
-          kubectl apply -f tp10/24-grafana-dashboard-configmap.yaml
-          kubectl apply -f tp10/25-grafana-dashboard-provider.yaml
-
-      - name: Wait for pods to be ready
-        run: |
-          echo "Waiting for PostgreSQL..."
-          kubectl wait --for=condition=ready pod -l app=postgres -n taskflow --timeout=180s
-
-          echo "Waiting for Redis..."
-          kubectl wait --for=condition=ready pod -l app=redis -n taskflow --timeout=120s
-
-          echo "Waiting for Backend API..."
-          kubectl wait --for=condition=ready pod -l app=backend-api -n taskflow --timeout=180s
-
-          echo "Waiting for Frontend..."
-          kubectl wait --for=condition=ready pod -l app=frontend -n taskflow --timeout=120s
-
-      - name: Make test script executable
-        run: chmod +x tp10/test-tp10.sh
-
-      - name: Run TP10 synthesis tests
-        run: |
-          cd tp10
-          ./test-tp10.sh
-
-      - name: Display pod status
-        if: always()
-        run: |
-          echo "=== Pod Status ==="
-          kubectl get pods -n taskflow
-          echo ""
-          echo "=== HPA Status ==="
-          kubectl get hpa -n taskflow
-          echo ""
-          echo "=== PVC Status ==="
-          kubectl get pvc -n taskflow
-
-      - name: Show logs on failure
-        if: failure()
-        run: |
-          echo "=== PostgreSQL logs ==="
-          kubectl logs -l app=postgres -n taskflow --tail=50 || true
-          echo ""
-          echo "=== Backend API logs ==="
-          kubectl logs -l app=backend-api -n taskflow --tail=50 || true
-          echo ""
-          echo "=== Redis logs ==="
-          kubectl logs -l app=redis -n taskflow --tail=50 || true
-
-      - name: Cleanup TP10 resources
-        if: always()
-        run: |
-          kubectl delete namespace taskflow --ignore-not-found=true --timeout=60s || true
-
   lint-readme:
     name: Lint README Files
     runs-on: ubuntu-latest
@@ -401,27 +272,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Build tp10 TaskFlow backend
-        run: docker build -t tp10-backend:ci tp10/
-
-      - name: Verify images run as non-root
-        run: |
-          for img in tp10-backend:ci; do
-            uid=$(docker run --rm "$img" id -u)
-            echo "$img -> uid $uid"
-            if [ "$uid" = "0" ]; then
-              echo "❌ $img tourne en root"
-              exit 1
-            fi
-          done
-
-      - name: Verify tp10 dependencies import
-        # psycopg2-binary dépend d'une wheel musllinux sur Alpine : si la version de
-        # Python monte au-delà de ce que couvre requirements.txt, l'import casse ici.
-        run: |
-          docker run --rm tp10-backend:ci \
-            python -c "import psycopg2, flask, redis, prometheus_client; print('imports OK')"
 
       - name: Build hardened hpa-example
         run: docker build -t hpa-example:ci docker/hardened/hpa-example/
