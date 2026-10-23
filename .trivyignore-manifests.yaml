@@ -35,38 +35,6 @@
 # `kustomize build` est bien durci. Sinon c'est un blanc-seing.
 
 misconfigurations:
-  # ── tp05/05-clusterrole-secret-reader.yaml ──
-  # Ce fichier existe pour démontrer un ClusterRole, et le fait sur l'exemple le
-  # plus parlant qui soit : la lecture de secrets à l'échelle du cluster. Trivy
-  # condamne tout accès aux secrets par ClusterRole, quelle que soit la
-  # restriction — vérifié le 2026-07-27 : avec `resourceNames` limité à un seul
-  # secret ET le verbe `get` seul, KSV-0041 se déclenche encore. Il n'existe donc
-  # aucune écriture de ce manifest qui conserve la démonstration et éteigne
-  # l'alerte : c'est excepter ou supprimer le TP.
-  #
-  # Le manifest applique déjà le moindre privilège atteignable : `get` et `list`
-  # uniquement, aucun verbe d'écriture.
-  - id: KSV-0041
-    paths:
-      - "tp05/05-clusterrole-secret-reader.yaml"
-    statement: >-
-      Démonstration pédagogique d'un ClusterRole (TP5 - RBAC). L'alerte porte sur
-      la notion même qu'enseigne le fichier. Aucune écriture ne l'éteint, testé
-      avec resourceNames + get seul. Le rôle est déjà en lecture seule.
-
-  # ── tp08/examples/04-externalname-service.yaml ──
-  # Le fichier entier EST un Service de type ExternalName — huit lignes dont le
-  # seul objet est d'enseigner ce type de Service, aux côtés de ClusterIP,
-  # NodePort et LoadBalancer dans le même répertoire. Respecter KSV-0108 revient
-  # à supprimer le fichier.
-  - id: KSV-0108
-    paths:
-      - "tp08/examples/04-externalname-service.yaml"
-    statement: >-
-      Démonstration pédagogique du type de Service ExternalName (TP8 - Réseau).
-      Le manifest ne contient que cet objet : respecter la règle reviendrait à
-      supprimer l'exemple.
-
   # ── tp06/07-gitops-structure/overlays/*/patch-deployment.yaml ──
   # Patchs Kustomize (`patchesStrategicMerge`), pas des manifests déployables : ils
   # ne redéclarent que l'image et les ressources, tout le reste vient de la base.

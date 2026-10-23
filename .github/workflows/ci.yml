@@ -170,6 +170,8 @@ jobs:
           kubernetes-version: ${{ env.KUBERNETES_VERSION }}
           driver: docker
           container-runtime: containerd
+          # kindnet (le défaut) n'applique pas les NetworkPolicies : Calico pour le TP11.
+          cni: ${{ startsWith(matrix.tp, 'tp11-') && 'calico' || 'auto' }}
           cpus: max
           memory: max
 
