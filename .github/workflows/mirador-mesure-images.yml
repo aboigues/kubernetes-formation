@@ -1,11 +1,18 @@
 name: Mirador Mesure Images
+# Porte la branche poussée : Mirador la lit à la fin du run pour ouvrir la PR.
+run-name: Mirador Mesure Images — ${{ inputs.head_branch }}
 
 # Workflow déclenché par Mirador (workflow_dispatch) quand un correctif change le
 # tag d'une image. Mirador ne choisit pas le tag : il fournit, pour chaque image,
 # le tag en place et les tags publiés de la même ligne (jamais en arrière). Ce
-# workflow les MESURE avec les filtres de la barrière du dépôt, et n'ouvre la PR
-# que si un tag fait strictement baisser le nombre de CVE bloquantes. Sinon, il
-# publie le tableau des mesures dans une Issue : aucun tag publié ne corrige.
+# workflow les MESURE avec les filtres de la barrière du dépôt, et ne pousse la
+# branche de correction que si un tag fait strictement baisser le nombre de CVE
+# bloquantes. Sinon, il publie le tableau des mesures dans une Issue : aucun tag
+# publié ne corrige.
+#
+# Il n'ouvre PAS la PR : le dépôt n'autorise pas Actions à créer des PR (le même
+# réglage permettrait d'en approuver). Mirador l'ouvre à la fin du run, avec le
+# titre et le corps (les mesures) écrits dans le message du commit.
 #
 # Pourquoi : kubernetes-formation#216, où Mirador a proposé des tags de mémoire
 # (grafana 13.2.1 → 11.4.0, helm 3.22.0 → 3.14.0), soit 7 → 43 CVE bloquantes.
@@ -30,10 +37,13 @@ on:
         description: "Issue Mirador où publier le résultat ; vide pour en ouvrir une sur abstention"
         required: false
         default: ""
+      anomalie:
+        description: "Identifiant de l'anomalie Mirador (journal d'audit)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
-  pull-requests: write
   issues: write
 
 env:
@@ -142,17 +152,18 @@ jobs:
 
           cat "$MESURES/tableau.md"
 
-      - name: Ouvrir la pull request, ou publier l'abstention
+      - name: Pousser la branche, ou publier l'abstention
         env:
           GH_TOKEN: ${{ github.token }}
-          BASE_BRANCH: ${{ inputs.base_branch }}
           HEAD_BRANCH: ${{ inputs.head_branch }}
           ISSUE: ${{ inputs.issue }}
+          ANOMALIE: ${{ inputs.anomalie }}
           MESURES: ${{ runner.temp }}/mirador-mesures
         run: |
           set -euo pipefail
-          [[ "$HEAD_BRANCH" =~ ^mirador/[A-Za-z0-9._/-]+$ ]] || { echo "::error::head_branch refusée" >&2; exit 1; }
+          [[ "$HEAD_BRANCH" =~ ^mirador/fix-[0-9]+$ ]] || { echo "::error::head_branch refusée" >&2; exit 1; }
           [[ "$ISSUE" =~ ^[0-9]*$ ]] || { echo "::error::issue refusée" >&2; exit 1; }
+          [[ "$ANOMALIE" =~ ^([0-9a-fA-F-]{36})?$ ]] || { echo "::error::anomalie refusée" >&2; exit 1; }
 
           options="--image-src remote --scanners vuln --pkg-types $PKG_TYPES --severity $SEVERITE"
           if [ "$IGNORE_UNFIXED" = "true" ]; then options="$options --ignore-unfixed"; fi
@@ -200,11 +211,16 @@ jobs:
             exit 1
           fi
 
-          titre="fix(images): $(IFS=,; echo "${resume[*]}" | sed 's/,/, /g') (tags mesurés)"
-          git commit -am "$titre"
+          # Titre et corps de la PR qu'ouvrira Mirador, plus les trailers qui la
+          # rattachent à l'anomalie et à l'Issue.
+          {
+            echo "fix(images): $(IFS=,; echo "${resume[*]}" | sed 's/,/, /g') (tags mesurés)"
+            echo
+            cat "$MESURES/corps.md"
+            echo
+            if [ -n "$ANOMALIE" ]; then echo "Mirador-Anomalie: $ANOMALIE"; fi
+            if [ -n "$ISSUE" ]; then echo "Mirador-Issue: $ISSUE"; fi
+          } > "$MESURES/commit.txt"
+          git commit -a -F "$MESURES/commit.txt"
           git push -u origin "$HEAD_BRANCH"
-          url=$(gh pr create --base "$BASE_BRANCH" --head "$HEAD_BRANCH" \
-            --title "$titre" --body-file "$MESURES/corps.md")
-          if [ -n "$ISSUE" ]; then
-            gh issue comment "$ISSUE" --body "Pull request ouverte à partir des mesures : $url"
-          fi
+          echo "Branche $HEAD_BRANCH poussée : Mirador ouvrira la pull request."
