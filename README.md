@@ -70,7 +70,7 @@ Chaque TP fournit son **état de départ** : vous pouvez faire un TP sans avoir 
 | [TP03](tp03-deployer-exposer/) | Déployer et exposer : Deployment, probes, Services, DNS, rolling update, diagnostic | ✅ |
 | [TP04](tp04-jobs-daemonsets/) | DaemonSet, Job et CronJob : sonde par nœud, lot de commandes, rapport planifié | ✅ |
 | [TP05](tp05-config-stockage/) | Configuration et stockage : ConfigMap, Secret, PVC, StatefulSet PostgreSQL, Job de migration | ✅ |
-| TP06 | Ressources et autoscaling : requests/limits, QoS, `OOMKilled`, HPA | 🚧 |
+| [TP06](tp06-ressources-autoscaling/) | Ressources et autoscaling : requests/limits, QoS, `OOMKilled`, durcissement, HPA | ✅ |
 | TP07 | Gateway API (Traefik) | 🚧 |
 | TP08 | Namespaces, quotas et RBAC | 🚧 |
 | TP09 | Placement et maintenance : affinités, taints, `drain`, PodDisruptionBudget | 🚧 |

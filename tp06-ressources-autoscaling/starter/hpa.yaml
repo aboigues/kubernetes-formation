@@ -1,0 +1,28 @@
+# L'autoscaling de l'API : entre 2 et 6 réplicas, pour viser 70 % de la
+# request CPU en moyenne.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api
+  labels:
+    app: api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: ______             # TODO 6 : le type d'objet à mettre à l'échelle
+    name: ______             # TODO 7 : son nom
+  minReplicas: ______        # TODO 8 : jamais moins de deux réplicas
+  maxReplicas: ______        # TODO 9 : six au plus
+  metrics:
+    - type: Resource
+      resource:
+        name: ______         # TODO 10 : la ressource mesurée
+        target:
+          type: Utilization
+          averageUtilization: ______   # TODO 11 : viser 70 % de la request
+  behavior:
+    # Par défaut, le HPA attend 5 minutes avant de retirer des pods. Une
+    # minute suffit pour l'observer pendant le TP ; en production, gardez une
+    # fenêtre longue pour ne pas osciller au gré du trafic.
+    scaleDown:
+      stabilizationWindowSeconds: 60

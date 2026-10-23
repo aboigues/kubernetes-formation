@@ -144,7 +144,7 @@ jobs:
       - name: Scripts shell (shellcheck)
         run: |
           set -euo pipefail
-          shellcheck -x -S warning scripts/*.sh tp[0-9][0-9]-*/verify.sh
+          shellcheck -x -S warning scripts/*.sh tp[0-9][0-9]-*/*.sh
 
   # 3) Rejouer verify.sh solution dans un cluster neuf, un TP par job.
   tp:
@@ -184,6 +184,12 @@ jobs:
           minikube image load \
             telemachlearning/telemarche-api:1.0 telemachlearning/telemarche-api:1.1 \
             telemachlearning/telemarche-web:1.0 telemachlearning/telemarche-web:1.1
+
+      - name: Prérequis du cluster — ${{ matrix.tp }}
+        # Addons, contrôleurs ou nœuds supplémentaires qu'un TP fait installer
+        # dans son README (metrics-server, Traefik…) : scriptés dans prerequis.sh.
+        run: |
+          if [ -x "${{ matrix.tp }}/prerequis.sh" ]; then ./${{ matrix.tp }}/prerequis.sh; else echo "aucun"; fi
 
       - name: verify.sh solution — ${{ matrix.tp }}
         run: ./${{ matrix.tp }}/verify.sh solution
