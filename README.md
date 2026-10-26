@@ -142,11 +142,12 @@ minikube version             # attendu : v1.39.0 ou plus
 
 Sur macOS : `brew upgrade kubectl minikube`.
 
-Trois pièges :
+Quatre pièges :
 
 - **L'ancienne version est toujours celle qui répond.** Un autre binaire passe avant `/usr/local/bin` dans le `PATH`, ou un alias le masque (`kubectl` → `microk8s kubectl`, `minikube kubectl --`). `type -a kubectl` liste tout ce que le shell trouve, dans l'ordre : supprimez l'alias ou le binaire en trop.
 - **Un cluster créé par l'ancien minikube garde son ancienne version de Kubernetes** : la mise à jour de minikube ne le met pas à niveau. ⚠️ Commande destructrice, elle efface le cluster et tout ce qu'il contient : `minikube delete`, puis recréez-le avec la commande du TP01.
 - **Docker Desktop installe son propre kubectl** (souvent ancien) : sous WSL2, vérifiez avec `type -a kubectl` que c'est bien `/usr/local/bin/kubectl` qui répond.
+- **Ne confondez pas les deux numéros.** minikube 1.39 est la version de l'outil. Le cluster, lui, tourne en Kubernetes 1.37 : `--kubernetes-version=v1.39.0` échoue avec `K8S_NEW_UNSUPPORTED`. Utilisez la commande du TP01 (`--kubernetes-version=v1.37.1`).
 
 Lab de référence : **AlmaLinux**, minikube (un nœud, puis plusieurs pour TP09), kubeadm pour TP10.
 
