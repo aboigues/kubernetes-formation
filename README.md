@@ -120,6 +120,34 @@ Contrôlez votre poste — le script ne modifie rien :
 ./scripts/preflight.sh
 ```
 
+### Installer ou mettre à jour kubectl et minikube
+
+Si `preflight.sh` signale un kubectl « trop éloigné » ou un minikube trop ancien, remplacez les binaires (Linux et WSL2) :
+
+```bash
+ARCH=$(uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
+
+# kubectl : la dernière 1.37.x, alignée sur le cluster des TP
+curl -LO "https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable-1.37.txt)/bin/linux/$ARCH/kubectl"
+sudo install -m 0755 kubectl /usr/local/bin/kubectl && rm kubectl
+
+# minikube : la dernière version publiée
+curl -LO "https://github.com/kubernetes/minikube/releases/latest/download/minikube-linux-$ARCH"
+sudo install -m 0755 "minikube-linux-$ARCH" /usr/local/bin/minikube && rm "minikube-linux-$ARCH"
+
+hash -r                      # le shell oublie les anciens chemins
+kubectl version --client     # attendu : v1.37.x
+minikube version             # attendu : v1.39.0 ou plus
+```
+
+Sur macOS : `brew upgrade kubectl minikube`.
+
+Trois pièges :
+
+- **L'ancienne version est toujours celle qui répond.** Un autre binaire passe avant `/usr/local/bin` dans le `PATH`, ou un alias le masque (`kubectl` → `microk8s kubectl`, `minikube kubectl --`). `type -a kubectl` liste tout ce que le shell trouve, dans l'ordre : supprimez l'alias ou le binaire en trop.
+- **Un cluster créé par l'ancien minikube garde son ancienne version de Kubernetes** : la mise à jour de minikube ne le met pas à niveau. ⚠️ Commande destructrice, elle efface le cluster et tout ce qu'il contient : `minikube delete`, puis recréez-le avec la commande du TP01.
+- **Docker Desktop installe son propre kubectl** (souvent ancien) : sous WSL2, vérifiez avec `type -a kubectl` que c'est bien `/usr/local/bin/kubectl` qui répond.
+
 Lab de référence : **AlmaLinux**, minikube (un nœud, puis plusieurs pour TP09), kubeadm pour TP10.
 
 ---
