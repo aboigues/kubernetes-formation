@@ -1,8 +1,8 @@
 # TP13 — Observabilité : Prometheus, alertes, Grafana
 
 > Durée estimée : 2 h · Namespace de travail : `telemarche`
-> Prérequis : TP03 (Services), TP12 (Helm 4). 4 processeurs et 6 Go de mémoire pour minikube (`minikube start --cpus=4 --memory=6g`). L'état de départ est fourni : `starter/00-telemarche.yaml`.
-> Faites place nette : `kubectl delete deployment,service,statefulset,job,cronjob,daemonset,hpa --all -n telemarche`
+> Prérequis : TP03 (Services), TP12 (Helm 4). 4 processeurs et 6 Go de mémoire pour minikube (voir ci-dessous). L'état de départ est fourni : `starter/00-telemarche.yaml`.
+> Faites place nette : `kubectl delete deployment,service,statefulset,job,cronjob,daemonset,hpa,resourcequota,limitrange,pod --all -n telemarche`
 
 ## 🎬 Le contexte
 
@@ -23,6 +23,17 @@ Mission : donner à Télémarché une **supervision**. Des **métriques** collec
 Prometheus collecte les 3 pods de l'API et compte leurs requêtes par route et par code HTTP. Deux règles d'alerte sont chargées, et **elles sonnent** : `./verify.sh` provoque un conteneur qui redémarre en boucle, puis la disparition de tous les pods de l'API, et attend que chaque alerte passe à `firing`.
 
 ---
+
+## Étape 0 — Un cluster assez grand
+
+Votre cluster a été créé au TP01 avec 2 processeurs et 4 Go : c'est trop peu pour la pile de supervision. Or minikube ne redimensionne pas un cluster existant : relancer `minikube start --cpus=4 --memory=6g` ne fait qu'afficher un avertissement. Il faut le recréer. ⚠️ `minikube delete` détruit le cluster et tout ce qu'il contient : chaque TP fournit son état de départ, vous ne perdez rien d'utile. Si vous avez déjà créé le cluster avec 4 processeurs et 6 Go, passez à l'étape 1.
+
+```bash
+minikube delete
+minikube start --kubernetes-version=v1.37.1 --cpus=4 --memory=6g
+kubectl create namespace telemarche
+kubectl config set-context --current --namespace=telemarche
+```
 
 ## Étape 1 — Installer la pile de supervision
 

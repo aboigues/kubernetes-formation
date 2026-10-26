@@ -2,7 +2,7 @@
 
 > Durée estimée : 1 h 15 · Namespace de travail : `telemarche`
 > Prérequis : TP03 (Services, DNS). Un cluster dont le plugin réseau **applique** les NetworkPolicies (étape 1). L'état de départ est fourni : `starter/00-telemarche.yaml`.
-> Faites place nette : `kubectl delete deployment,service,statefulset,job,cronjob,daemonset,hpa,networkpolicy --all -n telemarche`
+> Faites place nette : `kubectl delete deployment,service,statefulset,job,cronjob,daemonset,hpa,networkpolicy,resourcequota,limitrange,pod --all -n telemarche`
 
 ## 🎬 Le contexte
 
@@ -148,6 +148,14 @@ kubectl delete namespace dehors
 ```
 
 `verify.sh` refuse de tourner sans Calico : sur kindnet, il « réussirait » à appliquer des politiques qui ne protègent rien.
+
+Pour finir, revenez au cluster principal. Sinon le TP suivant tournera, sans que vous le voyiez, sur `reseau`, et deux clusters se partageront la mémoire du poste. ⚠️ `minikube delete -p reseau` détruit ce cluster et tout ce qu'il contient.
+
+```bash
+kubectl config use-context minikube
+minikube delete -p reseau
+kubectl config current-context   # minikube
+```
 
 ---
 
