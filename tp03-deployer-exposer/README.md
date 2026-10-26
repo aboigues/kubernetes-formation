@@ -1,8 +1,8 @@
 # TP03 — Déployer et exposer
 
 > Durée estimée : 2 h 30 · Namespace de travail : `telemarche`
-> Prérequis : TP01 et TP02. Si vous avez gardé leurs objets, faites place nette :
-> `kubectl delete deployment,service,pod --all -n telemarche`
+> Prérequis : TP01 et TP02.
+> Faites place nette : `kubectl delete deployment,service,pod --all -n telemarche`
 
 ## 🎬 Le contexte
 
