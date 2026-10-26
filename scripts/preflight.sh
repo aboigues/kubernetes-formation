@@ -6,6 +6,7 @@ set -uo pipefail
 K8S_TARGET="1.37"      # version mineure de Kubernetes des TP
 MINIKUBE_MIN="1.39.0"  # version de minikube avec laquelle les TP sont testés
 CPU_MIN=2
+MAJ="voir « Installer ou mettre à jour kubectl et minikube » dans le README"
 MEM_MIN_GO=4
 
 if [ -t 1 ]; then G='\033[0;32m'; R='\033[0;31m'; Y='\033[0;33m'; N='\033[0m'; else G=''; R=''; Y=''; N=''; fi
@@ -34,17 +35,17 @@ if command -v kubectl >/dev/null 2>&1; then
   KMINOR="$(printf '%s' "$KV" | cut -d. -f2)"; TMINOR="$(printf '%s' "$K8S_TARGET" | cut -d. -f2)"
   if [ -z "$KV" ]; then ko "kubectl présent mais sa version est illisible (un alias vers microk8s ou minikube ?)"
   elif [ $((KMINOR - TMINOR)) -ge -1 ] && [ $((KMINOR - TMINOR)) -le 1 ]; then ok "kubectl $KV (compatible avec Kubernetes $K8S_TARGET)"
-  else ko "kubectl $KV : trop éloigné de Kubernetes $K8S_TARGET (écart toléré : une version mineure)"; fi
+  else ko "kubectl $KV : trop éloigné de Kubernetes $K8S_TARGET (écart toléré : une version mineure) ; $MAJ"; fi
 else
-  ko "kubectl absent : https://kubernetes.io/docs/tasks/tools/"
+  ko "kubectl absent : $MAJ"
 fi
 
 if command -v minikube >/dev/null 2>&1; then
   MV="$(minikube version --short 2>/dev/null | sed 's/^v//')"
   if version_ge "$MV" "$MINIKUBE_MIN"; then ok "minikube $MV"
-  else ko "minikube $MV : version $MINIKUBE_MIN ou plus récente requise"; fi
+  else ko "minikube $MV : version $MINIKUBE_MIN ou plus récente requise ; $MAJ"; fi
 else
-  ko "minikube absent : https://minikube.sigs.k8s.io/docs/start/"
+  ko "minikube absent : $MAJ"
 fi
 
 if command -v helm >/dev/null 2>&1; then ok "helm $(helm version --short 2>/dev/null) (TP12)"
