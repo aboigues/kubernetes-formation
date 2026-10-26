@@ -4,10 +4,10 @@ kind: Pod
 metadata:
   name: web-demo
   labels:
-    app: ______             # TODO 11 : le label court de la vitrine
+    app: ______             # TODO 11 : le label court, comme au TODO 3 : même valeur que app.kubernetes.io/name
     app.kubernetes.io/name: web
     app.kubernetes.io/version: "1.0"
-    app.kubernetes.io/part-of: ______   # TODO 12 : l'application dont la vitrine fait partie
+    app.kubernetes.io/part-of: ______   # TODO 12 : l'application dont la vitrine fait partie (voir pod-api.yaml)
     environnement: recette
 spec:
   # Durcissement standard du dépôt (expliqué au TP06) : ne pas modifier.
