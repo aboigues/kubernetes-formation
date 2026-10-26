@@ -2,7 +2,13 @@
 
 > Durée estimée : 1 h 30 · Namespace de travail : `telemarche`
 > Prérequis : TP03 (Deployment, Service). **Helm 4** (`helm version` → `v4.x`).
-> Faites place nette : `kubectl delete deployment,service,statefulset,job,cronjob,daemonset,hpa,resourcequota,limitrange,pod --all -n telemarche`
+
+**Avant de commencer, faites place nette.** Repartez d'un namespace vide : les objets laissés par les TP précédents fausseraient vos résultats. La suppression prend quelques secondes, et votre contexte reste réglé sur `telemarche`.
+
+```bash
+kubectl delete namespace telemarche --ignore-not-found
+kubectl create namespace telemarche
+```
 
 ## 🎬 Le contexte
 

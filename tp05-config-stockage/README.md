@@ -1,8 +1,16 @@
 # TP05 — Configuration et stockage
 
 > Durée estimée : 1 h 30 · Namespace de travail : `telemarche`
-> Prérequis : TP03 (Deployment, Service, probes) et TP04 (Job). L'état de départ est fourni : `starter/00-web.yaml`.
-> Faites place nette : `kubectl delete deployment,service,job,cronjob,daemonset --all -n telemarche`
+> Prérequis : TP03 (Deployment, Service, probes) et TP04 (Job).
+
+**Avant de commencer, faites place nette.** Repartez d'un namespace vide : les objets laissés par les TP précédents fausseraient vos résultats. La suppression prend quelques secondes, et votre contexte reste réglé sur `telemarche`.
+
+```bash
+kubectl delete namespace telemarche --ignore-not-found
+kubectl create namespace telemarche
+```
+
+L'état de départ est fourni : `starter/00-web.yaml`, appliqué à l'étape 3. Il crée ou met à jour les objets qu'il décrit, et rien d'autre : `kubectl apply` ne supprime jamais un objet absent de ses fichiers. Il ne remplace donc pas la place nette.
 
 ## 🎬 Le contexte
 

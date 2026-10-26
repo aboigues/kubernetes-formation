@@ -1,8 +1,16 @@
 # TP11 — Network Policies
 
 > Durée estimée : 1 h 15 · Namespace de travail : `telemarche`
-> Prérequis : TP03 (Services, DNS). Un cluster dont le plugin réseau **applique** les NetworkPolicies (étape 1). L'état de départ est fourni : `starter/00-telemarche.yaml`.
-> Faites place nette : `kubectl delete deployment,service,statefulset,job,cronjob,daemonset,hpa,networkpolicy,resourcequota,limitrange,pod --all -n telemarche`
+> Prérequis : TP03 (Services, DNS). Un cluster dont le plugin réseau **applique** les NetworkPolicies (étape 1).
+
+**Avant de commencer, faites place nette.** Repartez d'un namespace vide : les objets laissés par les TP précédents fausseraient vos résultats. La suppression prend quelques secondes, et votre contexte reste réglé sur `telemarche`.
+
+```bash
+kubectl delete namespace telemarche --ignore-not-found
+kubectl create namespace telemarche
+```
+
+L'état de départ est fourni : `starter/00-telemarche.yaml`, appliqué à l'étape 2. Il crée ou met à jour les objets qu'il décrit, et rien d'autre : `kubectl apply` ne supprime jamais un objet absent de ses fichiers. Il ne remplace donc pas la place nette.
 
 ## 🎬 Le contexte
 

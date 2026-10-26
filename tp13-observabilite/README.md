@@ -1,8 +1,16 @@
 # TP13 — Observabilité : Prometheus, alertes, Grafana
 
 > Durée estimée : 2 h · Namespace de travail : `telemarche`
-> Prérequis : TP03 (Services), TP12 (Helm 4). 4 processeurs et 6 Go de mémoire pour minikube (voir ci-dessous). L'état de départ est fourni : `starter/00-telemarche.yaml`.
-> Faites place nette : `kubectl delete deployment,service,statefulset,job,cronjob,daemonset,hpa,resourcequota,limitrange,pod --all -n telemarche`
+> Prérequis : TP03 (Services), TP12 (Helm 4). 4 processeurs et 6 Go de mémoire pour minikube (voir ci-dessous).
+
+**Avant de commencer, faites place nette.** Repartez d'un namespace vide : les objets laissés par les TP précédents fausseraient vos résultats. La suppression prend quelques secondes, et votre contexte reste réglé sur `telemarche`.
+
+```bash
+kubectl delete namespace telemarche --ignore-not-found
+kubectl create namespace telemarche
+```
+
+L'état de départ est fourni : `starter/00-telemarche.yaml`, appliqué à l'étape 2. Il crée ou met à jour les objets qu'il décrit, et rien d'autre : `kubectl apply` ne supprime jamais un objet absent de ses fichiers. Il ne remplace donc pas la place nette.
 
 ## 🎬 Le contexte
 

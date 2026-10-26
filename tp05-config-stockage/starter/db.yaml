@@ -87,4 +87,4 @@ spec:
         accessModes: ["______"]   # TODO 10 : lecture-écriture par un seul nœud
         resources:
           requests:
-            storage: ______    # TODO 11 : 1 Gio
+            storage: ______    # TODO 11 : 1 gibioctet, en notation binaire comme les « Mi » de memory
