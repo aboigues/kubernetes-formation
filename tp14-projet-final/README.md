@@ -2,7 +2,7 @@
 
 > Durée estimée : 1 h 30 à 2 h · Namespace de travail : `telemarche`
 > Prérequis : TP03 (diagnostic), TP04 (Job), TP05 (configuration et stockage). Pour la suite (« Pour aller plus loin ») : TP06 à TP13.
-> Faites place nette : `kubectl delete deployment,service,statefulset,job,cronjob,daemonset,hpa,pvc --all -n telemarche`
+> Faites place nette : `kubectl delete deployment,service,statefulset,job,cronjob,daemonset,hpa,pvc,resourcequota,limitrange,pod --all -n telemarche`
 
 ## 🎬 Le contexte
 

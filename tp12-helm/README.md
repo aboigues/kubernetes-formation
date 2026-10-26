@@ -2,7 +2,7 @@
 
 > Durée estimée : 1 h 30 · Namespace de travail : `telemarche`
 > Prérequis : TP03 (Deployment, Service). **Helm 4** (`helm version` → `v4.x`).
-> Faites place nette : `kubectl delete deployment,service,statefulset,job,cronjob,daemonset,hpa --all -n telemarche`
+> Faites place nette : `kubectl delete deployment,service,statefulset,job,cronjob,daemonset,hpa,resourcequota,limitrange,pod --all -n telemarche`
 
 ## 🎬 Le contexte
 

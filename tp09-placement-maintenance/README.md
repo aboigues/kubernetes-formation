@@ -2,7 +2,7 @@
 
 > Durée estimée : 1 h 30 · Namespace de travail : `telemarche`
 > Prérequis : TP03 (Deployment, probes). Un poste qui supporte **3 nœuds minikube** (4 processeurs et 6 Go de mémoire libres conseillés). L'état de départ est fourni : `starter/00-web.yaml`.
-> Faites place nette : `kubectl delete deployment,service,statefulset,job,cronjob,daemonset,hpa,pdb --all -n telemarche`
+> Faites place nette : `kubectl delete deployment,service,statefulset,job,cronjob,daemonset,hpa,pdb,resourcequota,limitrange,pod --all -n telemarche`
 
 ## 🎬 Le contexte
 
@@ -158,7 +158,12 @@ kubectl drain minikube-m02 --ignore-daemonsets --delete-emptydir-data --timeout=
 
 ⚠️ `verify.sh` **draine réellement** un nœud de votre cluster (tous ses pods, y compris ceux du namespace `telemarche`), puis le remet en service, même en cas d'échec.
 
-Pour revenir à un seul nœud après le TP : `minikube node delete minikube-m03 && minikube node delete minikube-m02`.
+Puis revenez à un seul nœud : les deux nœuds de plus consomment de la mémoire, et `minikube-m03` garde sa taint.
+
+```bash
+minikube node delete minikube-m03 && minikube node delete minikube-m02
+kubectl get nodes                # un seul nœud : minikube
+```
 
 ---
 
