@@ -1,8 +1,16 @@
 # TP04 — DaemonSet, Job et CronJob
 
 > Durée estimée : 45 min · Namespace de travail : `telemarche`
-> Prérequis : TP03 (Deployment, Service). L'état de départ est fourni : `starter/00-telemarche.yaml`.
-> Faites place nette : `kubectl delete deployment,service,pod --all -n telemarche`
+> Prérequis : TP03 (Deployment, Service).
+
+**Avant de commencer, faites place nette.** Repartez d'un namespace vide : les objets laissés par les TP précédents fausseraient vos résultats. La suppression prend quelques secondes, et votre contexte reste réglé sur `telemarche`.
+
+```bash
+kubectl delete namespace telemarche --ignore-not-found
+kubectl create namespace telemarche
+```
+
+L'état de départ est fourni : `starter/00-telemarche.yaml`, appliqué à l'étape 1. Il crée ou met à jour les objets qu'il décrit, et rien d'autre : `kubectl apply` ne supprime jamais un objet absent de ses fichiers. Il ne remplace donc pas la place nette.
 
 ## 🎬 Le contexte
 

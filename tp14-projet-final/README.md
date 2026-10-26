@@ -2,7 +2,13 @@
 
 > Durée estimée : 1 h 30 à 2 h · Namespace de travail : `telemarche`
 > Prérequis : TP03 (diagnostic), TP04 (Job), TP05 (configuration et stockage). Pour la suite (« Pour aller plus loin ») : TP06 à TP13.
-> Faites place nette : `kubectl delete deployment,service,statefulset,job,cronjob,daemonset,hpa,pvc,resourcequota,limitrange,pod --all -n telemarche`
+
+**Avant de commencer, faites place nette.** Repartez d'un namespace vide : les objets laissés par les TP précédents fausseraient vos résultats. La suppression prend quelques secondes, et votre contexte reste réglé sur `telemarche`.
+
+```bash
+kubectl delete namespace telemarche --ignore-not-found
+kubectl create namespace telemarche
+```
 
 ## 🎬 Le contexte
 
