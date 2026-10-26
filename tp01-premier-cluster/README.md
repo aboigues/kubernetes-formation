@@ -121,7 +121,15 @@ kubectl create deployment web --image=telemachlearning/telemarche-web:1.0 \
   --replicas=3 --port=8080 --dry-run=client -o yaml
 ```
 
-Gardez cette sortie sous les yeux et complétez les `______` de **`starter/web.yaml`** et **`starter/web-service.yaml`** (`# TODO 1` à `8`). Le bloc `securityContext` et les `resources` sont déjà écrits : ne les touchez pas, ils seront expliqués au TP06.
+Même chose pour le Service que `kubectl expose` avait créé à l'étape 4 :
+
+```bash
+kubectl create service nodeport web --tcp=80:8080 --dry-run=client -o yaml
+```
+
+> ℹ️ Un **Service** donne une adresse stable devant des pods qui, eux, changent de nom et d'IP à chaque remplacement (vous l'avez vu à l'étape 4). Il choisit ses pods par leurs **labels** (`selector`). Le type **`NodePort`** ouvre en plus un port sur le nœud, ce qui permet à `minikube service` de l'atteindre depuis votre poste. Pas besoin d'en savoir plus ici : les Services sont le sujet du TP03.
+
+Gardez ces deux sorties sous les yeux et complétez les `______` de **`starter/web.yaml`** et **`starter/web-service.yaml`** (`# TODO 1` à `8`). Le bloc `securityContext` et les `resources` sont déjà écrits : ne les touchez pas, ils seront expliqués au TP06.
 
 Puis appliquez le **dossier** entier :
 

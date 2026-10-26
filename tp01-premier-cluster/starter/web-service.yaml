@@ -6,7 +6,7 @@ metadata:
   labels:
     app: web
 spec:
-  type: ______              # TODO 6 : le type qui ouvre un port sur chaque nœud
+  type: ______              # TODO 6 : le type qui ouvre un port sur chaque nœud (celui de --type à l'étape 4)
   selector:
     app: ______               # TODO 7 : les pods vers lesquels envoyer le trafic
   ports:
