@@ -29,7 +29,7 @@ spec:
             - name: NODE_NAME
               valueFrom:
                 fieldRef:
-                  fieldPath: ______    # TODO 2 : le champ du pod qui contient le nom de son nœud
+                  fieldPath: ______    # TODO 2 : le champ du pod qui contient le nom de son nœud (voir le README, étape 2)
           command: ["sh", "-c"]
           args:
             - |

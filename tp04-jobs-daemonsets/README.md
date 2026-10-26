@@ -2,6 +2,7 @@
 
 > Durée estimée : 45 min · Namespace de travail : `telemarche`
 > Prérequis : TP03 (Deployment, Service). L'état de départ est fourni : `starter/00-telemarche.yaml`.
+> Faites place nette : `kubectl delete deployment,service,pod --all -n telemarche`
 
 ## 🎬 Le contexte
 
@@ -37,6 +38,14 @@ kubectl get daemonsets -n kube-system
 `kube-proxy` et le greffon réseau (`kindnet` sous minikube) doivent tourner sur **chaque** nœud : c'est le rôle d'un DaemonSet.
 
 Complétez `starter/sonde.yaml` (`# TODO 1` et `2`). La sonde a besoin de connaître le nom de son nœud : on le lui passe par l'**API descendante** (*downward API*), qui expose des champs du pod lui-même en variables d'environnement.
+
+Pour le `# TODO 2`, ne cherchez pas au hasard : `kubectl explain` liste les champs que l'API descendante sait exposer.
+
+```bash
+kubectl explain pod.spec.containers.env.valueFrom.fieldRef
+```
+
+Choisissez, dans la liste, celui qui contient le nom du nœud.
 
 ```bash
 kubectl apply -f starter/sonde.yaml
