@@ -3,12 +3,15 @@
 > Durée estimée : 1 h 15 · Namespace de travail : `telemarche`
 > Prérequis : TP03 (Deployment), TP06 (requests et limits).
 
-**Avant de commencer, faites place nette.** Repartez d'un namespace vide : les objets laissés par les TP précédents fausseraient vos résultats. La suppression prend quelques secondes, et votre contexte reste réglé sur `telemarche`.
+**Avant de commencer, faites place nette.** Repartez d'un namespace vide : les objets laissés par les TP précédents fausseraient vos résultats. La suppression prend quelques secondes.
 
 ```bash
 kubectl delete namespace telemarche --ignore-not-found
 kubectl create namespace telemarche
+kubectl config set-context --current --namespace=telemarche
 ```
+
+La dernière ligne vous replace dans `telemarche`. Supprimer le namespace ne change pas votre contexte, mais celui-ci a pu changer depuis le TP01 : un cluster recréé, ou un autre cluster sélectionné, repart sur `default`. Vos `kubectl apply` y partiraient alors **sans le moindre avertissement**, et l'erreur n'apparaîtrait que plus tard, loin de sa cause. Vérifiez : `kubectl config view --minify -o jsonpath='{..namespace}'; echo` doit afficher `telemarche` (une ligne vide veut dire `default`).
 
 L'état de départ est fourni : `starter/00-telemarche.yaml`, appliqué à l'étape 1. Il crée ou met à jour les objets qu'il décrit, et rien d'autre : `kubectl apply` ne supprime jamais un objet absent de ses fichiers. Il ne remplace donc pas la place nette.
 
@@ -42,7 +45,6 @@ Un namespace regroupe les objets d'une équipe ou d'une application. C'est à so
 
 ```bash
 kubectl get namespaces
-kubectl config set-context --current --namespace=telemarche     # si ce n'est pas déjà fait (TP01)
 kubectl apply -f starter/00-telemarche.yaml
 kubectl api-resources --namespaced=false | head     # ce qui n'appartient à AUCUN namespace
 ```
