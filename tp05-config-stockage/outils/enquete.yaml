@@ -1,0 +1,63 @@
+# Un pod d'enquête : il reçoit la configuration EXACTEMENT comme l'API et la
+# migration devraient la recevoir (ConfigMap api-config + Secret db-credentials,
+# noms écrits sans faute), dit ce qu'il a reçu, teste la base, puis reste
+# ouvert 30 minutes pour que vous puissiez fouiller vous-même.
+#
+#   kubectl apply -f outils/enquete.yaml
+#   kubectl logs -f enquete             # le rapport
+#   kubectl exec -it enquete -- sh      # un shell, avec les mêmes variables
+#   kubectl delete -f outils/enquete.yaml
+#
+# Les valeurs des variables ne sont jamais affichées, seulement leur longueur.
+# Si l'enquête démarre et pas votre pod, l'erreur est dans VOTRE manifeste.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: enquete
+  labels:
+    app: enquete
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    runAsGroup: 65534
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: enquete
+      image: busybox:1.38.0
+      envFrom:
+        - configMapRef:
+            name: api-config
+        - secretRef:
+            name: db-credentials
+      command: ["sh", "-c"]
+      args:
+        - |
+          echo "== Variables attendues par l'API (valeurs masquées)"
+          for v in DB_HOST LOG_LEVEL POSTGRES_USER POSTGRES_PASSWORD; do
+            eval "val=\${$v-ABSENTE}"
+            if [ "$val" = ABSENTE ]; then echo "  !! $v : absente (clé mal nommée dans la ConfigMap ou le Secret ?)"
+            elif [ -z "$val" ]; then echo "  !! $v : vide"
+            else echo "  ok $v (longueur ${#val})"; fi
+          done
+          echo "== La base, vue d'ici"
+          h="${DB_HOST:-db}"
+          if err=$(nc -z -w 3 "$h" 5432 2>&1); then echo "  ok $h:5432 accepte les connexions"
+          elif echo "$err" | grep -q "bad address"; then echo "  !! le nom $h ne se résout pas (Service absent, ou autre namespace ?)"
+          else echo "  !! $h:5432 ne répond pas (pod db pas prêt ?)"; fi
+          echo "== Pod ouvert 30 min : kubectl exec -it enquete -- sh"
+          sleep 1800
+      resources:
+        requests:
+          cpu: 10m
+          memory: 8Mi
+        limits:
+          cpu: 100m
+          memory: 16Mi
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: ["ALL"]

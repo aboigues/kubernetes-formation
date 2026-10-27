@@ -181,9 +181,40 @@ Après redémarrage, les lignes `DEBUG` apparaissent. D'où la règle : une Conf
 ## 💡 Indices
 
 <details>
-<summary>Le pod <code>db-0</code> reste en <code>CreateContainerConfigError</code></summary>
+<summary>Un pod (<code>db-0</code>, <code>migration-…</code>, <code>api-…</code>) reste en <code>CreateContainerConfigError</code></summary>
 
-`kubectl describe pod db-0` : `secret "db-credentials" not found`. Le Secret n'existe pas dans **ce** namespace : refaites l'étape 1.
+Le kubelet n'a pas pu assembler la configuration du conteneur : il ne le démarre pas, et réessaie en boucle. La cause est dans les événements :
+
+```bash
+kubectl get events --field-selector reason=Failed -o custom-columns=POD:.involvedObject.name,MESSAGE:.message
+```
+
+Le message dit `secret "…" not found` ou `configmap "…" not found`. Lisez ce nom **lettre par lettre**, puis comparez-le à ce qui existe vraiment :
+
+```bash
+kubectl get secret,configmap
+kubectl config view --minify -o jsonpath='{..namespace}'; echo     # votre namespace courant
+```
+
+- **Le nom diffère** (`db-credendials`) : la faute est dans votre manifeste. Le modèle de pod d'un Job ne se modifie pas : corrigez le fichier, puis `kubectl delete job migration` et `kubectl apply -f starter/migration.yaml`.
+- **L'objet manque** : vous n'êtes pas dans le bon namespace, ou l'étape 1 n'a pas été faite ici. `kubectl get jobs,pods -A | grep migration` révèle aussi un Job appliqué par erreur dans `default`. Supprimez-le.
+
+Toujours un doute ? Lancez le pod d'enquête (ci-dessous) : il référence les mêmes objets, avec des noms écrits sans faute. S'il démarre et pas le vôtre, l'erreur est dans votre manifeste.
+</details>
+
+<details>
+<summary>Le pod démarre, mais une variable manque ou la base est injoignable</summary>
+
+`envFrom` importe les clés **présentes** dans la ConfigMap et le Secret, sans rien vérifier : une clé mal nommée (`POSTGRES_PASWORD`) ne provoque aucune erreur, la variable est juste absente. Pour voir ce qu'un pod reçoit vraiment, lancez un **pod d'enquête**. Il reçoit la configuration exactement comme l'API, dit ce qu'il a reçu (sans afficher les valeurs), teste `db:5432`, puis reste ouvert 30 minutes :
+
+```bash
+kubectl apply -f outils/enquete.yaml
+kubectl logs -f enquete                 # le rapport ; Ctrl+C pour sortir
+kubectl exec -it enquete -- sh          # fouiller soi-même : env | sort, nc -zv db 5432
+kubectl delete -f outils/enquete.yaml
+```
+
+Pourquoi un pod à part ? L'image de l'API est distroless : on ne peut pas y ouvrir de shell (TP02). Un conteneur en `CreateContainerConfigError` n'a jamais démarré : `kubectl exec` échoue. Quant à `kubectl debug` (TP03), il ajoute bien un conteneur d'outils au pod, mais **sans** les variables du conteneur visé. Il ne montre donc pas ce que l'API reçoit.
 </details>
 
 <details>
