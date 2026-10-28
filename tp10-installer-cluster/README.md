@@ -32,7 +32,7 @@ Trois nœuds `Ready` en Kubernetes **v1.37.1**, un control plane sain (etcd comp
 **En autonomie**, le lab Vagrant crée trois VM **nues**, sans rien de Kubernetes :
 
 ```bash
-export TP=$PWD             # depuis le dossier du TP : la suite y retrouve outils/ et starter/
+export TP="$(git rev-parse --show-toplevel)/tp10-installer-cluster"   # le TP, d'où que vous soyez dans le dépôt
 cd lab
 ./verifier-poste.sh         # Vagrant, fournisseur, ressources, réseaux : corrigez chaque ✗ avant d'aller plus loin
 vagrant up                  # 5 à 10 minutes la première fois (téléchargement de la box)
@@ -292,7 +292,7 @@ Le jeton vit 24 h. Redemandez la commande sur `cp-1` : `sudo kubeadm token creat
 ## 🚀 Pour aller plus loin
 
 1. **Restaurer etcd.** Supprimez un Deployment, puis restaurez `sauvegarde.db` avec `etcdutl snapshot restore` vers un **nouveau** dossier, et faites pointer le manifeste `/etc/kubernetes/manifests/etcd.yaml` dessus. Le Deployment revient-il ?
-2. **Une mise à jour de version.** Recommencez le lab avec `K8S_MINEURE="v1.36"` dans `outils/preparer-noeud.sh` et la dernière 1.36, puis montez en 1.37 : sur `cp-1`, `kubeadm upgrade plan` puis `kubeadm upgrade apply`, et sur chaque nœud, l'un après l'autre, `drain` (TP09), `kubeadm upgrade node`, mise à jour du kubelet, `uncordon`.
+2. **Une mise à jour de version.** Recommencez le lab avec `K8S_VERSION` réglée sur la dernière 1.36 dans `outils/preparer-noeud.sh`, puis montez en 1.37 : sur `cp-1`, `kubeadm upgrade plan` puis `kubeadm upgrade apply`, et sur chaque nœud, l'un après l'autre, `drain` (TP09), `kubeadm upgrade node`, mise à jour du kubelet, `uncordon`.
 3. **Un control plane hautement disponible.** Pourquoi `controlPlaneEndpoint` est-il un **nom** (`cp-1:6443`) et pas une IP ? Que faudrait-il pour ajouter `cp-2` et `cp-3` (`kubeadm join --control-plane`, répartiteur de charge, nombre impair de membres etcd) ?
 4. **Le pare-feu activé.** Démarrez firewalld sur les trois nœuds (`sudo systemctl enable --now firewalld`), relancez `preparer-noeud.sh`, et vérifiez que le cluster fonctionne toujours. Quels ports a-t-il ouverts, et pour qui ?
 

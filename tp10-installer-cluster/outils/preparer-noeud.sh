@@ -7,7 +7,8 @@
 set -euo pipefail
 
 NODE_IP="${1:?Usage : $0 <IP du nœud sur le réseau du cluster, ex. 10.30.0.11>}"
-K8S_MINEURE="v1.37"   # la version MINEURE, sans le patch : un dépôt de paquets par mineure
+K8S_VERSION="1.37.1"              # la MÊME sur tous les nœuds ; verify.sh la contrôle
+K8S_MINEURE="v${K8S_VERSION%.*}"  # v1.37 : il y a un dépôt de paquets par version mineure
 
 # Un dépôt kubernetes laissé par un passage précédent ferait échouer le premier
 # « dnf install » s'il est faux : l'étape 7 le réécrit de toute façon.
@@ -71,7 +72,7 @@ EOF
 systemctl enable --now containerd
 systemctl restart containerd
 
-echo "== 7. kubeadm, kubelet et kubectl ${K8S_MINEURE}"
+echo "== 7. kubeadm, kubelet et kubectl v${K8S_VERSION}"
 cat >/etc/yum.repos.d/kubernetes.repo <<EOF
 [kubernetes]
 name=Kubernetes
@@ -81,7 +82,16 @@ gpgcheck=1
 gpgkey=https://pkgs.k8s.io/core:/stable:/${K8S_MINEURE}/rpm/repodata/repomd.xml.key
 exclude=kubelet kubeadm kubectl cri-tools kubernetes-cni
 EOF
-dnf -y install kubelet kubeadm kubectl --disableexcludes=kubernetes >/dev/null
+# La version exacte : sans elle, dnf prend le dernier correctif de la mineure,
+# et les nœuds préparés à quelques jours d'écart n'auraient pas la même.
+for p in kubelet kubeadm kubectl; do
+  if rpm -q "$p" >/dev/null 2>&1 && [ "$(rpm -q --qf '%{VERSION}' "$p")" != "$K8S_VERSION" ]; then
+    dnf -y downgrade "$p-$K8S_VERSION" --disableexcludes=kubernetes >/dev/null 2>&1 \
+      || dnf -y install "$p-$K8S_VERSION" --disableexcludes=kubernetes >/dev/null   # plus récente : install met à jour
+  else
+    dnf -y install "$p-$K8S_VERSION" --disableexcludes=kubernetes >/dev/null
+  fi
+done
 
 echo "== 8. Le kubelet annonce l'IP du réseau du cluster (la VM en a deux)"
 echo "KUBELET_EXTRA_ARGS=--node-ip=${NODE_IP}" >/etc/sysconfig/kubelet

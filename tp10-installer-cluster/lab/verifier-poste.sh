@@ -44,6 +44,15 @@ if [ "$WSL" = 1 ]; then
   esac
 fi
 
+step "Fichiers du TP (\$TP, utilisé par les vagrant upload)"
+if [ -z "${TP:-}" ]; then
+  ko "TP n'est pas défini" "export TP=\"\$(git rev-parse --show-toplevel)/tp10-installer-cluster\"   (hors du dépôt : export TP=<chemin du dépôt>/tp10-installer-cluster)"
+elif [ -f "$TP/outils/preparer-noeud.sh" ]; then
+  ok "TP=$TP"
+else
+  ko "TP=$TP ne mène pas au TP : $TP/outils/preparer-noeud.sh introuvable" "export TP=\"\$(git rev-parse --show-toplevel)/tp10-installer-cluster\"   (hors du dépôt : export TP=<chemin du dépôt>/tp10-installer-cluster)"
+fi
+
 step "Fournisseur"
 FOURNISSEUR="${VAGRANT_DEFAULT_PROVIDER:-}"
 if [ -z "$FOURNISSEUR" ]; then
