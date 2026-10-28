@@ -97,12 +97,27 @@ kubectl create job rapport-manuel --from=cronjob/rapport
 kubectl logs job/rapport-manuel --follow
 ```
 
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl create job rapport-manuel --from=cronjob/rapport` : crée un Job immédiatement, à partir du **modèle** du CronJob. C'est le moyen de tester un CronJob sans attendre son heure.
+- `kubectl logs job/rapport-manuel --follow` : les journaux du pod de ce Job, suivis en direct jusqu'à la fin du conteneur.
+</details>
+
 > 🎯 **Avant de lancer les commandes suivantes, prédis :** le Job `commandes` a passé 5 commandes. Combien le rapport en compte-t-il ? Et si vous le lancez trois fois ?
 
 ```bash
 for i in 1 2 3; do kubectl create job rapport-$i --from=cronjob/rapport; done
 sleep 10; for i in 1 2 3; do kubectl logs job/rapport-$i; done
 ```
+
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `for i in 1 2 3; do …; done` : une boucle du shell, qui exécute la commande trois fois, avec `i` valant `1`, puis `2`, puis `3`. On obtient trois Jobs : `rapport-1`, `rapport-2` et `rapport-3`.
+- `sleep 10;` : attend dix secondes, le temps que les Jobs tournent. Le `;` sépare deux commandes sur la même ligne.
+- La seconde boucle affiche les journaux de chacun des trois Jobs.
+</details>
 
 <details>
 <summary>💡 Vérifie ta prédiction</summary>

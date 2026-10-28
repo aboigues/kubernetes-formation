@@ -63,6 +63,13 @@ kubectl get endpointslices -l kubernetes.io/service-name=api
 kubectl get pods -l app=api -o wide          # comparez les IP
 ```
 
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl get endpointslices -l kubernetes.io/service-name=api` : les EndpointSlices contiennent la liste des adresses d'un Service. Kubernetes leur pose ce label pour indiquer à quel Service elles appartiennent : c'est ainsi qu'on les retrouve.
+- `kubectl get pods -l app=api -o wide` : les pods de l'API, avec leur IP et leur nœud (`-o wide`).
+</details>
+
 Lancez un pod d'outils jetable et cherchez l'API comme le fait la vitrine :
 
 ```bash
@@ -73,6 +80,16 @@ wget -qO- http://api/ready
 env | grep ^API_
 exit
 ```
+
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl run debug --image=busybox:1.38.0` : crée un pod nommé `debug`, à partir d'une image minuscule qui contient les outils réseau de base (`nslookup`, `wget`).
+- `--restart=Never` : un pod simple, qui ne sera pas relancé quand sa commande se termine.
+- `-it` : branche votre terminal sur le pod. `--rm` : le supprime dès que vous en sortez, rien ne reste.
+- `-- sh` : la commande lancée dans le conteneur, ici un shell.
+- Dans le pod : `nslookup api` interroge le DNS du cluster ; `wget -qO- URL` affiche une page sans l'enregistrer (`-q` : silencieux, `-O-` : vers l'écran) ; `env | grep ^API_` affiche les variables qui commencent par `API_`.
+</details>
 
 > ❓ **Question** : `nslookup api` affiche d'abord des `NXDOMAIN` puis trouve `api.telemarche.svc.cluster.local`. D'où viennent les noms essayés ? (indice : `cat /etc/resolv.conf` dans le pod, ligne `search`.)
 
@@ -171,6 +188,16 @@ wget -qO- localhost:8080/version    # même réseau que l'API
 ls /proc/1/root/app                 # et même ses fichiers
 exit
 ```
+
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `POD=$(kubectl get pod -l app=api -o jsonpath='{.items[0].metadata.name}')` : range le nom du premier pod de l'API dans la variable `POD` (même mécanique qu'au TP01, étape 4).
+- `kubectl debug -it "$POD"` : ajoute au pod un **conteneur éphémère**, et vous y connecte.
+- `--image=busybox:1.38.0` : l'image de ce conteneur, qui apporte les outils absents de l'image distroless.
+- `--target=api` : le fait entrer dans l'espace de processus du conteneur `api`. Sans cette option, il partagerait le réseau du pod mais pas ses processus : `ps` ne montrerait pas l'API.
+- `-- sh` : la commande lancée dans le conteneur éphémère.
+</details>
 
 > ℹ️ Un conteneur éphémère **ne peut pas être retiré** d'un pod : il disparaît avec lui. C'est un outil de diagnostic, pas une façon de déployer.
 

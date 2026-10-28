@@ -27,6 +27,13 @@ kubectl explain pod.spec.containers.ports
 kubectl explain pod.spec.containers.env
 ```
 
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl explain pod` : la documentation d'un type, servie par l'API server de **votre** version. `| head -20` n'en garde que les 20 premières lignes.
+- `kubectl explain pod.spec.containers.ports` : on descend dans les champs en les séparant par des points. Ajoutez `--recursive` pour voir tout l'arbre d'un coup.
+</details>
+
 Les variables d'environnement comprises par l'API et la vitrine sont listées dans [`apps/telemarche/README.md`](../apps/telemarche/README.md).
 
 ## Étape 2 — Compléter les manifestes
@@ -93,6 +100,13 @@ kubectl get pods --show-labels
 kubectl get pods -L app.kubernetes.io/version,environnement
 ```
 
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `--show-labels` : ajoute une colonne avec **tous** les labels de chaque pod.
+- `-L clé1,clé2` : une colonne par clé choisie, avec la valeur du label (vide s'il est absent). Plus lisible quand les labels sont nombreux.
+</details>
+
 Sélectionnez :
 
 ```bash
@@ -109,6 +123,14 @@ kubectl label pod api-canari environnement=recette --overwrite
 kubectl get pods -l environnement=recette
 kubectl label pod api-canari environnement=production --overwrite   # on remet
 ```
+
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl label pod api-canari environnement=recette` : pose le label sur l'objet. `--overwrite` est obligatoire quand la clé existe déjà : sans lui, kubectl refuse de changer la valeur.
+- `kubectl get pods -l environnement=recette` : `-l` (*selector*) ne garde que les objets qui portent ce label.
+- Pour retirer un label : la clé suivie d'un `-`, soit `kubectl label pod api-canari environnement-`.
+</details>
 
 > ❓ **Question** : un Service (TP03) choisit les pods vers lesquels envoyer le trafic avec un sélecteur de labels. Que se passerait-il si vous retiriez le label `app=api` d'un pod en production ?
 
@@ -137,6 +159,14 @@ kubectl logs api-demo                  # journaux du conteneur
 kubectl port-forward pod/api-demo 8080:8080
 ```
 
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl describe pod api-demo` : un résumé lisible de l'objet, avec à la fin ses événements récents.
+- `kubectl logs api-demo` : ce que le conteneur écrit sur sa sortie standard. `-f` pour suivre en direct, `--previous` pour le conteneur d'avant un redémarrage.
+- `kubectl port-forward pod/api-demo 8080:8080` : ouvre un tunnel du port `8080` de **votre poste** (à gauche) vers le port `8080` du pod (à droite), en passant par l'API server. La commande reste au premier plan tant que le tunnel est ouvert.
+</details>
+
 Dans un autre terminal : `curl -s localhost:8080/api/info`. Arrêtez le `port-forward` avec `Ctrl-C`.
 
 > 🎯 **Avant de lancer la commande suivante, prédis :** pouvez-vous ouvrir un shell dans le conteneur de l'API ?
@@ -144,6 +174,14 @@ Dans un autre terminal : `curl -s localhost:8080/api/info`. Arrêtez le `port-fo
 ```bash
 kubectl exec -it api-demo -- sh
 ```
+
+<details>
+<summary>🔍 Cette commande, option par option</summary>
+
+- `kubectl exec api-demo` : lance une commande **dans** le conteneur d'un pod qui tourne déjà.
+- `-it` : branche votre terminal sur la commande (`-i` : l'entrée, `-t` : un terminal), indispensable pour un shell interactif.
+- `--` : la fin des options de kubectl. Ce qui suit, ici `sh`, est la commande exécutée dans le conteneur.
+</details>
 
 <details>
 <summary>💡 Vérifie ta prédiction</summary>

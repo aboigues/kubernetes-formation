@@ -48,6 +48,13 @@ kubectl apply -f starter/
 kubectl get all,pvc
 ```
 
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl create secret generic db-credentials --from-literal=…` : le Secret de la base, créé à la main comme au TP05, étape 1. Il n'est jamais versionné.
+- `kubectl get all,pvc` : `all` regroupe les types courants (pods, Services, Deployments, ReplicaSets, StatefulSets, Jobs…), mais **pas** les PVC, les ConfigMaps ni les Secrets : il faut les ajouter.
+</details>
+
 ## La méthode de l'exploitant
 
 Toujours dans cet ordre, du plus large au plus précis :

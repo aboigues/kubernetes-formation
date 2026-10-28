@@ -127,6 +127,15 @@ kubectl get nodes                    # STATUS : Ready,SchedulingDisabled
 kubectl drain minikube-m02 --ignore-daemonsets --delete-emptydir-data
 ```
 
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl cordon minikube-m02` : marque le nœud « non planifiable ». Les pods en place restent, mais aucun nouveau n'y arrive.
+- `kubectl drain minikube-m02` : fait un `cordon`, puis **expulse** les pods du nœud un par un, en respectant les PodDisruptionBudgets.
+- `--ignore-daemonsets` : laisse les pods des DaemonSets en place (voir le paragraphe suivant).
+- `--delete-emptydir-data` : accepte d'expulser les pods qui ont un volume `emptyDir`, dont le contenu est alors **perdu**. Sans cette option, le drain refuse.
+</details>
+
 Observez l'ordre : un pod d'API est expulsé, son remplaçant démarre **ailleurs**, et c'est seulement quand il est prêt que le second est expulsé. Le PDB n'autorise qu'**une** interruption à la fois. `--ignore-daemonsets` : les pods des DaemonSets (réseau, `kube-proxy`) restent, puisqu'ils seraient recréés sur place.
 
 ```bash
@@ -149,6 +158,13 @@ kubectl get nodes
 ```
 
 <details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl patch pdb api --type=merge -p '{"spec":{"minAvailable":3}}'` : modifie l'objet sur place. `--type=merge` fusionne ce morceau de JSON avec l'objet : seul `spec.minAvailable` change, le reste est conservé.
+- `kubectl drain … --timeout=30s` : abandonne au bout de 30 secondes si toutes les expulsions n'ont pas abouti.
+</details>
+
+<details>
 <summary>💡 Vérifie ta prédiction</summary>
 
 Il **attend indéfiniment** : `ALLOWED DISRUPTIONS` vaut `0`, chaque expulsion est refusée (`Cannot evict pod as it would violate the pod's disruption budget`) et réessayée toutes les 5 secondes, jusqu'au `--timeout`. Un PDB égal au nombre de réplicas interdit **toute** maintenance. Et remarquez : après l'échec, le nœud reste **`SchedulingDisabled`**. Un drain raté ne défait pas le `cordon`.
@@ -165,6 +181,13 @@ Second cas : quelqu'un a lancé un pod de dépannage **sans contrôleur**, direc
 kubectl run debug --image=busybox:1.38.0 --overrides='{"spec":{"nodeName":"minikube-m02"}}' -- sleep 3600
 kubectl drain minikube-m02 --ignore-daemonsets --delete-emptydir-data --timeout=30s
 ```
+
+<details>
+<summary>🔍 Cette commande, option par option</summary>
+
+- `--overrides='{"spec":{"nodeName":"minikube-m02"}}'` : un morceau de JSON fusionné avec le pod que `kubectl run` génère. Ici, `spec.nodeName` impose le nœud, sans passer par le scheduler.
+- `-- sleep 3600` : la commande du conteneur, qui le garde en vie une heure.
+</details>
 
 > ❓ **Question** : que répond le drain, et pourquoi refuse-t-il ce pod alors qu'il expulse sans hésiter ceux de l'API ? Que ferait `--force`, et qu'adviendrait-il du pod `debug` ? Terminez par `kubectl uncordon minikube-m02` et `kubectl delete pod debug`.
 

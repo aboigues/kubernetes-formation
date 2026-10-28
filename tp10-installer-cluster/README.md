@@ -17,6 +17,21 @@ L'outil officiel pour cela est **kubeadm**. Il ne crée pas les machines et n'in
 
 Réseau des pods : **`10.244.0.0/16`** (Calico). Réseau des Services : `10.96.0.0/12`. Aucun des deux ne doit chevaucher celui des nœuds : en salle, les postes sont en `192.168.<salle>.<poste>`, c'est pourquoi on n'utilise **pas** le réseau par défaut de Calico, `192.168.0.0/16`.
 
+## 🤔 Pourquoi pas kind, ou minikube, en plusieurs nœuds ?
+
+kind (*Kubernetes in Docker*) et minikube savent monter plusieurs nœuds : c'est ce que fait le TP09, avec `minikube node add`. kind utilise même kubeadm en interne. Mais ces « nœuds » sont des **conteneurs**, sur **une seule machine**, préparés d'avance. Tout ce que ce TP vous fait faire, ils le font à votre place, ou ne le montrent pas :
+
+| | kind, ou minikube avec le pilote Docker | Trois vraies machines (ce TP) |
+|---|---|---|
+| **Système** | une image de nœud toute prête : containerd, kubelet et kubeadm installés, réglages faits | à préparer sur chaque nœud (étape 2) : c'est là que naissent la plupart des pannes d'installation |
+| **Noyau** | **un seul**, celui de votre poste, partagé par tous les nœuds : modules, sysctl, cgroups, swap | un par nœud, à configurer sur chacun |
+| **Réseau** | un pont Docker local, une seule carte, des adresses attribuées pour vous | deux cartes, un pare-feu, l'IP annoncée à choisir (`--node-ip`), des plages qui ne doivent pas se chevaucher |
+| **Installation** | `kubeadm init` et `join` lancés pour vous, configuration générée | vous écrivez la configuration et faites rejoindre les nœuds (jeton, empreinte de la CA) |
+| **Pannes** | la machine tombe, tous les nœuds tombent avec elle | un nœud peut tomber, redémarrer ou perdre le réseau **seul** |
+| **Exploitation** | on jette le cluster et on le recrée | certificats à renouveler, etcd à sauvegarder, versions à monter nœud par nœud |
+
+kind reste l'outil idéal pour tester des manifestes ou faire tourner une CI sur plusieurs nœuds. Il ne vous apprend pas à **installer et exploiter** des machines. Pour cela, il faut des machines : c'est l'objet de ce TP.
+
 ## 🎯 Objectif vérifiable
 
 Trois nœuds `Ready` en Kubernetes **v1.37.1**, un control plane sain (etcd compris), Calico sur chaque nœud, et Télémarché qui tourne sur les deux workers, sa vitrine joignant l'API d'un autre nœud. `./verify.sh` le contrôle **sur votre cluster** (étape 8).
@@ -135,6 +150,14 @@ kubectl get pods -n calico-system --watch     # Ctrl-C quand calico-node est 1/1
 kubectl get nodes
 ```
 
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl create -f <URL>` : crée les objets d'un fichier lu directement à cette adresse. `create` échoue si un objet existe déjà, contrairement à `apply`.
+- `kubectl wait --for=condition=Established crd/installations.operator.tigera.io --timeout=60s` : attend que le type `Installation` soit **enregistré** par l'API server (condition `Established`), avant de créer un objet de ce type.
+- `kubectl get pods -n calico-system --watch` : suit les pods de Calico jusqu'à `Ctrl-C`.
+</details>
+
 L'ordre n'est pas décoratif. Sans `operator-crds.yaml`, c'est l'opérateur qui crée les types en démarrant, quelques secondes plus tard : `calico.yaml` arrive alors trop tôt (`no matches for kind "Installation" in version "operator.tigera.io/v1" — ensure CRDs are installed first`), et le `kubectl wait` lui-même échoue (`NotFound`).
 
 Le fichier de l'éditeur (`custom-resources.yaml`) installe aussi l'API server de Calico, Goldmane et Whisker (observabilité des flux). Sur les VM du lab, ces composants saturent le control plane : notre `calico.yaml` ne garde que le réseau.
@@ -152,6 +175,14 @@ Puis, sur **chaque** worker, exécutez-la en root :
 ```bash
 vagrant ssh worker-1 -c 'sudo kubeadm join cp-1:6443 --token … --discovery-token-ca-cert-hash sha256:…'
 ```
+
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubeadm token create --print-join-command` : crée un jeton de jonction et affiche la commande `kubeadm join` complète, prête à copier.
+- `vagrant ssh worker-1 -c '…'` : exécute la commande sur `worker-1` sans ouvrir de session.
+- `kubeadm join cp-1:6443` : l'adresse de l'API server à rejoindre. `--token` : le jeton qui authentifie le nouveau nœud. `--discovery-token-ca-cert-hash` : l'empreinte de l'autorité de certification du cluster (voir la question ci-dessous).
+</details>
 
 > ❓ **Question** : à quoi sert `--discovery-token-ca-cert-hash` ? Que risquerait un worker qui rejoindrait le cluster avec le jeton seul ? (Indice : comment le worker sait-il qu'il parle au **vrai** `cp-1` ?)
 
@@ -181,6 +212,16 @@ kubectl -n kube-system exec etcd-cp-1 -- etcdutl snapshot status /var/lib/etcd/s
 sudo ls -lh /var/lib/etcd/
 ```
 
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `ETCDCTL="…"` : range une longue commande dans une variable, pour ne pas la retaper. `$ETCDCTL endpoint health` la déroule, suivie des arguments.
+- `kubectl -n kube-system exec etcd-cp-1 -- etcdctl` : lance `etcdctl` dans le pod d'etcd, où il est installé.
+- `--endpoints=https://127.0.0.1:2379` : l'adresse d'etcd, vue depuis son propre pod.
+- `--cacert`, `--cert`, `--key` : etcd n'accepte que des clients munis d'un certificat. On présente celui du serveur etcd, et l'autorité qui l'a signé.
+- `snapshot save` : écrit une copie cohérente de toute la base. `etcdutl snapshot status -w table` : en affiche le résumé (taille, nombre de clés, révision), sous forme de tableau.
+</details>
+
 ⚠️ Une sauvegarde laissée **sur** le control plane disparaît avec lui. En production : copiez-la ailleurs, chiffrée (elle contient tous les Secrets), et **testez la restauration** (voir « Pour aller plus loin »).
 
 ## Étape 8 — Validez depuis votre poste
@@ -195,6 +236,15 @@ chmod 600 ~/.kube/tp10.conf
 export KUBECONFIG=~/.kube/tp10.conf
 kubectl get nodes
 ```
+
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `vagrant ssh cp-1 -c 'sudo cat /etc/kubernetes/admin.conf'` : affiche le kubeconfig d'administration de `cp-1`. `2>/dev/null` masque les avertissements de Vagrant, qui pollueraient le fichier.
+- `| sed 's#ancien#nouveau#'` : remplace le nom `cp-1`, inconnu de votre poste, par son IP. Le `#` sert de séparateur à la place du `/` habituel, qui apparaît dans les URL.
+- `> ~/.kube/tp10.conf` : écrit le résultat dans ce fichier. `chmod 600` le rend lisible par vous seul : il contient la clé de l'administrateur du cluster.
+- `export KUBECONFIG=~/.kube/tp10.conf` : ce terminal utilise désormais ce fichier au lieu de `~/.kube/config`.
+</details>
 
 Puis, depuis le dossier du TP :
 

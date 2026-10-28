@@ -75,6 +75,22 @@ essai telemarche pirate http://api/api/info
 essai telemarche pirate -k https://kubernetes.default.svc
 ```
 
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl run client -n dehors --image=… --command -- sleep infinity` : un pod d'outils qui ne fait rien, sauf rester en vie. `--command` : ce qui suit `--` remplace le **point d'entrée** de l'image, pas seulement ses arguments.
+- `kubectl wait --for=condition=Ready pod/pirate` : attend que le pod soit prêt.
+- `essai() { …; }` : définit une **fonction** du shell, réutilisable jusqu'à la fermeture du terminal. `"$1"` est son premier argument (le namespace), `"$2"` le deuxième (le pod), `"${@:3}"` tous les suivants (l'URL).
+- `kubectl exec … -- curl` : la requête part **du pod**, avec son identité réseau.
+- Les options de `curl` :
+  - `-s` : silencieux ;
+  - `-o /dev/null` : jette le corps de la réponse ;
+  - `-m 5` : abandonne au bout de 5 secondes ;
+  - `--retry 2 --retry-connrefused` : deux nouvelles tentatives, même sur une connexion refusée ;
+  - `-w "%{http_code}\n"` : n'affiche que le code HTTP.
+- `|| echo "bloqué"` : si la commande échoue (délai dépassé), affiche `bloqué` à la place.
+</details>
+
 Tout répond (l'API server répond `403`, mais il **répond** : la connexion aboutit). C'est ce que l'audit reproche.
 
 > Le `--retry` n'est pas décoratif : le résolveur DNS de l'image (musl, Alpine) rate parfois la **toute première** requête d'un pod. Ce n'est pas une politique réseau qui bloque.
