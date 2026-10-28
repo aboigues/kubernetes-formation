@@ -32,13 +32,14 @@ Trois nœuds `Ready` en Kubernetes **v1.37.1**, un control plane sain (etcd comp
 **En autonomie**, le lab Vagrant crée trois VM **nues**, sans rien de Kubernetes :
 
 ```bash
+export TP=$PWD             # depuis le dossier du TP : la suite y retrouve starter/
 cd lab
 vagrant up                  # 5 à 10 minutes la première fois (téléchargement de la box)
 vagrant status
 vagrant ssh cp-1            # « exit » pour revenir
 ```
 
-> **Sous WSL2**, Vagrant refuse de travailler dans `/mnt/c/…` (il ne peut pas y garantir les permissions des fichiers). Copiez d'abord le dossier dans votre home Linux : `cp -r lab ~/tp10-lab && cd ~/tp10-lab`. Le fournisseur `libvirt` (KVM) y fonctionne : `export VAGRANT_DEFAULT_PROVIDER=libvirt`.
+> **Sous WSL2**, Vagrant refuse de travailler dans `/mnt/c/…` (il ne peut pas y garantir les permissions des fichiers). Copiez d'abord le dossier dans votre home Linux : `cp -r lab ~/tp10-lab && cd ~/tp10-lab`. Les starters, eux, restent dans le dépôt : complétez-les là, `$TP` y mène (dans un nouveau terminal, refaites `export TP=<chemin du dépôt>/tp10-installer-cluster`). Le fournisseur `libvirt` (KVM) y fonctionne : `export VAGRANT_DEFAULT_PROVIDER=libvirt`.
 
 Chaque VM a **deux** cartes réseau : la première pour Vagrant (SSH, Internet), la seconde, en `10.30.0.0/24`, pour le cluster. Retenez-le : c'est la source du piège de l'étape 2.
 
@@ -48,12 +49,10 @@ Le même travail sur les trois nœuds : des modules noyau, le routage, plus de s
 
 ```bash
 # depuis le dossier du lab, pour chaque nœud :
-vagrant upload ../starter/preparer-noeud.sh /tmp/preparer-noeud.sh cp-1
+vagrant upload "$TP"/starter/preparer-noeud.sh /tmp/preparer-noeud.sh cp-1
 vagrant ssh cp-1 -c 'sudo bash /tmp/preparer-noeud.sh 10.30.0.11'
 # … puis worker-1 avec 10.30.0.21, worker-2 avec 10.30.0.22
 ```
-
-(Sous WSL avec la copie `~/tp10-lab`, remplacez `../starter/` par le chemin de votre dépôt.)
 
 Trois points méritent qu'on s'y arrête :
 
@@ -72,7 +71,7 @@ Le kubelet redémarre en boucle (`activating (auto-restart)`) : c'est **normal**
 Complétez `starter/kubeadm-config.yaml` (`# TODO 7` à `10`), copiez-le sur `cp-1`, puis :
 
 ```bash
-vagrant upload ../starter/kubeadm-config.yaml /tmp/kubeadm-config.yaml cp-1
+vagrant upload "$TP"/starter/kubeadm-config.yaml /tmp/kubeadm-config.yaml cp-1
 vagrant ssh cp-1
 # --- sur cp-1 ---
 kubeadm config validate --config /tmp/kubeadm-config.yaml
@@ -117,7 +116,7 @@ kubectl describe node cp-1 | grep -i network
 Complétez `starter/calico.yaml` (`# TODO 11`). Le CIDR des pods déclaré à `kubeadm init` **doit** être celui que distribue le CNI. Copiez le fichier sur `cp-1`, puis installez dans cet ordre : les **types d'objets** de Calico (CRD), son **opérateur**, et seulement quand les types sont enregistrés, votre **installation** :
 
 ```bash
-vagrant upload ../starter/calico.yaml /tmp/calico.yaml cp-1     # depuis le dossier du lab
+vagrant upload "$TP"/starter/calico.yaml /tmp/calico.yaml cp-1     # depuis le dossier du lab
 vagrant ssh cp-1
 # --- sur cp-1 ---
 kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.33.0/manifests/operator-crds.yaml
