@@ -62,7 +62,7 @@ vagrant ssh cp-1 -c 'sudo bash /tmp/preparer-noeud.sh 10.30.0.11'
 # … puis worker-1 avec 10.30.0.21, worker-2 avec 10.30.0.22
 ```
 
-Dans ce script, trois points méritent qu'on s'y arrête :
+Le script commence par mesurer le nœud (processeurs, mémoire, place sous `/var`) et s'arrête, sans rien installer, s'il est trop petit pour son rôle : un nom en `cp-*` réclame ce qu'exige kubeadm pour un control plane. Dans la suite du script, trois points méritent qu'on s'y arrête :
 
 - **`br_netfilter`** : sur AlmaLinux 10, ce module n'est plus livré avec le noyau de base. Il vient de `kernel-modules-extra`, et dans la version **exacte** du noyau lancé. Le script s'en occupe.
 - **`SystemdCgroup = true`** : containerd et le kubelet doivent gérer les cgroups de la même façon. Un désaccord, et le control plane redémarre en boucle : c'est la panne classique des installations kubeadm.

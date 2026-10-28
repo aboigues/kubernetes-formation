@@ -8,7 +8,7 @@ set -uo pipefail
 
 CPU_MIN=4          # 2 (cp-1) + 1 + 1, voir le Vagrantfile
 MEMOIRE_MIN_GO=7   # 3 + 1,5 + 1,5 Go pour les VM, plus de la marge pour le poste
-DISQUE_MIN_GO=10   # la box, puis trois disques qui grossissent avec les paquets
+DISQUE_MIN_GO=10   # mesuré : environ 3 Go par nœud une fois les images en place, plus la box
 
 if [ -t 1 ]; then
   GREEN='\033[0;32m'; RED='\033[0;31m'; YELLOW='\033[0;33m'; BLUE='\033[0;34m'; NC='\033[0m'
