@@ -1,7 +1,7 @@
 # TP10 — Installer un cluster avec kubeadm
 
 > Durée estimée : 2 h · Sur trois **machines** AlmaLinux 10 (pas minikube)
-> Prérequis : TP01 (composants d'un cluster). Les VM du lab de formation, **ou** le lab Vagrant fourni (`lab/`) : 4 processeurs et 7 Go de mémoire libres.
+> Prérequis : TP01 (composants d'un cluster). Les VM du lab de formation, **ou** le lab Vagrant fourni (`lab/`) : 4 processeurs et 7 Go de mémoire libres, ce que `lab/verifier-poste.sh` contrôle.
 
 ## 🎬 Le contexte
 
@@ -34,12 +34,20 @@ Trois nœuds `Ready` en Kubernetes **v1.37.1**, un control plane sain (etcd comp
 ```bash
 export TP=$PWD             # depuis le dossier du TP : la suite y retrouve outils/ et starter/
 cd lab
+./verifier-poste.sh         # Vagrant, fournisseur, ressources, réseaux : corrigez chaque ✗ avant d'aller plus loin
 vagrant up                  # 5 à 10 minutes la première fois (téléchargement de la box)
 vagrant status
 vagrant ssh cp-1            # « exit » pour revenir
 ```
 
-> **Sous WSL2**, Vagrant refuse de travailler dans `/mnt/c/…` (il ne peut pas y garantir les permissions des fichiers). Copiez d'abord le dossier dans votre home Linux : `cp -r lab ~/tp10-lab && cd ~/tp10-lab`. Les starters, eux, restent dans le dépôt : complétez-les là, `$TP` y mène (dans un nouveau terminal, refaites `export TP=<chemin du dépôt>/tp10-installer-cluster`). Le fournisseur `libvirt` (KVM) y fonctionne : `export VAGRANT_DEFAULT_PROVIDER=libvirt`.
+> **Sous WSL2**, Vagrant refuse de travailler dans `/mnt/c/…` (il ne peut pas y garantir les permissions des fichiers), et seul le fournisseur `libvirt` (KVM) y fonctionne. Avant `./verifier-poste.sh` :
+>
+> ```bash
+> cp -r lab ~/tp10-lab && cd ~/tp10-lab           # ou clonez le dépôt dans votre home Linux
+> export VAGRANT_DEFAULT_PROVIDER=libvirt         # dans CHAQUE nouveau terminal
+> ```
+>
+> Sans cette variable, Vagrant tente VirtualBox et s'arrête aussitôt : « Vagrant is unable to use the VirtualBox provider from the Windows Subsystem for Linux ». Les starters, eux, restent dans le dépôt : complétez-les là, `$TP` y mène (dans un nouveau terminal, refaites aussi `export TP=<chemin du dépôt>/tp10-installer-cluster`).
 
 Chaque VM a **deux** cartes réseau : la première pour Vagrant (SSH, Internet), la seconde, en `10.30.0.0/24`, pour le cluster. Retenez-le : c'est la source du piège de l'étape 2.
 
@@ -197,7 +205,41 @@ Puis, depuis le dossier du TP :
 
 `verify.sh` contrôle les nœuds, le control plane, etcd et Calico. Ensuite il déploie Télémarché dans un namespace jetable et vérifie que la vitrine joint l'API **d'un autre nœud**, à travers le réseau des pods. Comptez 3 à 5 minutes.
 
-Pour revenir à minikube : `unset KUBECONFIG`. Pour supprimer le lab : `vagrant destroy -f`.
+## Étape 9 — Démonter
+
+**Revenir à minikube**, depuis votre poste :
+
+```bash
+unset KUBECONFIG                # kubectl reprend ~/.kube/config, donc minikube
+rm -f ~/.kube/tp10.conf         # l'accès administrateur au cluster du TP10
+```
+
+**Recommencer l'installation sans recréer les machines** (c'est aussi la seule voie sur les VM fournies en formation). Sur chaque nœud, les workers d'abord :
+
+```bash
+sudo kubeadm reset -f           # défait init ou join : control plane, etcd, certificats, configuration du kubelet
+sudo rm -rf /etc/cni/net.d      # la configuration de Calico, que reset ne touche pas
+rm -f ~/.kube/config            # sur cp-1 : l'accès copié à l'étape 4
+sudo reboot                     # efface les interfaces et règles réseau laissées par Calico et kube-proxy
+```
+
+La préparation de l'étape 2 (containerd, paquets) reste en place : reprenez à l'étape 3.
+
+**Supprimer le lab Vagrant**, depuis le dossier du lab :
+
+```bash
+vagrant destroy -f              # les trois VM et leurs disques
+vagrant status                  # « not created » pour les trois
+```
+
+**Récupérer aussi la place de la box** (environ 500 Mo, retéléchargée au prochain `vagrant up`) :
+
+```bash
+vagrant box remove almalinux/10
+# Avec libvirt, la box a aussi été copiée dans le stockage de libvirt :
+virsh -c qemu:///system vol-list default | grep almalinux
+virsh -c qemu:///system vol-delete --pool default <nom affiché par la commande précédente>
+```
 
 ---
 

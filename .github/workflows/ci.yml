@@ -199,7 +199,7 @@ jobs:
           set -euo pipefail
           shopt -s nullglob   # un motif sans fichier disparaît au lieu d'être passé tel quel
           shellcheck -x -S warning scripts/*.sh tp[0-9][0-9]-*/*.sh \
-            tp[0-9][0-9]-*/solution/*.sh tp[0-9][0-9]-*/outils/*.sh
+            tp[0-9][0-9]-*/solution/*.sh tp[0-9][0-9]-*/outils/*.sh tp[0-9][0-9]-*/lab/*.sh
 
   # 3) Rejouer verify.sh solution dans un cluster neuf, un TP par job.
   tp:

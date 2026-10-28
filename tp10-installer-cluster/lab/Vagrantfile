@@ -1,6 +1,7 @@
 # Lab du TP10 : trois VM AlmaLinux 10, NUES (rien de Kubernetes n'y est installé :
 # c'est l'objet du TP). Fournisseurs : libvirt (Linux, WSL2 avec KVM) ou VirtualBox.
 #
+#   ./verifier-poste.sh        # ce poste peut-il porter le lab ? (ne modifie rien)
 #   vagrant up                 # crée cp-1, worker-1, worker-2
 #   vagrant ssh cp-1           # se connecter à un nœud
 #   vagrant destroy -f         # tout supprimer
