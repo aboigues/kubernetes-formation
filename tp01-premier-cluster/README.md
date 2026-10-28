@@ -23,6 +23,14 @@ kubectl get nodes -o wide
 kubectl cluster-info
 ```
 
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `minikube start` : crée le cluster. `--kubernetes-version` fixe la version de Kubernetes (celle de la formation) ; `--cpus` et `--memory` taillent la machine qui le porte.
+- `kubectl get nodes -o wide` : les nœuds, avec des colonnes en plus (`-o wide`) : adresse IP, système, runtime de conteneurs.
+- `kubectl cluster-info` : l'adresse de l'API server, celle à laquelle kubectl parle.
+</details>
+
 `minikube start` crée une machine (un conteneur Docker, par défaut), y installe Kubernetes, puis écrit l'adresse du cluster et vos identifiants dans `~/.kube/config`.
 
 ```bash
@@ -49,6 +57,15 @@ kubectl get pods -n kube-system \
 ```
 
 <details>
+<summary>🔍 Cette commande, option par option</summary>
+
+- `-n kube-system` : le namespace des composants du cluster.
+- `\` en fin de ligne : la commande continue sur la ligne suivante.
+- `-o custom-columns='TITRE:chemin,…'` : un tableau à la carte. Chaque colonne s'écrit avec un titre, deux-points, puis le chemin du champ dans l'objet. Les apostrophes empêchent le shell d'interpréter les crochets.
+- `.metadata.ownerReferences[0].kind` : `ownerReferences` est la liste des objets qui ont créé celui-ci. `[0]` prend le premier, `.kind` donne son type. `<none>` s'affiche quand le champ n'existe pas.
+</details>
+
+<details>
 <summary>💡 Vérifie ta prédiction</summary>
 
 `etcd`, `kube-apiserver`, `kube-scheduler` et `kube-controller-manager` ont pour propriétaire **`Node`** : ce sont des **static pods**. Le kubelet les lance lui-même à partir de fichiers posés sur le nœud (`/etc/kubernetes/manifests/`), sans rien demander à l'API — c'est ce qui permet au cluster de démarrer. Il publie ensuite un « reflet » (*mirror pod*) dans l'API pour que vous puissiez les voir.
@@ -70,6 +87,13 @@ kubectl config set-context --current --namespace=telemarche
 kubectl config view --minify | grep namespace
 ```
 
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl config set-context --current --namespace=telemarche` : modifie votre **contexte** courant, c'est-à-dire le trio cluster + utilisateur + namespace que kubectl utilise, rangé dans `~/.kube/config`. Le namespace par défaut devient `telemarche`. Rien ne change dans le cluster : c'est un réglage de **votre** kubectl.
+- `kubectl config view --minify` : n'affiche que le contexte courant. `| grep namespace` ne garde que la ligne qui contient « namespace ».
+</details>
+
 Toutes vos commandes visent désormais `telemarche` sans `-n`.
 
 ## Étape 4 — Mode impératif : dire à Kubernetes quoi faire
@@ -81,6 +105,16 @@ kubectl scale deployment web --replicas=3
 kubectl expose deployment web --type=NodePort --port=80 --target-port=8080
 kubectl get deployment,replicaset,pods,service
 ```
+
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl create deployment web --image=…` : crée un Deployment nommé `web`, qui lance des pods à partir de cette image.
+- `kubectl get pods --watch` : reste ouvert et affiche chaque changement d'état (`-w` en abrégé).
+- `kubectl scale deployment web --replicas=3` : demande trois pods au lieu d'un.
+- `kubectl expose deployment web --type=NodePort --port=80 --target-port=8080` : crée un Service devant les pods du Deployment. Il écoute sur le port `80` et transmet au port `8080` des conteneurs. `NodePort` ouvre en plus un port sur le nœud (voir l'étape 5).
+- `kubectl get deployment,replicaset,pods,service` : plusieurs types en une commande, séparés par des virgules, sans espace.
+</details>
 
 Ouvrez la vitrine :
 
@@ -98,6 +132,14 @@ La page s'affiche… et annonce que **l'API ne répond pas**. C'est normal : il 
 kubectl delete pod "$(kubectl get pods -l app=web -o jsonpath='{.items[0].metadata.name}')"
 kubectl get pods -l app=web
 ```
+
+<details>
+<summary>🔍 Cette commande, option par option</summary>
+
+- `kubectl get pods -l app=web` : seulement les pods qui portent le label `app=web`.
+- `-o jsonpath='{.items[0].metadata.name}'` : extrait un seul champ de la réponse, ici le nom (`.metadata.name`) du premier (`[0]`) élément de la liste (`.items`).
+- `"$( … )"` : le shell exécute d'abord la commande entre parenthèses et met son résultat à la place. `kubectl delete pod` reçoit donc le nom d'un pod. Les guillemets protègent ce résultat.
+</details>
 
 <details>
 <summary>💡 Vérifie ta prédiction</summary>
@@ -126,6 +168,15 @@ Même chose pour le Service que `kubectl expose` avait créé à l'étape 4 :
 ```bash
 kubectl create service nodeport web --tcp=80:8080 --dry-run=client -o yaml
 ```
+
+<details>
+<summary>🔍 Ces deux commandes, option par option</summary>
+
+- `--dry-run=client` : kubectl construit l'objet **sans l'envoyer** au cluster : rien n'est créé.
+- `-o yaml` : affiche cet objet en YAML. Vous obtenez un manifeste de départ.
+- `--replicas=3 --port=8080` : se retrouvent dans `spec.replicas` et dans le `containerPort` du conteneur.
+- `kubectl create service nodeport web --tcp=80:8080` : un Service de type NodePort nommé `web`. `--tcp=PORT:PORT_CIBLE` joue le rôle de `--port` et `--target-port` dans `kubectl expose`.
+</details>
 
 > ℹ️ Un **Service** donne une adresse stable devant des pods qui, eux, changent de nom et d'IP à chaque remplacement (vous l'avez vu à l'étape 4). Il choisit ses pods par leurs **labels** (`selector`). Le type **`NodePort`** ouvre en plus un port sur le nœud, ce qui permet à `minikube service` de l'atteindre depuis votre poste. Pas besoin d'en savoir plus ici : les Services sont le sujet du TP03.
 
@@ -167,6 +218,18 @@ Depuis le dossier du TP :
 ---
 
 ## 💡 Indices
+
+<details>
+<summary><code>minikube start</code> s'arrête : « 403 API rate limit exceeded »</summary>
+
+Quand la version demandée (`--kubernetes-version`) est plus récente que la liste que connaît minikube, celui-ci vérifie qu'elle existe en interrogeant l'API de GitHub, sans s'authentifier. Cette API limite les requêtes anonymes à 60 par heure **et par adresse IP**. En salle, tous les postes sortent souvent par la même adresse : la limite saute vite. La version existe bien, c'est la vérification qui échoue. Ajoutez `--force`, qui laisse minikube passer outre :
+
+```bash
+minikube start --kubernetes-version=v1.37.1 --cpus=2 --memory=4g --force
+```
+
+`minikube start` affiche aussi « Specified Kubernetes version … is newer than the newest supported version » : c'est un simple avertissement.
+</details>
 
 <details>
 <summary>« no matches for kind "______" » ou « error converting YAML to JSON »</summary>

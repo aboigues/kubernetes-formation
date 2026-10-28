@@ -101,6 +101,12 @@ kubectl get httproute
 kubectl describe httproute telemarche | grep -A20 "Status:"
 ```
 
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl describe httproute telemarche | grep -A20 "Status:"` : dans le résumé de la route, la ligne `Status:` et les 20 suivantes (`-A20`), là où le contrôleur écrit son verdict.
+</details>
+
 Deux conditions à lire dans le statut, écrites par Traefik : **`Accepted`** (le Gateway accepte la route) et **`ResolvedRefs`** (tous les Services cités existent).
 
 Pour joindre le Gateway depuis votre poste, ouvrez un tunnel vers le Service de Traefik **dans un second terminal** :
@@ -115,6 +121,15 @@ curl -H 'Host: telemarche.local' http://localhost:8000/api/info; echo
 curl -i -H 'Host: autre.local' http://localhost:8000/ | head -1
 ```
 
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl port-forward -n traefik svc/traefik 8000:80` : un tunnel de votre port `8000` vers le port `80` du Service de Traefik.
+- `curl -H 'Host: telemarche.local' http://localhost:8000/` : la requête part vers le tunnel, mais annonce le nom `telemarche.local` dans l'en-tête `Host` (`-H` ajoute un en-tête). C'est sur ce nom que le Gateway choisit la route.
+- `| grep title` : ne garde que la ligne du titre de la page.
+- `curl -i … | head -1` : `-i` affiche aussi les en-têtes de la réponse, et `head -1` n'en garde que la première ligne, celle du code HTTP (`HTTP/1.1 200 OK`, `404`…).
+</details>
+
 L'en-tête `Host` choisit la route : c'est ce que ferait un navigateur si `telemarche.local` pointait vers le cluster (pour essayer : ajoutez `127.0.0.1 telemarche.local` à `/etc/hosts`, puis ouvrez http://telemarche.local:8000).
 
 ## Étape 4 — Le canari
@@ -125,6 +140,15 @@ L'en-tête `Host` choisit la route : c'est ce que ferait un navigateur si `telem
 for i in $(seq 20); do curl -s -H 'Host: telemarche.local' http://localhost:8000/api/info | grep -o '"version":"[0-9.]*"'; done | sort | uniq -c
 for i in $(seq 20); do curl -s -H 'Host: telemarche.local' -H 'X-Canari: oui' http://localhost:8000/api/info | grep -o '"version":"[0-9.]*"'; done | sort | uniq -c
 ```
+
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `for i in $(seq 20); do …; done` : répète la requête 20 fois (`seq 20` produit les nombres de 1 à 20).
+- `curl -s` : sans barre de progression. `-H 'X-Canari: oui'`, dans la seconde ligne, ajoute l'en-tête qui désigne les testeurs.
+- `grep -o '"version":"[0-9.]*"'` : `-o` n'affiche que le morceau qui correspond au motif, ici le champ `version` de la réponse JSON.
+- `| sort | uniq -c` : trie les 20 lignes, puis compte combien de fois chacune apparaît.
+</details>
 
 <details>
 <summary>💡 Vérifie ta prédiction</summary>
@@ -146,6 +170,14 @@ curl -i -H 'Host: telemarche.local' http://localhost:8000/ | head -1
 kubectl get httproute telemarche -o jsonpath='{.status.parents[0].conditions[0]}'; echo
 kubectl get gateway entree -n traefik -o jsonpath='{.status.listeners[0].attachedRoutes}'; echo
 ```
+
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl patch gateway entree -n traefik --type=json -p '[…]'` : modifie l'objet sur place, sans fichier. `--type=json` attend une liste d'opérations au format *JSON Patch* : ici, `remove` (supprimer) le champ situé au chemin `/spec/listeners/0/allowedRoutes`, c'est-à-dire le bloc `allowedRoutes` du premier écouteur.
+- `-o jsonpath='{.status.parents[0].conditions[0]}'` : la première condition que le premier Gateway parent a écrite dans le statut de la route.
+- `-o jsonpath='{.status.listeners[0].attachedRoutes}'` : le nombre de routes rattachées au premier écouteur du Gateway.
+</details>
 
 <details>
 <summary>💡 Vérifie ta prédiction</summary>

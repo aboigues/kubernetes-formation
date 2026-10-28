@@ -63,6 +63,18 @@ kubectl get pods -n monitoring
 kubectl api-resources --api-group=monitoring.coreos.com
 ```
 
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `helm upgrade --install monitoring kube-prometheus-stack` : installe la release `monitoring` à partir du chart `kube-prometheus-stack`, ou la met à jour si elle existe déjà. Les options `--repo`, `--version`, `--namespace`, `--create-namespace`, `--values` et `--wait` sont détaillées au TP07, étape 1.
+- `--set-string grafana.adminPassword="$( … )"` : fixe le mot de passe de Grafana, en forçant le type chaîne (`--set-string`). Sa valeur est produite par la commande entre `$( … )` :
+  - `head -c 18 /dev/urandom` : 18 octets tirés au hasard ;
+  - `| base64` : traduits en caractères imprimables ;
+  - `| tr -dc 'A-Za-z0-9'` : on ne garde (`-dc` : supprimer tout sauf) que les lettres et les chiffres.
+- `--timeout 10m` : laisse 10 minutes à `--wait`, au lieu des 5 par défaut. Le chart démarre beaucoup de pods.
+- `kubectl api-resources --api-group=monitoring.coreos.com` : les types ajoutés par l'opérateur.
+</details>
+
 > Le script `./prerequis.sh` fait exactement cette étape, pour la CI ou pour repartir d'un cluster neuf.
 
 L'opérateur ajoute de nouveaux types d'objets : **ServiceMonitor** (« où collecter »), **PrometheusRule** (« quand alerter »), et d'autres. On ne configure plus Prometheus en éditant son fichier : on déclare des objets Kubernetes, et l'opérateur s'en charge.
@@ -74,6 +86,12 @@ kubectl apply -f starter/00-telemarche.yaml
 kubectl rollout status deployment/api
 kubectl get --raw /api/v1/namespaces/telemarche/services/http:api:80/proxy/metrics
 ```
+
+<details>
+<summary>🔍 Cette commande, option par option</summary>
+
+- `kubectl get --raw /api/v1/namespaces/telemarche/services/http:api:80/proxy/metrics` : l'API server relaie la requête au Service `api` (en `http`, port `80`), sur le chemin `/metrics`. C'est ce que lira Prometheus. La syntaxe est vue au TP05, étape 7.
+</details>
 
 Trois métriques au format Prometheus, avec leurs **labels** entre accolades : `telemarche_http_requests_total{method, route, code}` (un compteur qui ne fait que monter), `telemarche_orders_total`, et `telemarche_build_info{version, stockage}`.
 
@@ -111,6 +129,14 @@ Envoyez un peu de trafic, puis essayez ces requêtes dans l'onglet **Query** :
 ```bash
 for i in $(seq 50); do kubectl get --raw /api/v1/namespaces/telemarche/services/http:web:80/proxy/api/products >/dev/null; done
 ```
+
+<details>
+<summary>🔍 Cette commande, option par option</summary>
+
+- `for i in $(seq 50); do …; done` : 50 fois de suite.
+- `kubectl get --raw …/services/http:web:80/proxy/api/products` : une requête au catalogue, relayée par l'API server jusqu'au Service `web` (voir le TP05, étape 7).
+- `>/dev/null` : jette la réponse. Seul compte le trafic produit.
+</details>
 
 | Requête | Ce qu'elle répond |
 |---|---|
@@ -183,6 +209,13 @@ kubectl get secret monitoring-grafana -n monitoring -o jsonpath='{.data.admin-pa
 kubectl port-forward -n monitoring svc/monitoring-grafana 3000:80
 ```
 
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl get secret monitoring-grafana -n monitoring -o jsonpath='{.data.admin-password}' | base64 -d; echo` : extrait le mot de passe du Secret et le décode (même mécanique qu'au TP05, étape 1).
+- `kubectl port-forward -n monitoring svc/monitoring-grafana 3000:80` : un tunnel de votre port `3000` vers le port `80` du Service de Grafana.
+</details>
+
 Connectez-vous sur http://localhost:3000 (utilisateur `admin`). Explorez les tableaux de bord livrés : **Kubernetes / Compute Resources / Namespace (Pods)**, avec le namespace `telemarche`.
 
 Puis ajoutez celui de Télémarché, écrit **comme du code**, dans une ConfigMap :
@@ -197,8 +230,17 @@ Une minute plus tard, **Dashboards → Télémarché** apparaît, sans un clic. 
 
 ```bash
 kubectl logs -l app=api --prefix --tail=3          # les 3 pods à la fois
-kubectl logs -l app=api --prefix --since=5m | grep -c level=INFO
+kubectl logs -l app=api --prefix --since=5m --tail=-1 | grep -c level=INFO
 ```
+
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl logs -l app=api` : les journaux de **tous** les pods qui portent ce label. `--prefix` fait précéder chaque ligne du nom du pod et du conteneur.
+- `--tail=3` : les 3 dernières lignes de chaque pod.
+- `--since=5m` : les 5 dernières minutes. **Attention** : avec `-l`, kubectl s'arrête par défaut aux **10 dernières lignes** de chaque pod, même avec `--since`. `--tail=-1` lève cette limite. Sans lui, le compte serait plafonné à 10 par pod.
+- `| grep -c level=INFO` : compte les lignes qui contiennent `level=INFO`.
+</details>
 
 > ❓ **Question** : un pod a planté puis a été remplacé hier soir. Où sont passés ses journaux ? Qu'apporterait une collecte centralisée (Loki, voir « Pour aller plus loin ») ?
 

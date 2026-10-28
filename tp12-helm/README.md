@@ -74,6 +74,14 @@ helm template boutique starter/telemarche | grep -E "^  name:|API_URL" -A1 | gre
 ```
 
 <details>
+<summary>🔍 Cette commande, option par option</summary>
+
+- `helm template boutique starter/telemarche` : produit le YAML final du chart pour une release nommée `boutique`, sans rien installer.
+- `grep -E "^  name:|API_URL" -A1` : garde les lignes `  name:` (en début de ligne, deux espaces : les noms des objets) **ou** (`|`, permis par `-E`) celles qui contiennent `API_URL`, plus la ligne suivante de chacune (`-A1`).
+- `grep -v "^--"` : retire (`-v`) les lignes `--` que `grep -A` insère entre les groupes.
+</details>
+
+<details>
 <summary>💡 Vérifie ta prédiction</summary>
 
 `boutique-api` et `boutique-web`, et la vitrine appelle `http://boutique-api`. Les noms sont **calculés à partir de la release** (`telemarche.nom` dans `_helpers.tpl`). C'est indispensable : sans ce préfixe, deux installations du même chart dans un namespace se disputeraient les mêmes noms. Le `# TODO 4` en découle : écrire `http://api` en dur ferait parler la vitrine de **n'importe quelle** release à une API qui n'existe pas.
@@ -96,6 +104,16 @@ helm upgrade telemarche starter/telemarche --set api.image.tag=1.1 --wait
 sleep 8; kubectl get --raw /api/v1/namespaces/telemarche/services/http:telemarche-web:80/proxy/api/info; echo
 helm history telemarche
 ```
+
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `helm upgrade telemarche starter/telemarche` : met à jour la release `telemarche` avec ce chart.
+- `--set api.image.tag=1.1` : remplace une valeur de `values.yaml` depuis la ligne de commande. Le chemin suit les niveaux du YAML : `api:` → `image:` → `tag:`.
+- `--wait` : ne rend la main que lorsque les pods sont prêts.
+- `sleep 8;` : attend 8 secondes avant la commande suivante.
+- `helm history telemarche` : les révisions successives de la release.
+</details>
 
 (Le `sleep 8` laisse les anciens pods finir leur vidange : ils servent encore quelques secondes après la fin de `--wait`.)
 
@@ -137,6 +155,13 @@ helm upgrade telemarche starter/telemarche -f starter/telemarche/values-prod.yam
 helm get values telemarche          # ce que VOUS avez fourni
 helm get values telemarche --all    # tout ce qui a servi au rendu
 ```
+
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `-f starter/telemarche/values-prod.yaml` : un fichier de values qui s'ajoute à `values.yaml` et l'emporte sur lui, clé par clé. On peut en empiler plusieurs : le dernier gagne.
+- `| grep -E "replicas|LOG_LEVEL" -A1` : les lignes qui contiennent l'un ou l'autre mot, plus la suivante.
+</details>
 
 Installez une seconde release, avec les values par défaut, dans le même namespace :
 

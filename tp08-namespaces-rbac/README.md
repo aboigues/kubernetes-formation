@@ -49,6 +49,12 @@ kubectl apply -f starter/00-telemarche.yaml
 kubectl api-resources --namespaced=false | head     # ce qui n'appartient à AUCUN namespace
 ```
 
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl api-resources --namespaced=false` : les types d'objets qui valent pour **tout le cluster** (nœuds, namespaces, PV, ClusterRoles…). Avec `--namespaced=true`, on obtient au contraire ceux qui vivent dans un namespace. `| head` garde les 10 premières lignes.
+</details>
+
 Les nœuds, les PersistentVolumes, les StorageClasses, les namespaces eux-mêmes : ces objets sont **globaux** au cluster.
 
 ## Étape 2 — Le budget : ResourceQuota
@@ -69,6 +75,13 @@ kubectl run essai --image=busybox:1.38.0 --restart=Never -- sleep 3600
 ```
 
 <details>
+<summary>🔍 Cette commande, option par option</summary>
+
+- `kubectl run essai --image=busybox:1.38.0` : crée un pod nommé `essai`. `--restart=Never` : un pod simple, sans relance.
+- `-- sleep 3600` : ce qui suit `--` est passé au conteneur. busybox n'a pas de point d'entrée imposé : le conteneur exécute donc `sleep 3600`, attendre une heure, juste pour rester en vie.
+</details>
+
+<details>
 <summary>💡 Vérifie ta prédiction</summary>
 
 Il est **refusé**, et le message dit pourquoi : `failed quota: budget: must specify limits.memory for: essai; requests.cpu for: essai; requests.memory for: essai`. Dès qu'un quota porte sur `requests.memory`, le cluster ne sait plus décompter un pod qui n'en déclare pas : il le rejette. Le refus a lieu à l'**admission**, avant même que le pod existe. Il n'y a donc aucun pod en erreur à inspecter : le message est dans la réponse à votre commande.
@@ -83,6 +96,12 @@ kubectl apply -f starter/limitrange.yaml
 kubectl run essai --image=busybox:1.38.0 --restart=Never -- sleep 3600
 kubectl get pod essai -o jsonpath='{.spec.containers[0].resources}'; echo
 ```
+
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `-o jsonpath='{.spec.containers[0].resources}'` : le bloc `resources` du premier conteneur du pod, tel que le cluster l'a enregistré. `; echo` ajoute un retour à la ligne.
+</details>
 
 > ❓ **Question** : d'où viennent les ressources affichées ? Et les pods de l'API, créés **avant** la LimitRange : leurs ressources ont-elles changé ? (`kubectl get pod -l app=api -o jsonpath='{.items[0].spec.containers[0].resources}'`)
 
@@ -106,6 +125,14 @@ kubectl get deployment api
 kubectl describe resourcequota budget | grep pods
 kubectl get events --field-selector reason=FailedCreate | tail -2
 ```
+
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl scale deployment api --replicas=12` : change le nombre de réplicas voulu.
+- `kubectl describe resourcequota budget | grep pods` : la ligne du quota qui concerne les pods (utilisé / plafond).
+- `kubectl get events --field-selector reason=FailedCreate | tail -2` : les événements de motif `FailedCreate`, et les deux derniers seulement.
+</details>
 
 <details>
 <summary>💡 Vérifie ta prédiction</summary>
@@ -144,6 +171,15 @@ kubectl auth can-i delete pods      --as=$SA
 kubectl auth can-i get secrets      --as=$SA
 kubectl auth can-i list pods -n default --as=$SA
 ```
+
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `SA=system:serviceaccount:telemarche:supervision` : une variable du shell, pour ne pas répéter ce nom. C'est le nom complet d'un ServiceAccount vu par l'API : `system:serviceaccount:<namespace>:<nom>`.
+- `kubectl auth can-i VERBE RESSOURCE` : demande à l'API server si l'action serait autorisée, sans l'exécuter. La réponse est `yes` ou `no`.
+- `pods/log` : une **sous-ressource**, les journaux d'un pod, autorisée séparément du pod lui-même.
+- `--as=$SA` : pose la question au nom de ce ServiceAccount, pas au vôtre.
+</details>
 
 <details>
 <summary>💡 Vérifie ta prédiction</summary>

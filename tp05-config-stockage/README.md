@@ -47,6 +47,14 @@ kubectl create secret generic db-credentials \
   --from-literal=POSTGRES_PASSWORD='un-mot-de-passe-fictif'
 ```
 
+<details>
+<summary>🔍 Cette commande, option par option</summary>
+
+- `kubectl create secret generic db-credentials` : crée un Secret « générique », un ensemble de paires clé = valeur.
+- `--from-literal=CLÉ=valeur` : une paire, donnée directement dans la commande. On en met autant que de clés. `--from-file=` lirait la valeur dans un fichier, et `--from-env-file=` lirait un fichier de lignes `CLÉ=valeur`.
+- Les apostrophes protègent la valeur des caractères spéciaux du shell.
+</details>
+
 > 🎯 **Avant de lancer la commande suivante, prédis :** le mot de passe est-il chiffré dans le cluster ?
 
 ```bash
@@ -58,6 +66,14 @@ kubectl get secret db-credentials -o jsonpath='{.data.POSTGRES_PASSWORD}' | base
 <summary>💡 Vérifie ta prédiction</summary>
 
 Non : il est **encodé** en base64, ce qui se décode en une commande. L'encodage sert à transporter des données binaires, pas à protéger. Ce qui protège un Secret : le **RBAC** (qui a le droit `get` sur `secrets` lit tout en clair — TP08), le **chiffrement au repos** d'etcd (configuration de l'API server), un **coffre externe** (Vault, OpenBao) et l'hygiène Git (Sealed Secrets, SOPS). Alors pourquoi un objet distinct d'une ConfigMap ? Parce qu'on peut lui appliquer des droits **différents**, et que Kubernetes le traite avec plus de précaution (jamais écrit sur le disque du nœud, masqué dans `kubectl describe`).
+</details>
+
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `-o jsonpath='{.data.POSTGRES_PASSWORD}'` : extrait une seule clé du champ `data` du Secret.
+- `| base64 -d` : transmet cette valeur à `base64 -d`, qui la décode.
+- `; echo` : ajoute un retour à la ligne, absent de la valeur, pour que l'invite du shell ne se colle pas au résultat.
 </details>
 
 ## Étape 2 — La configuration de l'API
@@ -132,6 +148,13 @@ kubectl logs job/migration
 kubectl get pods -l app=api          # ils passent à 1/1 d'eux-mêmes
 ```
 
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl wait --for=condition=complete job/migration --timeout=120s` : rend la main dès que le Job a la condition `Complete`, ou échoue au bout de 120 secondes. Dans un script, la suite attend ainsi la fin de la migration.
+- `kubectl logs job/migration` : les journaux du pod du Job.
+</details>
+
 Ouvrez la vitrine (`minikube service web -n telemarche --url`) : le pied de page indique `stockage : postgresql`.
 
 ## Étape 6 — Les données survivent aux pods
@@ -147,6 +170,16 @@ kubectl rollout status statefulset/db && kubectl rollout status deployment/api
 curl -s localhost:8080/api/orders; echo
 kill %1
 ```
+
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl port-forward service/web 8080:80 &` : ouvre un tunnel de votre port `8080` vers le port `80` du Service `web`. Le `&` le lance **en arrière-plan**, ce qui vous rend la main. `sleep 2` laisse au tunnel le temps de s'ouvrir.
+- `curl -s -X POST localhost:8080/api/orders -d '{…}'` : envoie une requête `POST` (`-X`) avec ce corps JSON (`-d`). `-s` masque la barre de progression.
+- `kubectl rollout restart deployment/api` : recrée tous les pods du Deployment, un par un, sans rien changer à leur modèle.
+- `A && B` : B ne s'exécute que si A a réussi.
+- `kill %1` : arrête la tâche d'arrière-plan n° 1 de ce terminal, ici le `port-forward`.
+</details>
 
 La commande est toujours là, et **chaque** pod d'API la voit : il n'y a plus qu'une vérité, dans la base.
 
@@ -175,6 +208,14 @@ kubectl get --raw /api/v1/namespaces/telemarche/services/http:api:80/proxy/api/i
 # relancez la commande ci-dessus toutes les 15 s, pendant une à deux minutes
 kubectl logs deployment/api --since=1m | grep -c level=DEBUG
 ```
+
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl edit configmap api-config` : ouvre l'objet dans votre éditeur (`$EDITOR`, sinon `vi`). L'enregistrement l'envoie au cluster.
+- `kubectl get --raw /api/v1/namespaces/telemarche/services/http:api:80/proxy/api/info` : fait passer une requête HTTP par l'API server, qui la relaie au Service `api` (en `http`, port `80`). Le chemin qui suit `/proxy`, ici `/api/info`, est celui demandé à l'application. C'est pratique : pas de tunnel à ouvrir.
+- `kubectl logs deployment/api --since=1m` : les journaux de la dernière minute, d'**un** pod du Deployment choisi par kubectl. `| grep -c level=DEBUG` compte les lignes qui contiennent `level=DEBUG`.
+</details>
 
 <details>
 <summary>💡 Vérifie ta prédiction</summary>
@@ -210,12 +251,26 @@ Le kubelet n'a pas pu assembler la configuration du conteneur : il ne le démarr
 kubectl get events --field-selector reason=Failed -o custom-columns=POD:.involvedObject.name,MESSAGE:.message
 ```
 
+<details>
+<summary>🔍 Cette commande, option par option</summary>
+
+- `--field-selector reason=Failed` : seulement les événements dont le motif est `Failed`.
+- `-o custom-columns=POD:.involvedObject.name,MESSAGE:.message` : deux colonnes, le nom de l'objet concerné et le message (la syntaxe est au TP02, étape 3).
+</details>
+
 Le message dit `secret "…" not found` ou `configmap "…" not found`. Lisez ce nom **lettre par lettre**, puis comparez-le à ce qui existe vraiment :
 
 ```bash
 kubectl get secret,configmap
 kubectl config view --minify -o jsonpath='{..namespace}'; echo     # votre namespace courant
 ```
+
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl get secret,configmap` : les deux types d'un coup.
+- `kubectl config view --minify` : votre contexte courant seulement. `-o jsonpath='{..namespace}'` : `..` cherche le champ `namespace` à **toute profondeur**. Rien ne s'affiche ? Vous êtes dans `default`.
+</details>
 
 - **Le nom diffère** (`db-credendials`) : la faute est dans votre manifeste. Le modèle de pod d'un Job ne se modifie pas : corrigez le fichier, puis `kubectl delete job migration` et `kubectl apply -f starter/migration.yaml`.
 - **L'objet manque** : vous n'êtes pas dans le bon namespace, ou l'étape 1 n'a pas été faite ici. `kubectl get jobs,pods -A | grep migration` révèle aussi un Job appliqué par erreur dans `default`. Supprimez-le.

@@ -4,6 +4,7 @@
 # réseaux du lab. Ne modifie rien. Lancez-le depuis le dossier du lab :
 #   ./verifier-poste.sh
 # Autonome (pas de scripts/lib.sh) : il doit marcher dans une copie du lab, hors du dépôt.
+# Linux et WSL2 seulement ; ailleurs, il liste ce qu'il faut vérifier à la main.
 set -uo pipefail
 
 CPU_MIN=4          # 2 (cp-1) + 1 + 1, voir le Vagrantfile
@@ -20,6 +21,15 @@ step() { printf "${BLUE}▶ %s${NC}\n" "$*"; }
 ok()   { printf "  ${GREEN}✓${NC} %s\n" "$*"; }
 ko()   { printf "  ${RED}✗ %s${NC}\n" "$1"; [ -n "${2:-}" ] && printf "    → %s\n" "$2"; FAIL=$((FAIL+1)); }
 warn() { printf "  ${YELLOW}⚠ %s${NC}\n" "$*"; }
+
+if [ "$(uname -s)" != Linux ]; then
+  # Les mesures ci-dessous lisent /proc et utilisent nproc, ip et df -BG : Linux seulement.
+  echo "Ce script vérifie un poste Linux ou WSL2. Sur $(uname -s), contrôlez à la main avant vagrant up :"
+  echo "  - vagrant --version et VBoxManage --version répondent ;"
+  echo "  - $CPU_MIN processeurs, $MEMOIRE_MIN_GO Go de mémoire et $DISQUE_MIN_GO Go de disque libres ;"
+  echo "  - aucun réseau du poste en 10.30.0.0/24 ni en 10.20.0.0/24."
+  exit 2
+fi
 
 WSL=0
 grep -qi microsoft /proc/version 2>/dev/null && WSL=1

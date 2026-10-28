@@ -100,6 +100,12 @@ kubectl describe pod racine | grep -A2 Warning
 ```
 
 <details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl describe pod racine | grep -A2 Warning` : ne garde, dans le résumé du pod, que les lignes qui contiennent `Warning` et les **2 lignes suivantes** (`-A2`, *after*), où le message se poursuit.
+</details>
+
+<details>
 <summary>💡 Vérifie ta prédiction</summary>
 
 Il **ne démarre pas** : `CreateContainerConfigError`, avec `container has runAsNonRoot and image will run as root`. `runAsNonRoot` ne **change** pas l'utilisateur, il **vérifie** : avant de lancer le conteneur, le kubelet lit l'utilisateur qu'il obtiendra et refuse si c'est root. Pour corriger, ajoutez un `runAsUser` non nul (par exemple `65532`), ou mieux, utilisez une image prévue pour tourner sans root.
@@ -183,6 +189,13 @@ kubectl apply -f starter/api.yaml
 kubectl get deployment api --watch      # Ctrl-C après 30 secondes
 kubectl get events --field-selector involvedObject.name=api | tail -4
 ```
+
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl get deployment api --watch` : affiche chaque changement du Deployment (colonnes `READY`, `UP-TO-DATE`…) jusqu'à `Ctrl-C`.
+- `kubectl get events --field-selector involvedObject.name=api` : les événements de l'objet `api` (syntaxe au TP02, étape 3). `| tail -4` : les quatre derniers seulement.
+</details>
 
 <details>
 <summary>💡 Vérifie ta prédiction</summary>
