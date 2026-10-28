@@ -219,6 +219,13 @@ jobs:
         with:
           minikube-version: ${{ env.MINIKUBE_VERSION }}
           kubernetes-version: ${{ env.KUBERNETES_VERSION }}
+          # minikube 1.39.0 ne connaît Kubernetes que jusqu'à 1.37.0 : pour 1.37.1, il
+          # vérifie la version auprès de l'API GitHub, sans jeton (client anonyme dans
+          # son code, GITHUB_TOKEN n'y change rien). Les runners partagent leur IP et
+          # épuisent la limite anonyme : « 403 API rate limit exceeded ». --force
+          # poursuit malgré l'échec de cette vérification. À retirer quand minikube
+          # connaîtra la version visée.
+          start-args: --force
           driver: docker
           container-runtime: containerd
           # kindnet (le défaut) n'applique pas les NetworkPolicies : Calico pour le TP11.
