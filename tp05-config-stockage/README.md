@@ -78,12 +78,30 @@ kubectl rollout status statefulset/db
 kubectl get statefulset,pods,pvc,pv
 ```
 
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl rollout status statefulset/db` : attend que le StatefulSet soit prêt, puis rend la main (vu au TP03 pour un Deployment). Un StatefulSet crée ses pods **un par un, dans l'ordre** : `db-1` n'est lancé que lorsque `db-0` est prêt.
+- `kubectl get statefulset,pods,pvc,pv` : plusieurs types en une seule commande, séparés par des virgules, sans espace. Les PV n'appartiennent à aucun namespace : la commande les montre tous.
+</details>
+
 Le StatefulSet a créé la PVC `donnees-db-0` à partir de son modèle, et le provisionneur de minikube un PV pour la satisfaire. Le pod s'appelle `db-0`, pas `db-7c9d…` : son nom est **stable**, et son adresse aussi :
 
 ```bash
 kubectl run dns --rm -it --restart=Never --image=busybox:1.38.0 -- \
   nslookup db-0.db.telemarche.svc.cluster.local
 ```
+
+<details>
+<summary>🔍 Cette commande, option par option</summary>
+
+- `kubectl run dns` : crée un pod nommé `dns`, à partir de l'image `--image=busybox:1.38.0` (une image minuscule qui contient les outils réseau de base).
+- `--restart=Never` : le pod exécute sa commande **une fois**, puis s'arrête sans être relancé.
+- `-it` : branche votre terminal sur le pod (`-i` : l'entrée, `-t` : un terminal), pour voir la réponse s'afficher.
+- `--rm` : supprime le pod dès qu'il a fini. Rien ne reste dans le namespace.
+- `--` : la fin des options de kubectl. Ce qui suit est la commande lancée **dans** le conteneur.
+- `db-0.db.telemarche.svc.cluster.local` se lit `<pod>.<service>.<namespace>.svc.<domaine du cluster>`. Ce nom par pod n'existe que parce que le Service `db` est **headless** (`clusterIP: None`) et que le StatefulSet le désigne (`serviceName: db`).
+</details>
 
 ## Étape 4 — L'API, sans le schéma
 

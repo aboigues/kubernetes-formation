@@ -72,6 +72,14 @@ kubectl taint node minikube-m03 dedie=stock:NoSchedule
 kubectl get nodes -L disque
 ```
 
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl label node minikube-m03 disque=ssd` : pose le label `disque=ssd` (`clé=valeur`) sur le nœud. `--overwrite` pour changer une valeur existante ; `kubectl label node minikube-m03 disque-` (la clé suivie de `-`) pour le retirer.
+- `kubectl taint node minikube-m03 dedie=stock:NoSchedule` : pose un taint de la forme `clé=valeur:effet`. Avec l'effet `NoSchedule`, aucun **nouveau** pod n'y est placé sans la toleration correspondante ; les pods déjà présents restent (l'effet `NoExecute`, lui, les expulserait). Pour le retirer : la même commande suivie de `-`, soit `dedie=stock:NoSchedule-`.
+- `kubectl get nodes -L disque` : ajoute une colonne `DISQUE` qui affiche la valeur de ce label sur chaque nœud (vide s'il est absent). Les taints n'ont pas de colonne : `kubectl describe node minikube-m03 | grep Taints`.
+</details>
+
 Le **label** décrit le nœud (on peut le choisir). Le **taint** le protège : plus aucun pod ne peut y être placé, sauf ceux qui le **tolèrent**.
 
 Complétez `starter/stock.yaml` (`# TODO 3` à `6`) : une toleration pour le taint, un `nodeSelector` pour le label.

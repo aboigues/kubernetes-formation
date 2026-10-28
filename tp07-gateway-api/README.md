@@ -58,6 +58,23 @@ kubectl get pods,svc -n traefik
 kubectl get gatewayclass
 ```
 
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl apply --server-side -f https://…/v1.6.3/standard-install.yaml` : kubectl lit le fichier directement à cette adresse. Ce sont les CRD de la Gateway API publiées par le projet, version 1.6.3, canal `standard` (les types stables). `--server-side` : c'est l'API server qui fusionne les changements et retient qui gère chaque champ. Sans cette option, kubectl recopie l'objet entier dans une annotation limitée à 256 Ko. Le CRD HTTPRoute y tient de justesse (environ 240 Ko) : un peu plus gros, il serait refusé. D'où l'option, que la documentation de la Gateway API donne d'office.
+- `kubectl api-resources --api-group=gateway.networking.k8s.io` : les types que le cluster connaît dans ce groupe. Si `Gateway`, `HTTPRoute` et `GatewayClass` y figurent, les CRD sont bien enregistrés. La colonne `NAMESPACED` indique `false` pour `GatewayClass`, qui vaut pour tout le cluster.
+- `helm upgrade --install traefik traefik` : installe la **release** `traefik` (le nom de *votre* installation) à partir du **chart** `traefik`. `upgrade --install` installe si la release est absente et la met à jour sinon : la commande peut se relancer sans risque.
+  - `--repo https://traefik.github.io/charts` : prend le chart dans ce dépôt, sans `helm repo add` préalable.
+  - `--version 42.1.3` : la version du **chart**, pas celle de Traefik (ce chart installe Traefik v3.7.16).
+  - `--namespace traefik --create-namespace` : installe dans le namespace `traefik`, et le crée s'il n'existe pas.
+  - `--values traefik-values.yaml` : vos réglages, qui remplacent les valeurs par défaut du chart.
+  - `--wait` : ne rend la main que lorsque les pods sont prêts.
+
+  Helm est vu en détail au TP12.
+- `kubectl get pods,svc -n traefik` : deux types en une commande, séparés par une virgule, sans espace.
+- `kubectl get gatewayclass` : pas de `-n`, une GatewayClass n'appartient à aucun namespace.
+</details>
+
 Lisez `traefik-values.yaml` : Traefik y lit **uniquement** la Gateway API, et ne crée **pas** de Gateway par défaut, puisque c'est vous qui allez l'écrire. La GatewayClass `traefik` doit être `ACCEPTED: True`.
 
 > Le script `./prerequis.sh` fait exactement cette étape, pour la CI ou pour repartir d'un cluster neuf.
