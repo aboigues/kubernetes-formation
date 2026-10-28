@@ -11,10 +11,15 @@
 # Le réseau des pods (10.244.0.0/16) et celui des Services (10.96.0.0/12) ne
 # doivent chevaucher aucun réseau des nœuds.
 
+# Taille de chaque VM, explicite. Processeurs et mémoire : kubeadm exige 2
+# processeurs et 1700 Mo pour le control plane, et avec Calico 2 Go ne suffisent
+# pas. Disque (Go) : celui de la box ; mesuré sur cp-1, 3 Go occupés une fois
+# toutes les images téléchargées. outils/preparer-noeud.sh revérifie le tout
+# dans chaque VM avant d'installer quoi que ce soit.
 NOEUDS = {
-  "cp-1"     => { ip: "10.30.0.11", cpus: 2, memoire: 3072 },   # control plane + Calico : 2 Go ne suffisent pas
-  "worker-1" => { ip: "10.30.0.21", cpus: 1, memoire: 1536 },
-  "worker-2" => { ip: "10.30.0.22", cpus: 1, memoire: 1536 },
+  "cp-1"     => { ip: "10.30.0.11", cpus: 2, memoire: 3072, disque: 20 },
+  "worker-1" => { ip: "10.30.0.21", cpus: 1, memoire: 1536, disque: 20 },
+  "worker-2" => { ip: "10.30.0.22", cpus: 1, memoire: 1536, disque: 20 },
 }
 
 HOSTS = NOEUDS.map { |nom, n| "#{n[:ip]} #{nom}" }.join("\n")
@@ -32,8 +37,11 @@ Vagrant.configure("2") do |config|
       noeud.vm.provider :libvirt do |lv|
         lv.cpus = n[:cpus]
         lv.memory = n[:memoire]
+        lv.machine_virtual_size = n[:disque]   # une valeur sous celle de la box est ignorée
         lv.management_network_address = "10.20.0.0/24"   # pas le 192.168.121.0/24 par défaut : en salle, 192.168.x est pris
       end
+      # VirtualBox : le disque reste celui de la box (le régler demande une
+      # fonction expérimentale de Vagrant) ; preparer-noeud.sh le vérifie.
       noeud.vm.provider :virtualbox do |vb|
         vb.cpus = n[:cpus]
         vb.memory = n[:memoire]

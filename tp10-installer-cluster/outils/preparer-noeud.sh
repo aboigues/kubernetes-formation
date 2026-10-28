@@ -7,11 +7,36 @@
 set -euo pipefail
 
 NODE_IP="${1:?Usage : $0 <IP du nœud sur le réseau du cluster, ex. 10.30.0.11>}"
-K8S_MINEURE="v1.37"   # la version MINEURE, sans le patch : un dépôt de paquets par mineure
+K8S_VERSION="1.37.1"              # la MÊME sur tous les nœuds ; verify.sh la contrôle
+K8S_MINEURE="v${K8S_VERSION%.*}"  # v1.37 : il y a un dépôt de paquets par version mineure
 
 # Un dépôt kubernetes laissé par un passage précédent ferait échouer le premier
 # « dnf install » s'il est faux : l'étape 7 le réécrit de toute façon.
 rm -f /etc/yum.repos.d/kubernetes.repo
+
+echo "== 0. Les ressources du nœud"
+# Plancher = ce que kubeadm exige (control plane : 2 processeurs, 1700 Mo) ou
+# en dessous de quoi le nœud ne tient pas ; conseillé = ce que le lab fournit.
+# Disque mesuré sur cp-1 : 3 Go occupés une fois toutes les images téléchargées.
+case "$(hostname -s)" in
+  cp-*) ROLE="control plane"; CPU_MIN=2; MEM_MIN=1700; MEM_CONSEIL=2800 ;;
+  *)    ROLE="worker";        CPU_MIN=1; MEM_MIN=1000; MEM_CONSEIL=1400 ;;
+esac
+DISQUE_MIN=4   # Go libres sous /var, où containerd range les images
+cpus="$(nproc)"
+mem="$(awk '/^MemTotal:/{print int($2/1024)}' /proc/meminfo)"
+disque="$(df -P -BG /var | awk 'NR==2{gsub("G","",$4); print $4}')"
+echo "   $(hostname -s) ($ROLE) : $cpus processeur(s), $mem Mo de mémoire, $disque Go libres sous /var"
+manque=""
+[ "$cpus" -ge "$CPU_MIN" ]      || manque="$manque\n   - $CPU_MIN processeurs au moins (il y en a $cpus)"
+[ "$mem" -ge "$MEM_MIN" ]       || manque="$manque\n   - $MEM_MIN Mo de mémoire au moins (il y en a $mem)"
+[ "$disque" -ge "$DISQUE_MIN" ] || manque="$manque\n   - $DISQUE_MIN Go libres sous /var au moins (il y en a $disque)"
+if [ -n "$manque" ]; then
+  printf "Nœud trop petit pour un %s :%b\nAgrandissez la VM (lab Vagrant : le Vagrantfile), puis relancez.\n" "$ROLE" "$manque" >&2
+  exit 1
+fi
+[ "$mem" -ge "$MEM_CONSEIL" ] \
+  || echo "   ⚠ $mem Mo de mémoire : ça démarre, mais en dessous de $MEM_CONSEIL Mo le $ROLE risque de saturer (probes qui expirent, redémarrages)."
 
 echo "== 1. Modules noyau du réseau des conteneurs"
 # Sur AlmaLinux 10, br_netfilter n'est plus livré avec le noyau de base : il
@@ -71,7 +96,7 @@ EOF
 systemctl enable --now containerd
 systemctl restart containerd
 
-echo "== 7. kubeadm, kubelet et kubectl ${K8S_MINEURE}"
+echo "== 7. kubeadm, kubelet et kubectl v${K8S_VERSION}, et crictl"
 cat >/etc/yum.repos.d/kubernetes.repo <<EOF
 [kubernetes]
 name=Kubernetes
@@ -81,7 +106,17 @@ gpgcheck=1
 gpgkey=https://pkgs.k8s.io/core:/stable:/${K8S_MINEURE}/rpm/repodata/repomd.xml.key
 exclude=kubelet kubeadm kubectl cri-tools kubernetes-cni
 EOF
-dnf -y install kubelet kubeadm kubectl --disableexcludes=kubernetes >/dev/null
+# La version exacte : sans elle, dnf prend le dernier correctif de la mineure,
+# et les nœuds préparés à quelques jours d'écart n'auraient pas la même.
+for p in kubelet kubeadm kubectl; do
+  if rpm -q "$p" >/dev/null 2>&1 && [ "$(rpm -q --qf '%{VERSION}' "$p")" != "$K8S_VERSION" ]; then
+    dnf -y downgrade "$p-$K8S_VERSION" --disableexcludes=kubernetes >/dev/null 2>&1 \
+      || dnf -y install "$p-$K8S_VERSION" --disableexcludes=kubernetes >/dev/null   # plus récente : install met à jour
+  else
+    dnf -y install "$p-$K8S_VERSION" --disableexcludes=kubernetes >/dev/null
+  fi
+done
+dnf -y install cri-tools --disableexcludes=kubernetes >/dev/null   # crictl : voir les conteneurs du nœud, même sans API server
 
 echo "== 8. Le kubelet annonce l'IP du réseau du cluster (la VM en a deux)"
 echo "KUBELET_EXTRA_ARGS=--node-ip=${NODE_IP}" >/etc/sysconfig/kubelet
