@@ -7,7 +7,11 @@
 set -euo pipefail
 
 NODE_IP="${1:?Usage : $0 <IP du nœud sur le réseau du cluster, ex. 10.30.0.11>}"
-K8S_MINEURE="v1.37"
+K8S_MINEURE="v1.37"   # la version MINEURE, sans le patch : un dépôt de paquets par mineure
+
+# Un dépôt kubernetes laissé par un passage précédent ferait échouer le premier
+# « dnf install » s'il est faux : l'étape 7 le réécrit de toute façon.
+rm -f /etc/yum.repos.d/kubernetes.repo
 
 echo "== 1. Modules noyau du réseau des conteneurs"
 # Sur AlmaLinux 10, br_netfilter n'est plus livré avec le noyau de base : il

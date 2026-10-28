@@ -5,7 +5,7 @@
 apiVersion: kubeadm.k8s.io/v1beta4
 kind: InitConfiguration
 localAPIEndpoint:
-  advertiseAddress: ______          # TODO 7 : l'IP de cp-1 sur le réseau du CLUSTER (pas celle de Vagrant)
+  advertiseAddress: ______          # TODO 1 : l'IP de cp-1 sur le réseau du CLUSTER (pas celle de Vagrant)
   bindPort: 6443
 nodeRegistration:
   name: cp-1
@@ -14,14 +14,14 @@ nodeRegistration:
 apiVersion: kubeadm.k8s.io/v1beta4
 kind: ClusterConfiguration
 clusterName: telemarche
-kubernetesVersion: ______          # TODO 8 : la version exacte (kubeadm version -o short)
+kubernetesVersion: ______          # TODO 2 : la version exacte (kubeadm version -o short)
 # Un NOM plutôt qu'une IP : pour passer plus tard à trois control planes
 # derrière un répartiteur, il suffira de faire pointer ce nom ailleurs.
 controlPlaneEndpoint: cp-1:6443
 networking:
-  podSubnet: ______                 # TODO 9 : le réseau des pods, celui que Calico distribuera
+  podSubnet: ______                 # TODO 3 : le réseau des pods, celui que Calico distribuera
   serviceSubnet: 10.96.0.0/12
 ---
 apiVersion: kubelet.config.k8s.io/v1beta1
 kind: KubeletConfiguration
-cgroupDriver: ______                # TODO 10 : le même gestionnaire de cgroups que containerd
+cgroupDriver: ______                # TODO 4 : le même gestionnaire de cgroups que containerd
