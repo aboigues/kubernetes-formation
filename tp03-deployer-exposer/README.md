@@ -108,6 +108,15 @@ kubectl annotate deployment/api kubernetes.io/change-cause="passage en 1.1" --ov
 kubectl rollout status deployment/api
 ```
 
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `kubectl annotate deployment/api kubernetes.io/change-cause="…"` : pose une **annotation** (une note libre, sans effet sur le fonctionnement) sur le Deployment. Celle-ci, `change-cause`, est reprise par `kubectl rollout history` pour dire **pourquoi** chaque révision existe. `--overwrite` : remplacer la valeur déjà posée.
+- `kubectl set image deployment/api api=…:1.1` : change l'image du conteneur **nommé** `api` dans le modèle de pod. Modifier le modèle déclenche une mise à jour progressive.
+- `kubectl rollout status deployment/api` : suit cette mise à jour en direct et ne rend la main qu'une fois terminée, quand tous les pods tournent la nouvelle version et sont prêts. Dans un script, la commande suivante attend donc la fin du déploiement.
+- `deployment/api` : la forme `type/nom`, équivalente à `deployment api`.
+</details>
+
 Regardez le terminal `trafic` : les réponses `1.1` apparaissent, se mêlent aux `1.0`, puis les remplacent. Aucune ligne `!!`.
 
 ```bash

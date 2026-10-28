@@ -39,26 +39,6 @@ Avant d'appliquer, faites valider vos fichiers **par l'API server**, sans rien c
 kubectl apply --dry-run=server -f starter/
 ```
 
-> 🎯 **Avant de lancer la commande suivante, prédis :** vous écrivez `contianers` au lieu de `containers` dans un manifeste. Kubernetes va-t-il ignorer le champ inconnu (et créer un pod sans conteneur), ou refuser le fichier ?
-
-```bash
-sed 's/containers:/contianers:/' starter/pod-api.yaml | kubectl apply --dry-run=server -f -
-```
-
-<details>
-<summary>💡 Vérifie ta prédiction</summary>
-
-Il **refuse** :
-
-```
-strict decoding error: unknown field "spec.contianers"
-```
-
-kubectl demande à l'API server une validation **stricte** des champs (`--validate=strict`, le défaut). Avec `--validate=false`, que l'on croise dans de vieux scripts, le même fichier serait **accepté** et le champ inconnu **jeté en silence** : essayez avec `ports` mal orthographié, le pod est créé… sans port. L'erreur n'apparaît alors que bien plus tard, sous une forme bien plus obscure.
-
-C'est aussi pourquoi `--dry-run=server` vaut mieux que `--dry-run=client` : seul le serveur connaît le schéma exact de **sa** version.
-</details>
-
 ## Étape 3 — Regarder le cluster travailler
 
 Ouvrez un **second terminal** et laissez-y tourner :
@@ -80,6 +60,20 @@ Observez les événements défiler et notez **qui** les émet :
 kubectl get events --field-selector involvedObject.name=api-demo \
   -o custom-columns=SOURCE:.source.component,RAISON:.reason,MESSAGE:.message
 ```
+
+<details>
+<summary>🔍 Cette commande, option par option</summary>
+
+- `kubectl get events` : les événements du namespace, que les composants publient chaque fois qu'ils agissent sur un objet.
+- `--field-selector involvedObject.name=api-demo` : un filtre sur un **champ** de l'objet, appliqué par l'API server (`-l` filtre sur les labels). `involvedObject` est l'objet dont parle l'événement : ici, on ne garde que ceux du pod `api-demo`.
+- `\` en fin de ligne : la commande continue sur la ligne suivante.
+- `-o custom-columns=TITRE:chemin,…` : un tableau à la carte. Chaque colonne s'écrit avec un titre, deux-points, puis le chemin du champ dans l'objet. Pas d'espace autour des virgules.
+  - `.source.component` : le composant qui a émis l'événement ;
+  - `.reason` : le motif, en un mot (`Pulled`, `Started`…) ;
+  - `.message` : le texte complet.
+
+Pour trouver d'autres chemins : `kubectl get events -o yaml`, ou `kubectl explain event`.
+</details>
 
 > ❓ **Question** : reliez chaque ligne à un composant du cours. Qui a choisi le nœud ? Qui a lancé le conteneur ? Pourquoi aucun événement ne vient-il de l'API server ni d'etcd ?
 

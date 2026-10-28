@@ -56,6 +56,12 @@ kubectl get pods -o custom-columns=POD:.metadata.name,QOS:.status.qosClass
 ```
 
 <details>
+<summary>🔍 Cette commande, option par option</summary>
+
+`-o custom-columns=TITRE:chemin,…` construit un tableau à la carte (vu au TP02) : la colonne `POD` affiche `.metadata.name`, la colonne `QOS` affiche `.status.qosClass`. Ce champ est dans `status` : vous ne l'écrivez jamais, Kubernetes le **calcule** à la création du pod.
+</details>
+
+<details>
 <summary>💡 Vérifie ta prédiction</summary>
 
 Tous en **`Burstable`** : ils ont des requests, mais des limits **plus hautes**. La classe se déduit des ressources de tous les conteneurs du pod :
@@ -141,6 +147,14 @@ kubectl get apiservice v1beta1.metrics.k8s.io      # AVAILABLE passe à True au 
 kubectl top nodes
 kubectl top pods --sort-by=cpu
 ```
+
+<details>
+<summary>🔍 Ces commandes, une par une</summary>
+
+- `minikube addons enable metrics-server` : déploie metrics-server dans le namespace `kube-system`.
+- `kubectl get apiservice v1beta1.metrics.k8s.io` : metrics-server ne remplace pas l'API server, il **s'y greffe**. Il déclare un objet APIService, et l'API server lui transmet alors toutes les requêtes du groupe `metrics.k8s.io`, en version `v1beta1` : c'est l'**agrégation d'API**. `AVAILABLE` à `True` signifie que l'API server arrive à le joindre. Tant que c'est `False`, `kubectl top` échoue.
+- `kubectl top nodes`, `kubectl top pods` : la consommation **du moment** (CPU en millicœurs `m`, mémoire en `Mi`). `--sort-by=cpu` trie les plus gourmands en tête (`--sort-by=memory` existe aussi).
+</details>
 
 metrics-server interroge le kubelet de chaque nœud et ne garde que la **dernière** mesure. Ce n'est pas un outil de supervision : ni historique, ni alertes (c'est le rôle de Prometheus, TP13).
 
