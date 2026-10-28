@@ -11,7 +11,7 @@ spec:
     ipPools:
       - name: default-ipv4-ippool
         blockSize: 26
-        cidr: ______                  # TODO 11 : le podSubnet de kubeadm-config.yaml : ils DOIVENT être égaux
+        cidr: ______                  # TODO 5 : le podSubnet de kubeadm-config.yaml : ils DOIVENT être égaux
         encapsulation: VXLANCrossSubnet
         natOutgoing: Enabled
         nodeSelector: all()

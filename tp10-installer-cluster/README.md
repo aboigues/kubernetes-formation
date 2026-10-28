@@ -32,7 +32,7 @@ Trois nœuds `Ready` en Kubernetes **v1.37.1**, un control plane sain (etcd comp
 **En autonomie**, le lab Vagrant crée trois VM **nues**, sans rien de Kubernetes :
 
 ```bash
-export TP=$PWD             # depuis le dossier du TP : la suite y retrouve starter/
+export TP=$PWD             # depuis le dossier du TP : la suite y retrouve outils/ et starter/
 cd lab
 vagrant up                  # 5 à 10 minutes la première fois (téléchargement de la box)
 vagrant status
@@ -45,16 +45,16 @@ Chaque VM a **deux** cartes réseau : la première pour Vagrant (SSH, Internet),
 
 ## Étape 2 — Préparer chaque nœud
 
-Le même travail sur les trois nœuds : des modules noyau, le routage, plus de swap, SELinux en mode permissif, le pare-feu, **containerd**, puis les paquets **kubeadm, kubelet, kubectl**. Complétez `starter/preparer-noeud.sh` (`# TODO 1` à `6`) en lisant ses commentaires, puis lancez-le sur chaque nœud, avec **son** IP :
+Le même travail sur les trois nœuds : des modules noyau, le routage, plus de swap, SELinux en mode permissif, le pare-feu, **containerd**, puis les paquets **kubeadm, kubelet, kubectl**. Ce travail est fourni, tout fait, dans `outils/preparer-noeud.sh` : lisez-le (chaque étape est commentée), puis lancez-le sur chaque nœud, avec **son** IP :
 
 ```bash
 # depuis le dossier du lab, pour chaque nœud :
-vagrant upload "$TP"/starter/preparer-noeud.sh /tmp/preparer-noeud.sh cp-1
+vagrant upload "$TP"/outils/preparer-noeud.sh /tmp/preparer-noeud.sh cp-1
 vagrant ssh cp-1 -c 'sudo bash /tmp/preparer-noeud.sh 10.30.0.11'
 # … puis worker-1 avec 10.30.0.21, worker-2 avec 10.30.0.22
 ```
 
-Trois points méritent qu'on s'y arrête :
+Dans ce script, trois points méritent qu'on s'y arrête :
 
 - **`br_netfilter`** : sur AlmaLinux 10, ce module n'est plus livré avec le noyau de base. Il vient de `kernel-modules-extra`, et dans la version **exacte** du noyau lancé. Le script s'en occupe.
 - **`SystemdCgroup = true`** : containerd et le kubelet doivent gérer les cgroups de la même façon. Un désaccord, et le control plane redémarre en boucle : c'est la panne classique des installations kubeadm.
@@ -68,7 +68,7 @@ Le kubelet redémarre en boucle (`activating (auto-restart)`) : c'est **normal**
 
 ## Étape 3 — Initialiser le control plane
 
-Complétez `starter/kubeadm-config.yaml` (`# TODO 7` à `10`), copiez-le sur `cp-1`, puis :
+Complétez `starter/kubeadm-config.yaml` (`# TODO 1` à `4`), copiez-le sur `cp-1`, puis :
 
 ```bash
 vagrant upload "$TP"/starter/kubeadm-config.yaml /tmp/kubeadm-config.yaml cp-1
@@ -113,7 +113,7 @@ kubectl describe node cp-1 | grep -i network
 
 ## Étape 5 — Le réseau des pods : Calico
 
-Complétez `starter/calico.yaml` (`# TODO 11`). Le CIDR des pods déclaré à `kubeadm init` **doit** être celui que distribue le CNI. Copiez le fichier sur `cp-1`, puis installez dans cet ordre : les **types d'objets** de Calico (CRD), son **opérateur**, et seulement quand les types sont enregistrés, votre **installation** :
+Complétez `starter/calico.yaml` (`# TODO 5`). Le CIDR des pods déclaré à `kubeadm init` **doit** être celui que distribue le CNI. Copiez le fichier sur `cp-1`, puis installez dans cet ordre : les **types d'objets** de Calico (CRD), son **opérateur**, et seulement quand les types sont enregistrés, votre **installation** :
 
 ```bash
 vagrant upload "$TP"/starter/calico.yaml /tmp/calico.yaml cp-1     # depuis le dossier du lab
@@ -206,7 +206,7 @@ Pour revenir à minikube : `unset KUBECONFIG`. Pour supprimer le lab : `vagrant 
 <details>
 <summary><code>kubeadm init</code> s'arrête aux vérifications préalables</summary>
 
-Lisez la ligne `[ERROR …]`. Les plus fréquentes : `NumCPU` (le control plane veut 2 processeurs), `Swap` (le swap est encore actif : `swapon --show`), `FileContent--proc-sys-net-ipv4-ip_forward` (le `# TODO 2`), `CRI` (containerd ne répond pas : `sudo systemctl status containerd`).
+Lisez la ligne `[ERROR …]`. Les plus fréquentes : `NumCPU` (le control plane veut 2 processeurs), `Swap` (le swap est encore actif : `swapon --show`), `FileContent--proc-sys-net-ipv4-ip_forward` (le script de l'étape 2 n'est pas allé au bout : relancez-le), `CRI` (containerd ne répond pas : `sudo systemctl status containerd`).
 </details>
 
 <details>
@@ -218,7 +218,7 @@ Le suspect n° 1 est un désaccord de cgroups entre containerd et le kubelet. `g
 <details>
 <summary>Les nœuds annoncent tous la même IP, ou une IP en 10.20.x / 10.0.2.15</summary>
 
-Le `--node-ip` manque (`# TODO 6`) : `cat /etc/sysconfig/kubelet` sur le nœud. Corrigez, puis `sudo systemctl restart kubelet`.
+Le `--node-ip` est absent ou faux : `cat /etc/sysconfig/kubelet` sur le nœud. Relancez `preparer-noeud.sh` avec l'IP **de ce nœud** (étape 2), puis `sudo systemctl restart kubelet`.
 </details>
 
 <details>
@@ -250,7 +250,7 @@ Le jeton vit 24 h. Redemandez la commande sur `cp-1` : `sudo kubeadm token creat
 ## 🚀 Pour aller plus loin
 
 1. **Restaurer etcd.** Supprimez un Deployment, puis restaurez `sauvegarde.db` avec `etcdutl snapshot restore` vers un **nouveau** dossier, et faites pointer le manifeste `/etc/kubernetes/manifests/etcd.yaml` dessus. Le Deployment revient-il ?
-2. **Une mise à jour de version.** Recommencez le lab avec `K8S_MINEURE="v1.36"` et la dernière 1.36, puis montez en 1.37 : sur `cp-1`, `kubeadm upgrade plan` puis `kubeadm upgrade apply`, et sur chaque nœud, l'un après l'autre, `drain` (TP09), `kubeadm upgrade node`, mise à jour du kubelet, `uncordon`.
+2. **Une mise à jour de version.** Recommencez le lab avec `K8S_MINEURE="v1.36"` dans `outils/preparer-noeud.sh` et la dernière 1.36, puis montez en 1.37 : sur `cp-1`, `kubeadm upgrade plan` puis `kubeadm upgrade apply`, et sur chaque nœud, l'un après l'autre, `drain` (TP09), `kubeadm upgrade node`, mise à jour du kubelet, `uncordon`.
 3. **Un control plane hautement disponible.** Pourquoi `controlPlaneEndpoint` est-il un **nom** (`cp-1:6443`) et pas une IP ? Que faudrait-il pour ajouter `cp-2` et `cp-3` (`kubeadm join --control-plane`, répartiteur de charge, nombre impair de membres etcd) ?
 4. **Le pare-feu activé.** Démarrez firewalld sur les trois nœuds (`sudo systemctl enable --now firewalld`), relancez `preparer-noeud.sh`, et vérifiez que le cluster fonctionne toujours. Quels ports a-t-il ouverts, et pour qui ?
 
