@@ -114,6 +114,8 @@ Chaque TP fournit son **état de départ** : vous pouvez faire un TP sans avoir 
 - **minikube 1.39** ou plus récent, et **kubectl 1.36 à 1.38** (les TP ciblent Kubernetes **1.37**)
 - `git` et `curl` ; **Helm 4** pour le TP12
 
+> 🖥️ **Classe virtuelle ou poste neuf ?** Deux guides pas à pas : [se connecter à son poste avec RustDesk](docs/CLASSE_VIRTUELLE_RUSTDESK.md), puis [installer kubectl et minikube](docs/INSTALLER_KUBECTL_MINIKUBE.md).
+
 Contrôlez votre poste — le script ne modifie rien :
 
 ```bash

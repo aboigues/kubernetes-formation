@@ -13,6 +13,12 @@ Cette section contient l'ensemble de la documentation complémentaire du projet 
 
 ## Démarrage et Installation
 
+### [CLASSE_VIRTUELLE_RUSTDESK.md](./CLASSE_VIRTUELLE_RUSTDESK.md)
+Se connecter à son poste de formation distant : bureau à distance RustDesk, puis SSH à travers un tunnel RustDesk.
+
+### [INSTALLER_KUBECTL_MINIKUBE.md](./INSTALLER_KUBECTL_MINIKUBE.md)
+Préparer un poste Linux neuf : kubectl, minikube, premier `minikube start`, Helm pour le TP12.
+
 ### [GETTING_STARTED.md](./GETTING_STARTED.md)
 Guide de démarrage rapide pour la formation Kubernetes.
 
