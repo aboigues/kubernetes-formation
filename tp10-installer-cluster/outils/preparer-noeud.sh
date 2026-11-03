@@ -38,12 +38,33 @@ fi
 [ "$mem" -ge "$MEM_CONSEIL" ] \
   || echo "   ⚠ $mem Mo de mémoire : ça démarre, mais en dessous de $MEM_CONSEIL Mo le $ROLE risque de saturer (probes qui expirent, redémarrages)."
 
+echo "== 0 bis. Les dépôts de paquets AlmaLinux"
+# Tout le script installe par dnf. mirrors.almalinux.org, qui distribue la liste
+# des miroirs, a des coupures passagères (« Curl error (28): Timeout was reached ») :
+# on le vérifie ici, avec trois essais, plutôt que de voir échouer l'étape 1
+# avec un message qui accuserait le noyau.
+essai=1
+until dnf -q makecache >/dev/null 2>&1; do
+  if [ "$essai" -ge 3 ]; then
+    echo "Dépôts AlmaLinux injoignables depuis ce nœud (3 essais). Rien n'a été installé. Testez :" >&2
+    echo "   curl -sS -m 10 -o /dev/null -w '%{http_code}\\n' https://mirrors.almalinux.org/mirrorlist/10/appstream" >&2
+    echo "   - 200 : coupure passagère, relancez ce script ;" >&2
+    echo "   - délai dépassé ici mais pas sur les autres nœuds : relancez plus tard, ou redémarrez la VM ;" >&2
+    echo "   - délai dépassé partout, poste compris : proxy ou pare-feu, voyez le formateur." >&2
+    exit 1
+  fi
+  echo "   dépôts injoignables (essai $essai/3), nouvel essai dans 15 s…"
+  essai=$((essai + 1))
+  sleep 15
+done
+echo "   dépôts joignables"
+
 echo "== 1. Modules noyau du réseau des conteneurs"
 # Sur AlmaLinux 10, br_netfilter n'est plus livré avec le noyau de base : il
 # est dans kernel-modules-extra, qui doit correspondre EXACTEMENT au noyau lancé.
 if ! modinfo br_netfilter >/dev/null 2>&1; then
   dnf -y install "kernel-modules-extra-$(uname -r)" >/dev/null \
-    || { echo "kernel-modules-extra-$(uname -r) introuvable : « dnf -y update kernel », redémarrez, puis relancez ce script." >&2; exit 1; }
+    || { echo "kernel-modules-extra-$(uname -r) introuvable (les dépôts répondent : le noyau lancé est plus ancien que ceux qu'ils proposent) : « dnf -y update kernel », redémarrez, puis relancez ce script." >&2; exit 1; }
 fi
 cat >/etc/modules-load.d/k8s.conf <<EOF
 overlay
