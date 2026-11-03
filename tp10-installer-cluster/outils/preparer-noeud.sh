@@ -50,18 +50,26 @@ echo "== 0 bis. Les dépôts de paquets AlmaLinux"
 # passe au miroir suivant. La durée totale n'est bornée que largement (10 min) :
 # les métadonnées pèsent près de 60 Mo (BaseOS : 54 Mo, une minute à 1 Mo/s),
 # et en salle trois VM par poste les téléchargent en même temps.
-MIROIRS=https://mirrors.almalinux.org/mirrorlist/10/appstream
 essai=1
 until timeout 600 dnf makecache --setopt=timeout=15 --setopt=minrate=50k --setopt=retries=1; do
   if [ "$essai" -ge 3 ]; then
-    echo "Dépôts AlmaLinux injoignables depuis $(hostname -s) (3 essais, miroirs puis serveur officiel). Rien n'a été installé. Diagnostic :" >&2
-    echo "   DNS        : $(getent ahosts mirrors.almalinux.org | awk '{print $1}' | sort -u | awk '/:/{v6++; next} {v4++} END {printf "%d adresse(s) IPv4, %d IPv6", v4, v6}')" >&2
-    echo "   miroirs    : $(curl -4 -sS -m 10 -o /dev/null -w 'HTTP %{http_code} en %{time_total} s' "$MIROIRS" 2>&1 | tr '\n' ' ')" >&2
-    echo "   officiel   : $(curl -4 -sS -m 10 -o /dev/null -w 'HTTP %{http_code} en %{time_total} s' https://repo.almalinux.org/almalinux/10/AppStream/x86_64/os/repodata/repomd.xml 2>&1 | tr '\n' ' ')" >&2
-    echo "   Internet   : $(curl -4 -sS -m 10 -o /dev/null -w 'HTTP %{http_code} en %{time_total} s' https://pkgs.k8s.io 2>&1 | tr '\n' ' ')" >&2
-    echo "   - tout en échec ici mais pas sur un autre nœud : réseau de la VM, « vagrant reload $(hostname -s) » depuis le poste ;" >&2
-    echo "   - « officiel » en 200 : coupure passagère, relancez ce script ;" >&2
-    echo "   - tout en échec sur tous les nœuds et sur le poste : réseau de la salle, voyez le formateur." >&2
+    # Le DNS répond même sans accès sortant (sous VirtualBox, c'est le poste qui
+    # résout pour la VM) : seul un vrai échange HTTPS dit si la VM sort.
+    # « || true » : sous set -e, un curl en échec dans $(…) arrêterait le script ici.
+    http() { curl -4 -sS -m 10 -o /dev/null -w '%{http_code}' "$1" 2>/dev/null || true; }
+    officiel="$(http https://repo.almalinux.org/almalinux/10/AppStream/x86_64/os/repodata/repomd.xml)"
+    internet="$(http https://pkgs.k8s.io)"
+    echo "Dépôts AlmaLinux injoignables depuis $(hostname -s) (3 essais, miroirs puis serveur officiel). Rien n'a été installé." >&2
+    echo "   Test HTTPS : serveur officiel AlmaLinux → ${officiel:-000}, pkgs.k8s.io → ${internet:-000}   (000 = pas de réponse)" >&2
+    if [ "${internet:-000}" = 000 ] && [ "${officiel:-000}" = 000 ]; then
+      echo "   → $(hostname -s) ne sort plus du tout. Vu en salle : le NAT de VirtualBox bloqué pour une seule VM." >&2
+      echo "     Depuis le dossier du lab, sur le poste : vagrant reload $(hostname -s), puis relancez ce script." >&2
+      echo "     Si tous les nœuds et le poste lui-même ne sortent plus : réseau de la salle, voyez le formateur." >&2
+    elif [ "${officiel:-000}" = 000 ]; then
+      echo "   → Internet répond mais pas AlmaLinux : serveur ou filtrage du côté AlmaLinux, relancez plus tard ou voyez le formateur." >&2
+    else
+      echo "   → AlmaLinux répond maintenant : coupure passagère, relancez ce script." >&2
+    fi
     exit 1
   fi
   if grep -q '^mirrorlist=' /etc/yum.repos.d/almalinux-*.repo; then
