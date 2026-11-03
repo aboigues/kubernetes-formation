@@ -41,26 +41,40 @@ fi
 echo "== 0 bis. Les dépôts de paquets AlmaLinux"
 # Tout le script installe par dnf : on vérifie d'abord que les dépôts répondent,
 # plutôt que de voir échouer l'étape 1 avec un message qui accuserait le noyau.
-# Chaque essai est borné (90 s) : réglé par défaut, dnf attend 30 s par connexion
-# et réessaie, un essai pouvait durer des minutes sans rien afficher.
+# Chaque dépôt AlmaLinux passe par une liste de miroirs (mirrorlist) que
+# mirrors.almalinux.org choisit d'après l'IP publique ; en salle, le miroir
+# proposé peut ne jamais répondre (« -- B/s »). Après un échec, on remplace la
+# liste par le serveur officiel, repo.almalinux.org : chaque .repo le prévoit
+# en commentaire (« # baseurl= »).
+# Un transfert bloqué (moins de 50 ko/s pendant 15 s) est abandonné par dnf, qui
+# passe au miroir suivant. La durée totale n'est bornée que largement (10 min) :
+# les métadonnées pèsent près de 60 Mo (BaseOS : 54 Mo, une minute à 1 Mo/s),
+# et en salle trois VM par poste les téléchargent en même temps.
 MIROIRS=https://mirrors.almalinux.org/mirrorlist/10/appstream
 essai=1
-until timeout 90 dnf makecache --setopt=timeout=15 --setopt=retries=1; do
+until timeout 600 dnf makecache --setopt=timeout=15 --setopt=minrate=50k --setopt=retries=1; do
   if [ "$essai" -ge 3 ]; then
-    echo "Dépôts AlmaLinux injoignables depuis $(hostname -s) (3 essais). Rien n'a été installé. Diagnostic :" >&2
-    echo "   DNS  : $(getent ahosts mirrors.almalinux.org | awk '{print $1}' | sort -u | awk '/:/{v6++; next} {v4++} END {printf "%d adresse(s) IPv4, %d IPv6", v4, v6}')" >&2
-    echo "   IPv4 : $(curl -4 -sS -m 10 -o /dev/null -w 'HTTP %{http_code} en %{time_total} s' "$MIROIRS" 2>&1 | tr '\n' ' ')" >&2
-    echo "   IPv6 : $(curl -6 -sS -m 10 -o /dev/null -w 'HTTP %{http_code} en %{time_total} s' "$MIROIRS" 2>&1 | tr '\n' ' ')" >&2
-    echo "   - DNS vide, ou IPv4 en échec ici mais pas sur un autre nœud : réseau de la VM, « vagrant reload $(hostname -s) » depuis le poste ;" >&2
-    echo "   - IPv4 en 200 : coupure passagère, relancez ce script ;" >&2
-    echo "   - IPv4 en échec sur tous les nœuds et sur le poste : réseau de la salle, voyez le formateur." >&2
+    echo "Dépôts AlmaLinux injoignables depuis $(hostname -s) (3 essais, miroirs puis serveur officiel). Rien n'a été installé. Diagnostic :" >&2
+    echo "   DNS        : $(getent ahosts mirrors.almalinux.org | awk '{print $1}' | sort -u | awk '/:/{v6++; next} {v4++} END {printf "%d adresse(s) IPv4, %d IPv6", v4, v6}')" >&2
+    echo "   miroirs    : $(curl -4 -sS -m 10 -o /dev/null -w 'HTTP %{http_code} en %{time_total} s' "$MIROIRS" 2>&1 | tr '\n' ' ')" >&2
+    echo "   officiel   : $(curl -4 -sS -m 10 -o /dev/null -w 'HTTP %{http_code} en %{time_total} s' https://repo.almalinux.org/almalinux/10/AppStream/x86_64/os/repodata/repomd.xml 2>&1 | tr '\n' ' ')" >&2
+    echo "   Internet   : $(curl -4 -sS -m 10 -o /dev/null -w 'HTTP %{http_code} en %{time_total} s' https://pkgs.k8s.io 2>&1 | tr '\n' ' ')" >&2
+    echo "   - tout en échec ici mais pas sur un autre nœud : réseau de la VM, « vagrant reload $(hostname -s) » depuis le poste ;" >&2
+    echo "   - « officiel » en 200 : coupure passagère, relancez ce script ;" >&2
+    echo "   - tout en échec sur tous les nœuds et sur le poste : réseau de la salle, voyez le formateur." >&2
     exit 1
   fi
-  echo "   dépôts injoignables (essai $essai/3), nouvel essai dans 15 s…"
+  if grep -q '^mirrorlist=' /etc/yum.repos.d/almalinux-*.repo; then
+    echo "   liste de miroirs sans réponse : bascule sur le serveur officiel (repo.almalinux.org)"
+    sed -i -e 's|^mirrorlist=|#mirrorlist=|' -e 's|^# *baseurl=|baseurl=|' /etc/yum.repos.d/almalinux-*.repo
+    dnf clean all >/dev/null
+  else
+    echo "   dépôts injoignables (essai $essai/3), nouvel essai dans 15 s…"
+    sleep 15
+  fi
   essai=$((essai + 1))
-  sleep 15
 done
-echo "   dépôts joignables"
+echo "   dépôts joignables ($(grep -q '^mirrorlist=' /etc/yum.repos.d/almalinux-baseos.repo && echo 'liste de miroirs' || echo 'serveur officiel'))"
 
 echo "== 1. Modules noyau du réseau des conteneurs"
 # Sur AlmaLinux 10, br_netfilter n'est plus livré avec le noyau de base : il
