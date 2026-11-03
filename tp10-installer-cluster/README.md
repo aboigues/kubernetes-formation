@@ -64,6 +64,16 @@ vagrant ssh cp-1            # « exit » pour revenir
 >
 > Sans cette variable, Vagrant tente VirtualBox et s'arrête aussitôt : « Vagrant is unable to use the VirtualBox provider from the Windows Subsystem for Linux ». Les starters, eux, restent dans le dépôt : complétez-les là, `$TP` y mène (dans un nouveau terminal, refaites aussi `export TP=<chemin du dépôt>/tp10-installer-cluster`).
 
+> **Avec VirtualBox sous Linux** (depuis la version 6.1.28), `vagrant up` peut s'arrêter sur cp-1 : « The IP address configured for the host-only network is not within the allowed ranges. Address: 10.30.0.11, Ranges: 192.168.56.0/21 ». Sans configuration, VirtualBox n'accepte un réseau host-only que dans `192.168.56.0/21`. Or le lab est en `10.30.0.0/24`, car en salle les postes sont en `192.168.x`. Il faut autoriser ce réseau, une fois par poste et en root (sans droits root, demandez-le au formateur) :
+>
+> ```bash
+> sudo mkdir -p /etc/vbox
+> echo '* 10.30.0.0/24' | sudo tee -a /etc/vbox/networks.conf
+> vagrant up                                      # reprend là où il s'était arrêté
+> ```
+>
+> `./verifier-poste.sh` le détecte avant `vagrant up`.
+
 Chaque VM a **deux** cartes réseau : la première pour Vagrant (SSH, Internet), la seconde, en `10.30.0.0/24`, pour le cluster. Retenez-le : c'est la source du piège de l'étape 2.
 
 ## Étape 2 — Préparer chaque nœud

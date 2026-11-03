@@ -22,6 +22,21 @@ ok()   { printf "  ${GREEN}✓${NC} %s\n" "$*"; }
 ko()   { printf "  ${RED}✗ %s${NC}\n" "$1"; [ -n "${2:-}" ] && printf "    → %s\n" "$2"; FAIL=$((FAIL+1)); }
 warn() { printf "  ${YELLOW}⚠ %s${NC}\n" "$*"; }
 
+RESEAU_CLUSTER=10.30.0.0/24   # la seconde carte des VM, voir le Vagrantfile
+
+# Vrai si une ligne « * <plage> … » du fichier $2 contient le réseau $1 (a.b.c.d/nn).
+# Les plages IPv6 sont ignorées. Format : https://www.virtualbox.org/manual/ch06.html#network_hostonly
+vbox_autorise() {
+  [ -r "$2" ] || return 1
+  awk -v cible="$1" '
+    function n(ip,  p) { split(ip, p, "."); return ((p[1] * 256 + p[2]) * 256 + p[3]) * 256 + p[4] }
+    BEGIN { split(cible, c, "/") }
+    $1 == "*" { for (i = 2; i <= NF; i++) if ($i ~ /^[0-9.]+\/[0-9]+$/) {
+        split($i, r, "/"); bloc = 2 ^ (32 - r[2])
+        if (r[2] + 0 <= c[2] + 0 && int(n(r[1]) / bloc) == int(n(c[1]) / bloc)) ok = 1 } }
+    END { exit !ok }' "$2"
+}
+
 if [ "$(uname -s)" != Linux ]; then
   # Les mesures ci-dessous lisent /proc et utilisent nproc, ip et df -BG : Linux seulement.
   echo "Ce script vérifie un poste Linux ou WSL2. Sur $(uname -s), contrôlez à la main avant vagrant up :"
@@ -102,7 +117,20 @@ case "$FOURNISSEUR" in
     if [ "$WSL" = 1 ]; then
       ko "VirtualBox depuis WSL n'est pas pris en charge par ce lab" "utilisez libvirt : export VAGRANT_DEFAULT_PROVIDER=libvirt"
     elif command -v VBoxManage >/dev/null; then
-      ok "VirtualBox $(VBoxManage --version)"
+      vbox="$(VBoxManage --version)"
+      ok "VirtualBox $vbox"
+      # Depuis 6.1.28, VirtualBox (Linux) refuse un réseau host-only hors des
+      # plages de /etc/vbox/networks.conf, 192.168.56.0/21 si le fichier manque :
+      # « The IP address configured for the host-only network is not within the
+      # allowed ranges ». Le lab est en 10.30.0.0/24 (192.168.x est pris en salle).
+      if [ "$(printf '%s\n' 6.1.28 "${vbox%%[r_]*}" | sort -V | head -n1)" = 6.1.28 ]; then
+        if vbox_autorise "$RESEAU_CLUSTER" /etc/vbox/networks.conf; then
+          ok "/etc/vbox/networks.conf autorise $RESEAU_CLUSTER"
+        else
+          ko "VirtualBox refusera le réseau du cluster : $RESEAU_CLUSTER n'est pas autorisé par /etc/vbox/networks.conf" \
+             "sudo mkdir -p /etc/vbox && echo '* $RESEAU_CLUSTER' | sudo tee -a /etc/vbox/networks.conf   (sans droits root : demandez-le au formateur)"
+        fi
+      fi
     else
       ko "VirtualBox introuvable (VBoxManage)" "installez VirtualBox, ou le plugin vagrant-libvirt sous Linux"
     fi
