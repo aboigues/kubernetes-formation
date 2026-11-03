@@ -39,25 +39,50 @@ fi
   || echo "   ⚠ $mem Mo de mémoire : ça démarre, mais en dessous de $MEM_CONSEIL Mo le $ROLE risque de saturer (probes qui expirent, redémarrages)."
 
 echo "== 0 bis. Les dépôts de paquets AlmaLinux"
-# Tout le script installe par dnf. mirrors.almalinux.org, qui distribue la liste
-# des miroirs, a des coupures passagères (« Curl error (28): Timeout was reached ») :
-# on le vérifie ici, avec trois essais, plutôt que de voir échouer l'étape 1
-# avec un message qui accuserait le noyau.
+# Tout le script installe par dnf : on vérifie d'abord que les dépôts répondent,
+# plutôt que de voir échouer l'étape 1 avec un message qui accuserait le noyau.
+# Chaque dépôt AlmaLinux passe par une liste de miroirs (mirrorlist) que
+# mirrors.almalinux.org choisit d'après l'IP publique ; en salle, le miroir
+# proposé peut ne jamais répondre (« -- B/s »). Après un échec, on remplace la
+# liste par le serveur officiel, repo.almalinux.org : chaque .repo le prévoit
+# en commentaire (« # baseurl= »).
+# Un transfert bloqué (moins de 50 ko/s pendant 15 s) est abandonné par dnf, qui
+# passe au miroir suivant. La durée totale n'est bornée que largement (10 min) :
+# les métadonnées pèsent près de 60 Mo (BaseOS : 54 Mo, une minute à 1 Mo/s),
+# et en salle trois VM par poste les téléchargent en même temps.
 essai=1
-until dnf -q makecache >/dev/null 2>&1; do
+until timeout 600 dnf makecache --setopt=timeout=15 --setopt=minrate=50k --setopt=retries=1; do
   if [ "$essai" -ge 3 ]; then
-    echo "Dépôts AlmaLinux injoignables depuis ce nœud (3 essais). Rien n'a été installé. Testez :" >&2
-    echo "   curl -sS -m 10 -o /dev/null -w '%{http_code}\\n' https://mirrors.almalinux.org/mirrorlist/10/appstream" >&2
-    echo "   - 200 : coupure passagère, relancez ce script ;" >&2
-    echo "   - délai dépassé ici mais pas sur les autres nœuds : relancez plus tard, ou redémarrez la VM ;" >&2
-    echo "   - délai dépassé partout, poste compris : proxy ou pare-feu, voyez le formateur." >&2
+    # Le DNS répond même sans accès sortant (sous VirtualBox, c'est le poste qui
+    # résout pour la VM) : seul un vrai échange HTTPS dit si la VM sort.
+    # « || true » : sous set -e, un curl en échec dans $(…) arrêterait le script ici.
+    http() { curl -4 -sS -m 10 -o /dev/null -w '%{http_code}' "$1" 2>/dev/null || true; }
+    officiel="$(http https://repo.almalinux.org/almalinux/10/AppStream/x86_64/os/repodata/repomd.xml)"
+    internet="$(http https://pkgs.k8s.io)"
+    echo "Dépôts AlmaLinux injoignables depuis $(hostname -s) (3 essais, miroirs puis serveur officiel). Rien n'a été installé." >&2
+    echo "   Test HTTPS : serveur officiel AlmaLinux → ${officiel:-000}, pkgs.k8s.io → ${internet:-000}   (000 = pas de réponse)" >&2
+    if [ "${internet:-000}" = 000 ] && [ "${officiel:-000}" = 000 ]; then
+      echo "   → $(hostname -s) ne sort plus du tout. Vu en salle : le NAT de VirtualBox bloqué pour une seule VM." >&2
+      echo "     Depuis le dossier du lab, sur le poste : vagrant reload $(hostname -s), puis relancez ce script." >&2
+      echo "     Si tous les nœuds et le poste lui-même ne sortent plus : réseau de la salle, voyez le formateur." >&2
+    elif [ "${officiel:-000}" = 000 ]; then
+      echo "   → Internet répond mais pas AlmaLinux : serveur ou filtrage du côté AlmaLinux, relancez plus tard ou voyez le formateur." >&2
+    else
+      echo "   → AlmaLinux répond maintenant : coupure passagère, relancez ce script." >&2
+    fi
     exit 1
   fi
-  echo "   dépôts injoignables (essai $essai/3), nouvel essai dans 15 s…"
+  if grep -q '^mirrorlist=' /etc/yum.repos.d/almalinux-*.repo; then
+    echo "   liste de miroirs sans réponse : bascule sur le serveur officiel (repo.almalinux.org)"
+    sed -i -e 's|^mirrorlist=|#mirrorlist=|' -e 's|^# *baseurl=|baseurl=|' /etc/yum.repos.d/almalinux-*.repo
+    dnf clean all >/dev/null
+  else
+    echo "   dépôts injoignables (essai $essai/3), nouvel essai dans 15 s…"
+    sleep 15
+  fi
   essai=$((essai + 1))
-  sleep 15
 done
-echo "   dépôts joignables"
+echo "   dépôts joignables ($(grep -q '^mirrorlist=' /etc/yum.repos.d/almalinux-baseos.repo && echo 'liste de miroirs' || echo 'serveur officiel'))"
 
 echo "== 1. Modules noyau du réseau des conteneurs"
 # Sur AlmaLinux 10, br_netfilter n'est plus livré avec le noyau de base : il
