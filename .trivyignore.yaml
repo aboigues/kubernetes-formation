@@ -12,9 +12,9 @@
 #
 #   - Les CVE de binaires embarqués (gobinary, jar, node-pkg…). Elles ne partent
 #     que si l'amont recompile, et leur nombre suit l'âge du build (~5-6 par mois
-#     pour un binaire Go) et non le risque. Filtrées par `vuln-type: os`.
+#     pour un binaire Go) et non le risque. Filtrées par `--pkg-types os`.
 #   - Les CVE de paquets OS sans correctif publié (wordpress : 156, cassandra : 45,
-#     fluentd : 21). Filtrées par `ignore-unfixed: true`. Surtout, NE PAS les
+#     fluentd : 21). Filtrées par `--ignore-unfixed`. Surtout, NE PAS les
 #     lister ici : elles doivent redevenir bloquantes automatiquement le jour où
 #     la distribution publie un correctif. Les figer ici masquerait précisément
 #     le correctif qu'on attend.

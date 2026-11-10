@@ -3,6 +3,11 @@ name: Weekly Image Vulnerability Scan
 # Scanne les CVE des images de conteneurs utilisées dans les manifests des TPs.
 # Complémentaire du job "security-scan" de test-kubernetes-manifests.yml, qui
 # lui analyse les misconfigurations des manifests (trivy config), pas les images.
+#
+# Sécurité chaîne d'appro : on N'utilise PAS `aquasecurity/trivy-action` ni
+# `aquasecurity/setup-trivy` (compromises en 2025, release malveillante v0.69.4).
+# On lance l'image officielle `aquasec/trivy` épinglée, comme docker-formation ;
+# seule l'action first-party `github/codeql-action/upload-sarif` est utilisée.
 
 on:
   schedule:
@@ -17,6 +22,7 @@ on:
       - '.github/workflows/scan-images.yml'
       - '.github/scripts/extract-images.py'
       - '.github/scripts/image-scan-report.py'
+      - '.github/scripts/test_extract_images.py'
       - '.github/image-scan-ignore.txt'
 
 permissions:
@@ -50,6 +56,11 @@ jobs:
 
       - name: Install dependencies
         run: pip install pyyaml
+
+      # Un calcul de catégorie faux brouillerait l'onglet Security sans bruit
+      # (uploads écrasés, alertes fantômes) : on le vérifie avant chaque scan.
+      - name: Tests du calcul des catégories SARIF
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py'
 
       - name: Extract container images from manifests
         id: extract
@@ -90,17 +101,18 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Scan image with Trivy (SARIF)
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          scan-type: 'image'
-          image-ref: ${{ matrix.image }}
-          format: 'sarif'
-          output: 'trivy-${{ matrix.slug }}.sarif'
-          severity: 'CRITICAL,HIGH'
-          limit-severities-for-sarif: true
-          exit-code: '0'
-          version: 'v0.72.0'
-          timeout: '15m'
+        env:
+          # Évite le rate-limiting GitHub lors du téléchargement de la base Trivy.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          docker run --rm -e GITHUB_TOKEN \
+            -v "$PWD:/out" -v "$PWD/.trivy-cache:/root/.cache/trivy" \
+            aquasec/trivy:0.72.0 image \
+            --severity CRITICAL,HIGH \
+            --format sarif --output "/out/trivy-${{ matrix.slug }}.sarif" \
+            --timeout 15m \
+            --no-progress \
+            "${{ matrix.image }}"
 
       - name: Upload results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
@@ -109,22 +121,26 @@ jobs:
         if: success()
         with:
           sarif_file: 'trivy-${{ matrix.slug }}.sarif'
-          # Une catégorie par image : sans cela, chaque upload écraserait le précédent.
-          category: 'trivy-image:${{ matrix.image }}'
+          # Une catégorie par image (sinon chaque upload écraserait le précédent),
+          # STABLE (sans tag) : une montée de version ferme les alertes corrigées au
+          # lieu de les laisser ouvertes à vie sous l'ancien tag. Voir
+          # categories_sarif() dans .github/scripts/extract-images.py.
+          category: ${{ matrix.categorie }}
 
+      # L'image est déjà dans le cache Trivy du premier scan : ce second
+      # passage ne la retélécharge pas.
       - name: Scan image with Trivy (JSON pour le rapport)
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          scan-type: 'image'
-          image-ref: ${{ matrix.image }}
-          format: 'json'
-          output: 'trivy-${{ matrix.slug }}.json'
-          severity: 'CRITICAL,HIGH,MEDIUM,LOW'
-          exit-code: '0'
-          version: 'v0.72.0'
-          timeout: '15m'
-          # L'image est déjà dans le cache Trivy du premier scan : ce second
-          # passage ne la retélécharge pas.
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          docker run --rm -e GITHUB_TOKEN \
+            -v "$PWD:/out" -v "$PWD/.trivy-cache:/root/.cache/trivy" \
+            aquasec/trivy:0.72.0 image \
+            --severity CRITICAL,HIGH,MEDIUM,LOW \
+            --format json --output "/out/trivy-${{ matrix.slug }}.json" \
+            --timeout 15m \
+            --no-progress \
+            "${{ matrix.image }}"
 
       - name: Upload JSON report
         uses: actions/upload-artifact@v4
@@ -139,14 +155,14 @@ jobs:
       #
       # Deux filtres complémentaires, et l'ordre du raisonnement compte :
       #
-      # 1. vuln-type: os — une CVE de binaire (gobinary, jar...) ne part que si
+      # 1. --pkg-types os — une CVE de binaire (gobinary, jar...) ne part que si
       #    l'amont recompile. Mesuré : 33 images rouges avec toutes les CVE, dont
       #    12 n'ont QUE des CVE de binaires Go. Elles sont en plus largement non
       #    atteignables (un binaire qui n'appelle jamais net/http embarque quand
       #    même les CVE de la stdlib), et leur nombre suit l'âge du build, pas le
       #    risque : ~5-6 nouvelles par mois sans que rien ne change dans l'image.
       #
-      # 2. ignore-unfixed: true — une fois restreint aux paquets OS, « corrigeable »
+      # 2. --ignore-unfixed — une fois restreint aux paquets OS, « corrigeable »
       #    veut enfin dire « applicable » : soit en montant le tag, soit par un
       #    apk/apt upgrade (cf. docker/hardened/). Sans ce filtre, la barrière est
       #    rouge à vie sur wordpress (156 CVE), cassandra (45) et fluentd (21), qui
@@ -165,26 +181,28 @@ jobs:
       # L'étape est en dernier : le SARIF et le JSON sont déjà uploadés, donc rien
       # n'est perdu au moment précis où il y a quelque chose à voir. L'image est en
       # cache depuis le premier scan, ce passage ne la retélécharge pas.
+      #
+      # --ignorefile : exceptions documentées et datées. Volontairement absent des
+      # étapes de scan ci-dessus : une exception lève le blocage, elle n'efface pas
+      # la CVE de l'onglet Security. Le fichier doit exister (checkout en tête de
+      # job) : absent, Trivy l'ignorerait en silence.
       - name: Fail on fixable OS package vulnerabilities
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          scan-type: 'image'
-          image-ref: ${{ matrix.image }}
-          format: 'table'
-          severity: ${{ env.FAIL_ON_SEVERITY }}
-          scanners: 'vuln'
-          # Attention : l'input s'appelle bien vuln-type et non pkg-types dans
-          # trivy-action v0.36.0 (l'action le mappe vers TRIVY_PKG_TYPES). Un input
-          # inconnu serait ignoré en silence et la barrière bloquerait sur tout.
-          vuln-type: 'os'
-          ignore-unfixed: true
-          # Exceptions documentées et datées. Volontairement absent des étapes de
-          # scan ci-dessus : une exception lève le blocage, elle n'efface pas la
-          # CVE de l'onglet Security.
-          trivyignores: '.trivyignore.yaml'
-          exit-code: '1'
-          version: 'v0.72.0'
-          timeout: '15m'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          test -f .trivyignore.yaml
+          docker run --rm -e GITHUB_TOKEN \
+            -v "$PWD:/src:ro" -v "$PWD/.trivy-cache:/root/.cache/trivy" \
+            aquasec/trivy:0.72.0 image \
+            --severity "$FAIL_ON_SEVERITY" \
+            --scanners vuln \
+            --pkg-types os \
+            --ignore-unfixed \
+            --ignorefile /src/.trivyignore.yaml \
+            --exit-code 1 \
+            --timeout 15m \
+            --no-progress \
+            "${{ matrix.image }}"
 
   report:
     name: Vulnerability Report
