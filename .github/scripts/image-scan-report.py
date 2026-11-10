@@ -17,7 +17,7 @@ même action :
      recompile. Hors de portée de ce dépôt.
 
 Le verdict (--fail-on) ne porte que sur la catégorie 1, pour rendre le même
-verdict que la barrière par image du workflow (vuln-type: os + ignore-unfixed).
+verdict que la barrière par image du workflow (--pkg-types os + --ignore-unfixed).
 
 Usage :
     python3 .github/scripts/image-scan-report.py <dossier-des-rapports>
